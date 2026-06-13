@@ -8,6 +8,7 @@
 		"dev": "concurrently \"pnpm run dev:vite\" \"pnpm run dev:electron\"",
 		"dev:vite": "vite dev",
 		"dev:electron": "wait-on http://127.0.0.1:5173 && electron .",
+		"generate:icons": "swift scripts/generate-project-icons.swift",
 		"build": "vite build",
 		"build:electron": "pnpm run build && electron-builder",
 		"preview": "vite preview",

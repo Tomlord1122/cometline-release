@@ -3,7 +3,12 @@
 
 <div class="empty-state">
 	<div class="avatar rounded-full border border-gray-400" aria-hidden="true">
-		<img src="/project_icon.png" alt="" />
+		<img
+			src="/project_avatar_192.png"
+			srcset="/project_avatar_96.png 96w, /project_avatar_192.png 192w, /project_avatar_384.png 384w"
+			sizes="82px"
+			alt=""
+		/>
 	</div>
 	<p class="subtitle">A thought, a task, a file — Cometline continues.</p>
 </div>

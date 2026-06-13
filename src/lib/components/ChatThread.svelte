@@ -239,7 +239,12 @@
 					class:avatar-flight-hidden={!firstTurnFlightDone}
 					data-flight-target="avatar"
 				>
-					<img src="/project_icon.png" alt="" />
+					<img
+						src="/project_avatar_96.png"
+						srcset="/project_avatar_96.png 96w, /project_avatar_192.png 192w, /project_avatar_384.png 384w"
+						sizes="(min-width: 1280px) 48px, (min-width: 1024px) 44px, (min-width: 768px) 40px, 36px"
+						alt=""
+					/>
 				</div>
 				{#if firstAssistantItem && showAssistantRow(firstAssistantItem)}
 					{@render assistantStack(firstAssistantItem)}
@@ -275,7 +280,12 @@
 							class:avatar-flight-hidden={!firstTurnFlightDone}
 							data-flight-target="avatar"
 						>
-							<img src="/project_icon.png" alt="" />
+							<img
+								src="/project_avatar_96.png"
+								srcset="/project_avatar_96.png 96w, /project_avatar_192.png 192w, /project_avatar_384.png 384w"
+								sizes="(min-width: 1280px) 48px, (min-width: 1024px) 44px, (min-width: 768px) 40px, 36px"
+								alt=""
+							/>
 						</div>
 						{#if firstAssistantItem && showAssistantRow(firstAssistantItem)}
 							{@render assistantStack(firstAssistantItem)}
@@ -292,7 +302,12 @@
 				>
 					{#if startsSpeakerRun(index, 'assistant')}
 						<div class="avatar-mini size-9 shrink-0 rounded-full border border-gray-400 md:size-10 lg:size-11 xl:size-12">
-							<img src="/project_icon.png" alt="" />
+							<img
+								src="/project_avatar_96.png"
+								srcset="/project_avatar_96.png 96w, /project_avatar_192.png 192w, /project_avatar_384.png 384w"
+								sizes="(min-width: 1280px) 48px, (min-width: 1024px) 44px, (min-width: 768px) 40px, 36px"
+								alt=""
+							/>
 						</div>
 					{:else}
 						<div class="avatar-gutter size-9 shrink-0 md:size-10 lg:size-11 xl:size-12" aria-hidden="true"></div>

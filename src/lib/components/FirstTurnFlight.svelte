@@ -115,7 +115,12 @@
 {/if}
 {#if showAvatarFlight}
 	<div class="flight-particle avatar-flight rounded-full border border-gray-400 overflow-hidden" style={avatarFlightStyle}>
-		<img src="/project_icon.png" alt="" />
+		<img
+			src="/project_avatar_192.png"
+			srcset="/project_avatar_96.png 96w, /project_avatar_192.png 192w, /project_avatar_384.png 384w"
+			sizes="82px"
+			alt=""
+		/>
 	</div>
 {/if}
 
