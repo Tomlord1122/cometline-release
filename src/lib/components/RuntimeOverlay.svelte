@@ -11,7 +11,7 @@
 	<div class="overlay">
 		<div class="overlay-card">
 			{#if connectionState.status === 'connecting'}
-				<div class="spinner"></div>
+				<div class="spinner spin"></div>
 				<p>Starting CometMind…</p>
 			{:else if connectionState.status === 'error'}
 				<p class="error-title">CometMind is not responding</p>
@@ -103,12 +103,5 @@
 		border: 2px solid var(--border-soft);
 		border-top-color: var(--text-muted);
 		border-radius: 50%;
-		animation: spin 0.8s linear infinite;
-	}
-
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
 	}
 </style>

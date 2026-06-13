@@ -121,7 +121,7 @@
 		z-index: 40;
 		pointer-events: none;
 		transform-origin: top left;
-		animation: first-turn-flight 560ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+		animation: first-turn-flight var(--duration-flight) var(--ease-smooth) forwards;
 	}
 
 	.user-flight {

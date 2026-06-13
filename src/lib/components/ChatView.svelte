@@ -186,9 +186,9 @@
 		z-index: 10;
 		bottom: 40px;
 		transition:
-			bottom 560ms cubic-bezier(0.22, 1, 0.36, 1),
-			transform 560ms cubic-bezier(0.22, 1, 0.36, 1),
-			width 560ms cubic-bezier(0.22, 1, 0.36, 1);
+			bottom var(--duration-flight) var(--ease-smooth),
+			transform var(--duration-flight) var(--ease-smooth),
+			width var(--duration-flight) var(--ease-smooth);
 	}
 
 	.composer-wrapper.centered {

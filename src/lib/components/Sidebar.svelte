@@ -156,8 +156,8 @@
 		padding: 12px 10px 10px;
 		overflow: hidden;
 		transition:
-			width 240ms cubic-bezier(0.22, 1, 0.36, 1),
-			padding 240ms cubic-bezier(0.22, 1, 0.36, 1),
+			width var(--duration-fast) var(--ease-smooth),
+			padding var(--duration-fast) var(--ease-smooth),
 			border-color 180ms ease;
 		view-transition-name: sidebar;
 	}
@@ -175,7 +175,7 @@
 		flex-direction: column;
 		transition:
 			opacity 150ms ease,
-			transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+			transform var(--duration-fast) var(--ease-smooth);
 	}
 
 	.sidebar.collapsed .sidebar-content {

@@ -107,10 +107,10 @@
 		flex-direction: column;
 		gap: 10px;
 		transition:
-			padding 280ms cubic-bezier(0.22, 1, 0.36, 1),
-			border-radius 280ms cubic-bezier(0.22, 1, 0.36, 1),
-			box-shadow 280ms cubic-bezier(0.22, 1, 0.36, 1),
-			transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+			padding var(--duration-medium) var(--ease-smooth),
+			border-radius var(--duration-medium) var(--ease-smooth),
+			box-shadow var(--duration-medium) var(--ease-smooth),
+			transform var(--duration-medium) var(--ease-smooth);
 	}
 
 	.composer.hero {
