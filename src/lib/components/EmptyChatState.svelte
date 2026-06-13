@@ -20,7 +20,7 @@
 	.avatar {
 		width: 82px;
 		height: 82px;
-		border-radius: 24px;
+		border-radius: 50%;
 		background: #fff;
 		border: 1px solid var(--border-soft);
 		margin-bottom: 24px;
@@ -33,7 +33,7 @@
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
-		border-radius: 20px;
+		border-radius: 50%;
 		display: block;
 	}
 
