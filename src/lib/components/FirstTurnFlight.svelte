@@ -90,7 +90,10 @@
 			await wait(FLIGHT_MS);
 
 			revealStagedUser();
-			flightDone = true;
+			// Unhide the real thread avatar slot (via onFlightDoneChange) BEFORE
+			// tearing down the flight overlay below, so the avatar never blinks
+			// out between the overlay ending and the thread placeholder showing.
+			setFlightDone(true);
 			await afterPaint();
 
 			showUserFlight = false;
@@ -137,7 +140,7 @@
 	}
 
 	.avatar-flight {
-		border-radius: 24px;
+		border-radius: 50%;
 		background: linear-gradient(145deg, #ffffff, #eef2f6);
 		border: 1px solid var(--border-soft);
 		box-shadow: 0 8px 28px rgba(15, 23, 42, 0.1);
@@ -149,7 +152,7 @@
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
-		border-radius: 20px;
+		border-radius: 50%;
 		display: block;
 	}
 
