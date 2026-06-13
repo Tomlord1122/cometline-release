@@ -1,4 +1,5 @@
 import type { ChatItem, StreamEvent } from '$lib/types';
+import { chatDebug, summarizeChatItem, summarizeChatItems, summarizeStreamEvent } from '../debug/chat';
 
 export interface ChatState {
 	items: ChatItem[];
@@ -108,10 +109,34 @@ function applyEvent(
 	}
 
 	function ensureAssistantForText() {
-		if (assistant.current) return assistant.current;
+		if (assistant.current) {
+			chatDebug('reducer:assistant-host', {
+				choice: 'current',
+				event: summarizeStreamEvent(event),
+				assistant: summarizeChatItem(assistant.current)
+			});
+			return assistant.current;
+		}
+		const last = items[items.length - 1];
+		if (last?.type === 'assistant' && !last.text.trim() && last.reasoning?.text.trim()) {
+			assistant.current = last;
+			chatDebug('reducer:assistant-host', {
+				choice: 'reuse-last-reasoning-only',
+				event: summarizeStreamEvent(event),
+				assistant: summarizeChatItem(last),
+				items: summarizeChatItems(items)
+			});
+			return last;
+		}
 		const id = localID('assistant', draft.nextId++).id;
 		const next: AssistantItem = { id, type: 'assistant', text: '' };
 		pushAssistant(next);
+		chatDebug('reducer:assistant-host', {
+			choice: 'new',
+			event: summarizeStreamEvent(event),
+			assistant: summarizeChatItem(next),
+			items: summarizeChatItems(items)
+		});
 		return next;
 	}
 
@@ -122,6 +147,12 @@ function applyEvent(
 	}
 
 	function finishAssistantSegment() {
+		chatDebug('reducer:finish-before', {
+			event: summarizeStreamEvent(event),
+			assistant: assistant.current ? summarizeChatItem(assistant.current) : null,
+			reasoning: reasoning.current,
+			items: summarizeChatItems(items)
+		});
 		settleTurn({ assistant: assistant.current, reasoning: reasoning.current });
 		if (assistant.current && !assistant.current.text.trim() && !assistant.current.reasoning?.text.trim()) {
 			clearEmptyAssistant();
@@ -129,6 +160,12 @@ function applyEvent(
 			assistant.current = null;
 		}
 		reasoning.current = null;
+		chatDebug('reducer:finish-after', {
+			event: summarizeStreamEvent(event),
+			assistant: assistant.current ? summarizeChatItem(assistant.current) : null,
+			reasoning: reasoning.current,
+			items: summarizeChatItems(draft.items)
+		});
 	}
 
 	function ensureTurnReasoning() {
@@ -183,7 +220,8 @@ function applyEvent(
 			toolId: event.id,
 			toolName: event.tool,
 			input: event.input,
-			pending: true
+			pending: true,
+			startedAt: Date.now()
 		});
 		return;
 	}
@@ -196,6 +234,9 @@ function applyEvent(
 			tool.output = event.output;
 			tool.error = event.error;
 			tool.pending = false;
+			if (tool.startedAt != null) {
+				tool.durationMs = Date.now() - tool.startedAt;
+			}
 		}
 		return;
 	}

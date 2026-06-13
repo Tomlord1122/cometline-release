@@ -1,6 +1,7 @@
 import { getSessionMessages, streamMessage } from '$lib/client/cometmind';
 import type { ChatItem, StreamEvent, TokenUsage, TranscriptItem } from '$lib/types';
 import { reduceChatState } from '$lib/reducers/chat';
+import { chatDebug, summarizeChatItems, summarizeStreamEvent } from '../debug/chat';
 
 export type { ChatItem } from '$lib/types';
 
@@ -115,6 +116,11 @@ function createChatStore() {
 			if (run !== loadRun) return;
 			if (isStreaming && sessionID === nextSessionID) return;
 			items = itemsFromTranscript(transcript.items);
+			chatDebug('store:load-transcript', {
+				sessionID: nextSessionID,
+				rawItems: transcript.items,
+				items: summarizeChatItems(items)
+			});
 		} catch (err) {
 			if (run !== loadRun) return;
 			if (isStreaming && sessionID === nextSessionID) return;
@@ -176,14 +182,34 @@ function createChatStore() {
 		error = '';
 		isStreaming = true;
 		if (!opts?.skipUser) addUser(text);
+		chatDebug('store:send-start', {
+			sessionID: nextSessionID,
+			run,
+			skipUser: opts?.skipUser ?? false,
+			textLength: text.length,
+			items: summarizeChatItems(items)
+		});
 		const ctx = {
 			assistant: { current: null as Extract<ChatItem, { type: 'assistant' }> | null },
 			reasoning: { current: null as { text: string; pending: boolean } | null }
 		};
+		let eventIndex = 0;
 		try {
 			for await (const event of streamMessage(nextSessionID, { text })) {
 				if (run !== streamRun) return;
+				eventIndex += 1;
+				const before = summarizeChatItems(items);
 				applyEvent(event, ctx);
+				chatDebug('store:stream-event', {
+					sessionID: nextSessionID,
+					run,
+					eventIndex,
+					event: summarizeStreamEvent(event),
+					before,
+					after: summarizeChatItems(items),
+					assistantID: ctx.assistant.current?.id ?? null,
+					reasoning: ctx.reasoning.current
+				});
 				if (event.type === 'done') break;
 			}
 		} catch (err) {
@@ -194,9 +220,19 @@ function createChatStore() {
 			);
 		} finally {
 			if (run === streamRun) {
+				const beforeDone = summarizeChatItems(items);
 				applyEvent({ type: 'done' }, ctx);
 				isStreaming = false;
 				notifyItems();
+				chatDebug('store:send-finish', {
+					sessionID: nextSessionID,
+					run,
+					beforeDone,
+					afterDone: summarizeChatItems(items),
+					assistantID: ctx.assistant.current?.id ?? null,
+					reasoning: ctx.reasoning.current,
+					error
+				});
 			}
 		}
 	}

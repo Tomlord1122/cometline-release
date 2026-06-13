@@ -61,6 +61,7 @@ describe('reduceChatState', () => {
 		if (tool.type !== 'tool') return;
 		expect(tool.toolId).toBe('tc-1');
 		expect(tool.pending).toBe(true);
+		expect(tool.startedAt).toBeTypeOf('number');
 
 		state = reduceChatState(state, { type: 'tool_result', id: 'tc-1', tool: 'read_file', output: 'ok' });
 		const updated = state.items[0];
@@ -68,6 +69,8 @@ describe('reduceChatState', () => {
 		if (updated.type !== 'tool') return;
 		expect(updated.output).toBe('ok');
 		expect(updated.pending).toBe(false);
+		expect(updated.startedAt).toBeTypeOf('number');
+		expect(updated.durationMs).toBeTypeOf('number');
 	});
 
 	it('settles reasoning on step_finish', () => {
@@ -151,5 +154,26 @@ describe('reduceChatState', () => {
 		expect(state.items[2].type).toBe('assistant');
 		if (state.items[2].type !== 'assistant') return;
 		expect(state.items[2].text).toBe('The file contains Go code.');
+	});
+
+	it('merges text that arrives after a reasoning step finish into the reasoning assistant', () => {
+		const events: StreamEvent[] = [
+			{ type: 'reasoning_delta', text: 'I have enough context.' },
+			{ type: 'step_finish' },
+			{ type: 'text_delta', delta: 'Here is the final answer.' },
+			{ type: 'done' }
+		];
+		let state = initChatState();
+		for (const event of events) {
+			state = reduceChatState(state, event);
+		}
+
+		expect(state.items).toHaveLength(1);
+		const assistant = state.items[0];
+		expect(assistant.type).toBe('assistant');
+		if (assistant.type !== 'assistant') return;
+		expect(assistant.reasoning?.text).toBe('I have enough context.');
+		expect(assistant.reasoning?.pending).toBe(false);
+		expect(assistant.text).toBe('Here is the final answer.');
 	});
 });
