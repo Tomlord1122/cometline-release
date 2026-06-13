@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { tick } from 'svelte';
+	import { onMount } from 'svelte';
 	import EmptyChatState from '$lib/components/EmptyChatState.svelte';
 	import Composer from '$lib/components/Composer.svelte';
 	import ChatThread from '$lib/components/ChatThread.svelte';
@@ -12,22 +12,16 @@
 	import { shellStore } from '$lib/stores/shell.svelte';
 	import { startChat } from '$lib/actions/start-chat';
 
-	let {
-		sessionId,
-		bootMessage = '',
-		initialMessage = null
-	}: {
-		sessionId: string;
-		bootMessage?: string;
-		initialMessage?: string | null;
-	} = $props();
+	// This component is keyed on sessionId by the route, so it remounts per
+	// session and sessionId is constant for the instance's lifetime. That lets
+	// per-session work live in onMount instead of sessionId-watching effects.
+	let { sessionId, bootMessage = '' }: { sessionId: string; bootMessage?: string } = $props();
 
 	let chatHome = $state<HTMLDivElement | null>(null);
 	let firstTurnFlight: FirstTurnFlight;
 	let awaitingFirstAssistant = $state(false);
 	let firstTurnActive = $state(false);
 	let firstTurnFlightDone = $state(false);
-	let bootstrapped = $state(false);
 
 	let hasVisibleConversation = $derived(chatStore.items.length > 0 || chatStore.isLoading);
 	let composerVariant = $derived<'hero' | 'dock'>(shellStore.composerPhase === 'centered' ? 'hero' : 'dock');
@@ -35,16 +29,23 @@
 		!hasVisibleConversation && shellStore.composerPhase === 'centered' && !firstTurnActive
 	);
 
-	$effect(() => {
-		if (sessionStore.current?.id !== sessionId) return;
-		modelStore.selectFromSession(sessionStore.current);
-	});
+	onMount(() => {
+		// Select this session and sync the model picker to it.
+		const session = sessionStore.sessions.find((item) => item.id === sessionId);
+		if (session) {
+			sessionStore.selectSession(session);
+			modelStore.selectFromSession(session);
+		}
 
-	$effect(() => {
-		const id = sessionId;
-		if (initialMessage) return;
-		if (chatStore.isStreaming && chatStore.sessionID === id) return;
-		void chatStore.loadTranscript(id);
+		// A pending first message (queued by the composer before navigation) takes
+		// priority and is submitted as the first turn; otherwise load the
+		// transcript for an existing session.
+		const pending = sessionStore.takePendingMessage(sessionId);
+		if (pending) {
+			void submit(pending);
+		} else if (!(chatStore.isStreaming && chatStore.sessionID === sessionId)) {
+			void chatStore.loadTranscript(sessionId);
+		}
 	});
 
 	$effect(() => {
@@ -55,15 +56,9 @@
 	});
 
 	$effect(() => {
-		if (hasVisibleConversation && !firstTurnActive && !initialMessage) {
+		if (hasVisibleConversation && !firstTurnActive) {
 			shellStore.dockComposer();
 		}
-	});
-
-	$effect(() => {
-		if (bootstrapped || !initialMessage) return;
-		bootstrapped = true;
-		void submit(initialMessage);
 	});
 
 	async function submit(text: string) {
