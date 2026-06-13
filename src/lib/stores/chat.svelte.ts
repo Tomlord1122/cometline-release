@@ -1,4 +1,4 @@
-import { getSessionMessages, streamMessage } from '$lib/client/cometmind';
+import { abortSession, getSessionMessages, streamMessage } from '$lib/client/cometmind';
 import type { ChatItem, StreamEvent, TokenUsage, TranscriptItem } from '$lib/types';
 import { reduceChatState } from '$lib/reducers/chat';
 import { chatDebug, summarizeChatItems, summarizeStreamEvent } from '../debug/chat';
@@ -90,6 +90,11 @@ function createChatStore() {
 	let nextId = 0;
 	let streamRun = 0;
 	let loadRun = 0;
+	let streamAbort: AbortController | null = null;
+
+	function isAbortError(err: unknown) {
+		return err instanceof DOMException && err.name === 'AbortError';
+	}
 
 	function clear() {
 		sessionID = null;
@@ -99,6 +104,8 @@ function createChatStore() {
 		error = '';
 		streamRun += 1;
 		loadRun += 1;
+		streamAbort?.abort();
+		streamAbort = null;
 	}
 
 	async function loadTranscript(nextSessionID: string) {
@@ -186,10 +193,22 @@ function createChatStore() {
 	}
 
 	async function send(nextSessionID: string, text: string, opts?: { skipUser?: boolean }) {
+		if (isStreaming) {
+			chatDebug('store:send-blocked', {
+				sessionID: nextSessionID,
+				reason: 'already-streaming',
+				textLength: text.length
+			});
+			return;
+		}
+
 		const run = ++streamRun;
 		sessionID = nextSessionID;
 		error = '';
 		isStreaming = true;
+		streamAbort?.abort();
+		streamAbort = new AbortController();
+		const signal = streamAbort.signal;
 		if (!opts?.skipUser) addUser(text);
 		chatDebug('store:send-start', {
 			sessionID: nextSessionID,
@@ -204,7 +223,7 @@ function createChatStore() {
 		};
 		let eventIndex = 0;
 		try {
-			for await (const event of streamMessage(nextSessionID, { text })) {
+			for await (const event of streamMessage(nextSessionID, { text }, signal)) {
 				if (run !== streamRun) return;
 				eventIndex += 1;
 				const before = summarizeChatItems(items);
@@ -223,6 +242,10 @@ function createChatStore() {
 			}
 		} catch (err) {
 			if (run !== streamRun) return;
+			if (isAbortError(err)) {
+				chatDebug('store:send-aborted', { sessionID: nextSessionID, run });
+				return;
+			}
 			applyEvent(
 				{ type: 'error', message: err instanceof Error ? err.message : 'Failed to send message' },
 				ctx
@@ -232,6 +255,7 @@ function createChatStore() {
 				const beforeDone = summarizeChatItems(items);
 				applyEvent({ type: 'done' }, ctx);
 				isStreaming = false;
+				streamAbort = null;
 				chatDebug('store:send-finish', {
 					sessionID: nextSessionID,
 					run,
@@ -242,6 +266,22 @@ function createChatStore() {
 					error
 				});
 			}
+		}
+	}
+
+	async function cancel(nextSessionID?: string) {
+		const id = nextSessionID ?? sessionID;
+		if (!id || !isStreaming) return;
+
+		chatDebug('store:cancel-start', { sessionID: id });
+		streamAbort?.abort();
+		try {
+			await abortSession(id);
+		} catch (err) {
+			chatDebug('store:cancel-abort-failed', {
+				sessionID: id,
+				error: err instanceof Error ? err.message : String(err)
+			});
 		}
 	}
 
@@ -265,7 +305,8 @@ function createChatStore() {
 		loadTranscript,
 		stageUser,
 		revealStagedUser,
-		send
+		send,
+		cancel
 	};
 }
 

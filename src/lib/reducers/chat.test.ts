@@ -127,6 +127,22 @@ describe('reduceChatState', () => {
 		expect(state.items[2].text).toBe('Found it.');
 	});
 
+	it('clears pending tools on done', () => {
+		let state = initChatState();
+		state = reduceChatState(state, {
+			type: 'tool_call',
+			id: 'tc-1',
+			tool: 'read_file',
+			input: { path: 'README.md' }
+		});
+		state = reduceChatState(state, { type: 'done' });
+		const tool = state.items[0];
+		expect(tool.type).toBe('tool');
+		if (tool.type !== 'tool') return;
+		expect(tool.pending).toBe(false);
+		expect(tool.durationMs).toBeTypeOf('number');
+	});
+
 	it('starts a fresh assistant after a step boundary and tool result', () => {
 		const events: StreamEvent[] = [
 			{ type: 'reasoning_delta', text: 'Need to inspect files.' },

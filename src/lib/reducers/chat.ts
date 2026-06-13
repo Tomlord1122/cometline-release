@@ -57,6 +57,19 @@ function attachReasoning(
 	return { ...assistant, reasoning: { text: chunk, pending: reasoning.pending } };
 }
 
+function settlePendingTools(items: ChatItem[]) {
+	for (let i = 0; i < items.length; i++) {
+		const item = items[i];
+		if (item.type !== 'tool' || !item.pending) continue;
+		items[i] = {
+			...item,
+			pending: false,
+			durationMs:
+				item.startedAt != null ? Date.now() - item.startedAt : item.durationMs
+		};
+	}
+}
+
 function settleTurn(ctx: {
 	assistant: AssistantItem | null;
 	reasoning: { text: string; pending: boolean } | null;
@@ -262,6 +275,7 @@ function applyEvent(
 	if (event.type === 'error') {
 		settleTurn({ assistant: assistant.current, reasoning: reasoning.current });
 		clearEmptyAssistant();
+		settlePendingTools(items);
 		draft.error = cleanErrorMessage(event.message);
 		const id = localID('error', draft.nextId++).id;
 		items.push({ id, type: 'error', text: draft.error });
@@ -270,6 +284,7 @@ function applyEvent(
 
 	if (event.type === 'done') {
 		settleTurn({ assistant: assistant.current, reasoning: reasoning.current });
+		settlePendingTools(items);
 		if (assistant.current && !assistant.current.text.trim()) {
 			clearEmptyAssistant();
 		}

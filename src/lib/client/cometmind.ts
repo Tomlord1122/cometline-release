@@ -59,12 +59,14 @@ export function abortSession(id: string): Promise<{ status: string }> {
 
 export async function* streamMessage(
 	id: string,
-	req: PostMessageRequest
+	req: PostMessageRequest,
+	signal?: AbortSignal
 ): AsyncGenerator<StreamEvent, void, unknown> {
 	const res = await fetch(`${BASE_URL}/api/v1/sessions/${id}/message`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify(req)
+		body: JSON.stringify(req),
+		signal
 	});
 
 	if (!res.ok || !res.body) {
@@ -78,6 +80,7 @@ export async function* streamMessage(
 
 	try {
 		while (true) {
+			if (signal?.aborted) return;
 			const { done, value } = await reader.read();
 			if (done) break;
 			const chunk = decoder.decode(value, { stream: true });
@@ -91,6 +94,9 @@ export async function* streamMessage(
 			if (result === 'done') return;
 			if (result) yield result;
 		}
+	} catch (err) {
+		if (signal?.aborted || (err instanceof DOMException && err.name === 'AbortError')) return;
+		throw err;
 	} finally {
 		reader.releaseLock();
 	}

@@ -12,6 +12,7 @@
 	import { modelStore } from '$lib/stores/model.svelte';
 	import { shellStore } from '$lib/stores/shell.svelte';
 	import { startChat } from '$lib/actions/start-chat';
+	import { createChatTurnQueue, type QueuedMessage } from '$lib/actions/chat-turn-queue';
 
 	const THREAD_IN = { duration: 180 };
 
@@ -25,12 +26,38 @@
 	let awaitingFirstAssistant = $state(false);
 	let firstTurnActive = $state(false);
 	let firstTurnFlightDone = $state(false);
+	let queuedCount = $state(0);
+	let queuedMessages = $state<QueuedMessage[]>([]);
 
 	let hasVisibleConversation = $derived(chatStore.items.length > 0 || chatStore.isLoading);
 	let composerVariant = $derived<'hero' | 'dock'>(shellStore.composerPhase === 'centered' ? 'hero' : 'dock');
 	let heroLayout = $derived(
 		!hasVisibleConversation && shellStore.composerPhase === 'centered' && !firstTurnActive
 	);
+
+	const turnQueue = createChatTurnQueue(async (text) => {
+		await startChat(
+			{
+				get sessionId() {
+					return sessionId;
+				},
+				get hasVisibleConversation() {
+					return hasVisibleConversation;
+				},
+				send: (t, opts) => chatStore.send(sessionId, t, opts),
+				onFirstTurnStart: async () => {
+					awaitingFirstAssistant = true;
+					shellStore.dockComposer();
+					firstTurnFlight.run(text);
+				},
+				onFirstTurnComplete: () => {
+					awaitingFirstAssistant = false;
+				},
+				refreshSession
+			},
+			text
+		);
+	});
 
 	onMount(() => {
 		// Select this session and sync the model picker to it.
@@ -45,7 +72,7 @@
 		// transcript for an existing session.
 		const pending = sessionStore.takePendingMessage(sessionId);
 		if (pending) {
-			void submit(pending);
+			submit(pending);
 		} else if (!(chatStore.isStreaming && chatStore.sessionID === sessionId)) {
 			void chatStore.loadTranscript(sessionId);
 		}
@@ -64,28 +91,36 @@
 		}
 	});
 
-	async function submit(text: string) {
-		await startChat(
-			{
-				get sessionId() {
-					return sessionId;
-				},
-				get hasVisibleConversation() {
-					return hasVisibleConversation;
-				},
-				send: (t, opts) => chatStore.send(sessionId, t, opts),
-				onFirstTurnStart: async (text) => {
-					awaitingFirstAssistant = true;
-					shellStore.dockComposer();
-					firstTurnFlight.run(text);
-				},
-				onFirstTurnComplete: () => {
-					awaitingFirstAssistant = false;
-				},
-				refreshSession
-			},
-			text
-		);
+	function syncQueueState() {
+		queuedCount = turnQueue.pendingCount;
+		queuedMessages = [...turnQueue.pendingMessages];
+	}
+
+	function submit(text: string) {
+		if (connectionState.status !== 'ready') return;
+		const pending = turnQueue.enqueue(text);
+		syncQueueState();
+		void pending.finally(syncQueueState);
+	}
+
+	function stop() {
+		void chatStore.cancel(sessionId);
+	}
+
+	function removeQueuedMessage(id: string) {
+		if (!turnQueue.remove(id)) return;
+		syncQueueState();
+	}
+
+	function onWindowKeydown(e: KeyboardEvent) {
+		if (e.key !== 'c' || !(e.ctrlKey || e.metaKey)) return;
+		if (!chatStore.isStreaming) return;
+		const target = e.target;
+		if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
+			if (target.selectionStart !== target.selectionEnd) return;
+		}
+		e.preventDefault();
+		stop();
 	}
 
 	async function refreshSession() {
@@ -96,6 +131,8 @@
 		}
 	}
 </script>
+
+<svelte:window onkeydown={onWindowKeydown} />
 
 <div
 	class="chat-home"
@@ -130,7 +167,13 @@
 	<div class="composer-wrapper" class:centered={shellStore.composerPhase === 'centered'}>
 		<Composer
 			onSend={submit}
-			disabled={chatStore.isStreaming || connectionState.status !== 'ready'}
+			onStop={stop}
+			onRemoveQueued={removeQueuedMessage}
+			disabled={connectionState.status !== 'ready'}
+			streaming={chatStore.isStreaming}
+			{queuedCount}
+			{queuedMessages}
+			waitingForReply={chatStore.isStreaming || firstTurnActive}
 			variant={composerVariant}
 		/>
 	</div>
