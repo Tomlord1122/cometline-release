@@ -80,7 +80,10 @@
 		if (pending) {
 			submit(pending);
 		} else if (!(chatStore.isStreaming && chatStore.sessionID === sessionId)) {
-			void chatStore.loadTranscript(sessionId);
+			void chatStore.loadTranscript(sessionId).then(() => {
+				if (chatStore.items.length > 0) shellStore.dockComposer();
+				else shellStore.centerComposer();
+			});
 		}
 	});
 
@@ -88,12 +91,6 @@
 		if (!hasVisibleConversation && !firstTurnActive) {
 			awaitingFirstAssistant = false;
 			firstTurnFlightDone = false;
-		}
-	});
-
-	$effect(() => {
-		if (hasVisibleConversation && !firstTurnActive) {
-			shellStore.dockComposer();
 		}
 	});
 
@@ -161,9 +158,9 @@
 		stageUser={(text) => chatStore.stageUser(text)}
 		revealStagedUser={() => chatStore.revealStagedUser()}
 		onActiveChange={(active) => (firstTurnActive = active)}
+		onPrepareFlight={() => shellStore.dockComposer()}
 		onFlightDoneChange={(done) => {
 			firstTurnFlightDone = done;
-			if (done) shellStore.dockComposer();
 		}}
 	/>
 
@@ -218,6 +215,7 @@
 	.thread-shell {
 		position: absolute;
 		inset: 0;
+		transition: bottom var(--duration-flight) var(--ease-smooth);
 	}
 
 	.thread-shell.docked {

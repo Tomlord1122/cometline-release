@@ -16,6 +16,7 @@
 		revealStagedUser: () => void;
 		onActiveChange?: (active: boolean) => void;
 		onFlightDoneChange?: (done: boolean) => void;
+		onPrepareFlight?: () => void;
 		onComplete?: () => void;
 	}
 
@@ -25,6 +26,7 @@
 		revealStagedUser,
 		onActiveChange,
 		onFlightDoneChange,
+		onPrepareFlight,
 		onComplete
 	}: Props = $props();
 
@@ -67,6 +69,7 @@
 		const textareaFrom =
 			textarea instanceof HTMLElement ? textarea.getBoundingClientRect() : null;
 
+		onPrepareFlight?.();
 		setActive(true);
 		setFlightDone(false);
 		stageUser(text);
