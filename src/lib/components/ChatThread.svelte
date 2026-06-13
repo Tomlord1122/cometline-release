@@ -502,7 +502,7 @@
 	.tool-stack {
 		min-width: 0;
 		flex: 1;
-		max-width: var(--chat-content-column);
+		max-width: calc(var(--chat-content-max) * 0.35);
 	}
 
 	.flight-placeholder {
