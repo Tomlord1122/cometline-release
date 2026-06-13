@@ -37,14 +37,6 @@
 		display: block;
 	}
 
-	.headline {
-		font-family: 'New York', 'Iowan Old Style', Georgia, serif;
-		font-size: 32px;
-		font-weight: 500;
-		margin: 0 0 10px;
-		letter-spacing: -0.02em;
-	}
-
 	.subtitle {
 		font-size: 14px;
 		color: var(--text-muted);
