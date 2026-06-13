@@ -151,6 +151,22 @@
 		return null;
 	}
 
+	function showFirstTurnAvatarSlot() {
+		if (!awaitingFirstAssistant || !firstUserId) return false;
+		if (!firstTurnFlightDone) return true;
+		if (!firstAssistantItem) return true;
+		return !showAssistantRow(firstAssistantItem);
+	}
+
+	function firstAssistantInNormalList(item: Extract<ChatItem, { type: 'assistant' }>) {
+		return !(
+			awaitingFirstAssistant &&
+			item.id === firstAssistantId &&
+			firstUserId &&
+			!(firstTurnFlightDone && showAssistantRow(item))
+		);
+	}
+
 	function startsSpeakerRun(index: number, speaker: 'user' | 'assistant') {
 		for (let i = index - 1; i >= 0; i--) {
 			const previousSpeaker = speakerFor(chatStore.items[i]);
@@ -269,7 +285,7 @@
 						{item.text}
 					</div>
 				</div>
-				{#if awaitingFirstAssistant && item.id === firstUserId}
+				{#if showFirstTurnAvatarSlot() && item.id === firstUserId}
 					<div
 						class="row assistant-row gap-2.5 md:gap-3 lg:gap-4"
 						class:flight-placeholder={!firstAssistantId}
@@ -294,11 +310,11 @@
 						{/if}
 					</div>
 				{/if}
-			{:else if item.type === 'assistant' && showAssistantRow(item) && !(awaitingFirstAssistant && item.id === firstAssistantId && firstUserId)}
+			{:else if item.type === 'assistant' && showAssistantRow(item) && firstAssistantInNormalList(item)}
 				<div
 					class="row assistant-row gap-2.5 md:gap-3 lg:gap-4"
 					class:continuation-row={!startsSpeakerRun(index, 'assistant')}
-					transition:fly={item.id === firstAssistantId ? undefined : ASSISTANT_ROW_IN}
+					in:fly={ASSISTANT_ROW_IN}
 				>
 					{#if startsSpeakerRun(index, 'assistant')}
 						<div class="avatar-mini size-9 shrink-0 rounded-full border border-gray-400 md:size-10 lg:size-11 xl:size-12">
@@ -318,7 +334,7 @@
 				<div
 					class="row tool-row gap-2.5 md:gap-3 lg:gap-4"
 					class:continuation-row={!startsSpeakerRun(index, 'assistant')}
-					transition:fly={TOOL_ROW_IN}
+					in:fly={TOOL_ROW_IN}
 				>
 					<div class="avatar-gutter size-9 shrink-0 md:size-10 lg:size-11 xl:size-12" aria-hidden="true"></div>
 					<div class="tool-stack">
@@ -367,9 +383,9 @@
 					</div>
 				</div>
 			{:else if item.type === 'status'}
-				<div class="status" transition:fly={STATUS_ROW_IN}>{usageText(item)}</div>
+				<div class="status" in:fly={STATUS_ROW_IN}>{usageText(item)}</div>
 			{:else if item.type === 'error'}
-				<div class="row event-row" transition:fly={TOOL_ROW_IN}>
+				<div class="row event-row" in:fly={TOOL_ROW_IN}>
 					<div class="event-card error-card">
 						<div class="event-title"><TriangleAlert size={14} /><span>Error</span></div>
 						<p>{item.text}</p>

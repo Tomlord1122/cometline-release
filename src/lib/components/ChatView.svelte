@@ -122,7 +122,9 @@
 		stageUser={(text) => chatStore.stageUser(text)}
 		revealStagedUser={() => chatStore.revealStagedUser()}
 		onActiveChange={(active) => (firstTurnActive = active)}
-		onFlightDoneChange={(done) => (firstTurnFlightDone = done)}
+		onFlightDoneChange={(done) => {
+			firstTurnFlightDone = done;
+		}}
 	/>
 
 	<div class="composer-wrapper" class:centered={shellStore.composerPhase === 'centered'}>
