@@ -6,6 +6,7 @@ import type {
 	StreamEvent,
 	TranscriptResponse
 } from '$lib/types';
+import { createSSEParser } from '$lib/sse/parser';
 
 const BASE_URL = 'http://127.0.0.1:7700';
 
@@ -73,41 +74,22 @@ export async function* streamMessage(
 
 	const reader = res.body.getReader();
 	const decoder = new TextDecoder();
-	let buffer = '';
+	const parser = createSSEParser();
 
 	try {
 		while (true) {
 			const { done, value } = await reader.read();
 			if (done) break;
-			buffer += decoder.decode(value, { stream: true });
-
-			const lines = buffer.split('\n');
-			buffer = lines.pop() ?? '';
-
-			for (const line of lines) {
-				const trimmed = line.trim();
-				if (!trimmed.startsWith('data:')) continue;
-				const payload = trimmed.slice(5).trim();
-				if (!payload) continue;
-				if (payload === '[DONE]') return;
-				try {
-					yield JSON.parse(payload) as StreamEvent;
-				} catch {
-					// Ignore malformed SSE payloads.
-				}
+			const chunk = decoder.decode(value, { stream: true });
+			for (const result of parser.feed(chunk)) {
+				if (result === 'done') return;
+				if (result) yield result;
 			}
 		}
 
-		const trailing = buffer.trim();
-		if (trailing.startsWith('data:')) {
-			const payload = trailing.slice(5).trim();
-			if (payload && payload !== '[DONE]') {
-				try {
-					yield JSON.parse(payload) as StreamEvent;
-				} catch {
-					// Ignore malformed SSE payloads.
-				}
-			}
+		for (const result of parser.flush()) {
+			if (result === 'done') return;
+			if (result) yield result;
 		}
 	} finally {
 		reader.releaseLock();
