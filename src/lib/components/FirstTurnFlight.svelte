@@ -4,6 +4,7 @@
 		FLIGHT_MS,
 		afterPaint,
 		rectStyle,
+		translateStyle,
 		textareaUserOrigin,
 		wait,
 		waitForSelector
@@ -83,7 +84,7 @@
 			const userTo = userTarget.getBoundingClientRect();
 			const avatarTo = avatarTarget.getBoundingClientRect();
 			userFlightText = text;
-			userFlightStyle = rectStyle(textareaUserOrigin(textareaFrom, userTo), userTo);
+			userFlightStyle = translateStyle(textareaUserOrigin(textareaFrom, userTo), userTo);
 			avatarFlightStyle = rectStyle(avatarFrom, avatarTo);
 			showUserFlight = true;
 			showAvatarFlight = true;
@@ -137,6 +138,7 @@
 		white-space: pre-wrap;
 		word-break: break-word;
 		box-shadow: 0 16px 40px rgba(31, 41, 51, 0.18);
+		animation-name: first-turn-user-flight;
 	}
 
 	.avatar-flight {
@@ -162,6 +164,15 @@
 		}
 		to {
 			transform: translate3d(var(--flight-x), var(--flight-y), 0) scale(var(--flight-sx), var(--flight-sy));
+		}
+	}
+
+	@keyframes first-turn-user-flight {
+		from {
+			transform: translate3d(0, 0, 0);
+		}
+		to {
+			transform: translate3d(var(--flight-x), var(--flight-y), 0);
 		}
 	}
 </style>

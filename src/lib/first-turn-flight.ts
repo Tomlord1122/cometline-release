@@ -18,10 +18,22 @@ export function rectStyle(from: DOMRect, to: DOMRect): string {
 	].join(';');
 }
 
+export function translateStyle(from: DOMRect, to: DOMRect): string {
+	const dx = to.left - from.left;
+	const dy = to.top - from.top;
+	return [
+		`--flight-x:${dx}px`,
+		`--flight-y:${dy}px`,
+		`left:${from.left}px`,
+		`top:${from.top}px`,
+		`width:${to.width}px`
+	].join(';');
+}
+
 /** Origin rect for the user bubble — starts at the composer textarea. */
 export function textareaUserOrigin(textarea: DOMRect, target: DOMRect): DOMRect {
-	const width = Math.max(target.width, Math.min(520, Math.max(56, textarea.width * 0.45)));
-	const height = Math.max(target.height, 40);
+	const width = target.width;
+	const height = target.height;
 	const left = Math.max(textarea.left, textarea.right - width);
 	const top = textarea.top + (textarea.height - height) / 2;
 	return new DOMRect(left, top, width, height);
