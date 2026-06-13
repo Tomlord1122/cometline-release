@@ -2,7 +2,7 @@
 </script>
 
 <div class="empty-state">
-	<div class="avatar rounded-full border border-border-soft" aria-hidden="true">
+	<div class="avatar rounded-full border border-gray-400" aria-hidden="true">
 		<img src="/project_icon.png" alt="" />
 	</div>
 	<p class="subtitle">A thought, a task, a file — Cometline continues.</p>

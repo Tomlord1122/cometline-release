@@ -235,7 +235,7 @@
 				aria-hidden="true"
 			>
 				<div
-					class="avatar-mini size-9 shrink-0 rounded-full border border-border-soft md:size-10 lg:size-11 xl:size-12"
+					class="avatar-mini size-9 shrink-0 rounded-full border border-gray-400 md:size-10 lg:size-11 xl:size-12"
 					class:avatar-flight-hidden={!firstTurnFlightDone}
 					data-flight-target="avatar"
 				>
@@ -271,7 +271,7 @@
 						aria-hidden={!firstAssistantId}
 					>
 						<div
-							class="avatar-mini size-9 shrink-0 rounded-full border border-border-soft md:size-10 lg:size-11 xl:size-12"
+							class="avatar-mini size-9 shrink-0 rounded-full border border-gray-400 md:size-10 lg:size-11 xl:size-12"
 							class:avatar-flight-hidden={!firstTurnFlightDone}
 							data-flight-target="avatar"
 						>
@@ -291,7 +291,7 @@
 					transition:fly={item.id === firstAssistantId ? undefined : ASSISTANT_ROW_IN}
 				>
 					{#if startsSpeakerRun(index, 'assistant')}
-						<div class="avatar-mini size-9 shrink-0 rounded-full border border-border-soft md:size-10 lg:size-11 xl:size-12">
+						<div class="avatar-mini size-9 shrink-0 rounded-full border border-gray-400 md:size-10 lg:size-11 xl:size-12">
 							<img src="/project_icon.png" alt="" />
 						</div>
 					{:else}
