@@ -9,6 +9,7 @@
 	import { connectionState } from '$lib/stores/runtime.svelte';
 	import { modelStore } from '$lib/stores/model.svelte';
 	import { shellStore } from '$lib/stores/shell.svelte';
+	import { startChat } from '$lib/actions/start-chat';
 	import {
 		FLIGHT_MS,
 		afterPaint,
@@ -73,7 +74,7 @@
 	$effect(() => {
 		if (bootstrapped || !initialMessage) return;
 		bootstrapped = true;
-		void sendFirstTurn(initialMessage);
+		void submit(initialMessage);
 	});
 
 	async function runParallelFirstTurn(text: string): Promise<void> {
@@ -125,22 +126,24 @@
 		firstTurnActive = false;
 	}
 
-	async function sendFirstTurn(text: string) {
-		const firstTurn = !hasVisibleConversation;
-		const flightTask = firstTurn ? runParallelFirstTurn(text) : Promise.resolve();
-		await flightTask;
-		await chatStore.send(sessionId, text, { skipUser: firstTurn });
-		if (firstTurn) awaitingFirstAssistant = false;
-		await refreshSession();
-	}
-
-	async function onSend(text: string) {
-		const firstTurn = !hasVisibleConversation;
-		const flightTask = firstTurn ? runParallelFirstTurn(text) : Promise.resolve();
-		await flightTask;
-		await chatStore.send(sessionId, text, { skipUser: firstTurn });
-		if (firstTurn) awaitingFirstAssistant = false;
-		await refreshSession();
+	async function submit(text: string) {
+		await startChat(
+			{
+				get sessionId() {
+					return sessionId;
+				},
+				get hasVisibleConversation() {
+					return hasVisibleConversation;
+				},
+				send: (t, opts) => chatStore.send(sessionId, t, opts),
+				onFirstTurnStart: runParallelFirstTurn,
+				onFirstTurnComplete: () => {
+					awaitingFirstAssistant = false;
+				},
+				refreshSession
+			},
+			text
+		);
 	}
 
 	async function refreshSession() {
@@ -180,7 +183,7 @@
 
 	<div class="composer-wrapper" class:centered={shellStore.composerPhase === 'centered'}>
 		<Composer
-			onSend={onSend}
+			onSend={submit}
 			disabled={chatStore.isStreaming || connectionState.status !== 'ready'}
 			variant={composerVariant}
 		/>
