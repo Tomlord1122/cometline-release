@@ -2,10 +2,13 @@
 	import { fade, fly, scale } from 'svelte/transition';
 	import {
 		Check,
+		Download,
+		Info,
 		Keyboard,
 		LoaderCircle,
 		Palette,
 		Plus,
+		RefreshCw,
 		Settings,
 		Trash2,
 		X
@@ -21,8 +24,9 @@
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import SettingsAppearancePanel from '$lib/components/SettingsAppearancePanel.svelte';
 	import SettingsShortcutsPanel from '$lib/components/SettingsShortcutsPanel.svelte';
+	import { onMount } from 'svelte';
 
-	type SettingsSection = 'providers' | 'appearance' | 'shortcuts';
+	type SettingsSection = 'providers' | 'appearance' | 'shortcuts' | 'about';
 
 	const METHOD_LABELS: Record<ProviderMethod, string> = {
 		'openai-compatible': 'OpenAI-compatible',
@@ -89,6 +93,10 @@
 	);
 	let status = $state('');
 	let modelSearch = $state('');
+	let appVersion = $state('');
+	let updateState = $state<UpdateState>({ status: 'idle' });
+	let checkingUpdates = $state(false);
+	let installingUpdate = $state(false);
 
 	let selectedProvider = $derived(
 		draft.providers.find((p) => p.id === selectedProviderId) ?? draft.providers[0]
@@ -110,6 +118,76 @@
 			0
 		)
 	);
+
+	let updateStatusText = $derived.by(() => {
+		switch (updateState.status) {
+			case 'checking':
+				return 'Checking for updates…';
+			case 'downloading':
+				return updateState.percent != null
+					? `Downloading update ${updateState.percent}%`
+					: 'Downloading update…';
+			case 'ready':
+				return updateState.version
+					? `Update available (v${updateState.version})`
+					: 'Update available';
+			case 'error':
+				return updateState.message ?? 'Update check failed';
+			default:
+				return 'Cometline is up to date';
+		}
+	});
+
+	let canCheckUpdates = $derived(
+		!checkingUpdates && updateState.status !== 'downloading' && !installingUpdate
+	);
+
+	onMount(() => {
+		const api = window.electronAPI;
+		if (!api) return;
+
+		void api.getAppVersion?.().then((version) => {
+			if (version) appVersion = version;
+		});
+		void api.getUpdateState?.().then((current) => {
+			if (current) updateState = current;
+		});
+
+		const unsubscribe = api.onUpdateState?.((next) => {
+			updateState = next;
+			if (next.status !== 'checking') checkingUpdates = false;
+		});
+		return () => unsubscribe?.();
+	});
+
+	async function checkForUpdates() {
+		const api = window.electronAPI;
+		if (!api?.checkForUpdates || !canCheckUpdates) return;
+		checkingUpdates = true;
+		try {
+			const next = await api.checkForUpdates();
+			updateState = next;
+		} catch (error) {
+			updateState = {
+				status: 'error',
+				message: error instanceof Error ? error.message : 'Update check failed'
+			};
+		} finally {
+			checkingUpdates = false;
+		}
+	}
+
+	async function installUpdate() {
+		const api = window.electronAPI;
+		if (!api?.installUpdate || updateState.status !== 'ready' || installingUpdate) return;
+		installingUpdate = true;
+		try {
+			await api.installUpdate();
+		} catch (error) {
+			console.error('Failed to install update:', error);
+			installingUpdate = false;
+		}
+	}
 
 	function updateProvider(providerId: string, patch: Partial<ProviderConfig>) {
 		draft = {
@@ -320,6 +398,17 @@
 					<Keyboard size={15} />
 					<span>Shortcuts</span>
 				</button>
+				<button
+					class="settings-nav-item"
+					class:selected={activeSection === 'about'}
+					onclick={() => {
+						activeSection = 'about';
+						status = '';
+					}}
+				>
+					<Info size={15} />
+					<span>About</span>
+				</button>
 			</nav>
 
 			<div class="settings-pane">
@@ -521,8 +610,55 @@
 					</div>
 				{:else if activeSection === 'appearance'}
 					<SettingsAppearancePanel bind:appearance={draft.appearance.heroComposer} />
-				{:else}
+				{:else if activeSection === 'shortcuts'}
 					<SettingsShortcutsPanel shortcuts={draft.shortcuts} onChange={updateShortcut} />
+				{:else}
+					<div class="about-pane">
+						<h3>About Cometline</h3>
+						<div class="about-row">
+							<span class="about-label">Version</span>
+							<span class="about-value">{appVersion || '—'}</span>
+						</div>
+						<div class="about-row update-row">
+							<div class="update-info">
+								<span class="about-label">Updates</span>
+								<span
+									class="update-status"
+									class:update-error={updateState.status === 'error'}
+									class:update-ready={updateState.status === 'ready'}
+								>
+									{#if checkingUpdates || updateState.status === 'checking' || updateState.status === 'downloading'}
+										<span class="spin small"><LoaderCircle size={14} /></span>
+									{/if}
+									{updateStatusText}
+								</span>
+							</div>
+							{#if updateState.status === 'ready'}
+								<button
+									class="primary"
+									onclick={installUpdate}
+									disabled={installingUpdate}
+								>
+									{#if installingUpdate}<span class="spin"
+											><LoaderCircle size={14} /></span
+										>{:else}<Download size={14} />{/if}
+									Install update
+								</button>
+							{:else}
+								<button
+									class="secondary"
+									onclick={checkForUpdates}
+									disabled={!canCheckUpdates}
+								>
+									{#if checkingUpdates || updateState.status === 'checking'}<span
+											class="spin"
+											><LoaderCircle size={14} /></span
+										>{:else}<RefreshCw size={14} />{/if}
+									Check for updates
+								</button>
+							{/if}
+						</div>
+					</div>
 				{/if}
 			</div>
 		</div>
@@ -1004,10 +1140,77 @@
 		animation: spin 0.9s linear infinite;
 	}
 
+	.spin.small {
+		width: 14px;
+		height: 14px;
+	}
+
 	@keyframes spin {
 		to {
 			transform: rotate(360deg);
 		}
+	}
+
+	.about-pane {
+		display: grid;
+		gap: 16px;
+		padding: 4px 2px;
+	}
+
+	.about-pane h3 {
+		font-size: 15px;
+		font-weight: 700;
+		margin: 0;
+	}
+
+	.about-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 16px;
+		padding: 14px 16px;
+		border: 1px solid var(--border-soft);
+		border-radius: 16px;
+		background: rgba(251, 251, 250, 0.72);
+	}
+
+	.about-label {
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--text-muted);
+	}
+
+	.about-value {
+		font-size: 13px;
+		font-weight: 650;
+		color: var(--text-main);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.update-row {
+		align-items: flex-start;
+	}
+
+	.update-info {
+		display: grid;
+		gap: 6px;
+	}
+
+	.update-status {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 13px;
+		font-weight: 650;
+		color: var(--text-main);
+	}
+
+	.update-status.update-error {
+		color: #b42318;
+	}
+
+	.update-status.update-ready {
+		color: #027a48;
 	}
 
 	@media (max-width: 780px) {

@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 		ipcRenderer.on('cometline:fullscreen-changed', handler);
 		return () => ipcRenderer.removeListener('cometline:fullscreen-changed', handler);
 	},
+	getAppVersion: () => ipcRenderer.invoke('cometline:get-app-version'),
 	getUpdateState: () => ipcRenderer.invoke('cometline:get-update-state'),
 	checkForUpdates: () => ipcRenderer.invoke('cometline:check-for-updates'),
 	installUpdate: () => ipcRenderer.invoke('cometline:install-update'),

@@ -75,6 +75,7 @@ declare global {
 			setSidebarOpen?: (state: SidebarChromeState) => void;
 			getFullScreen?: () => Promise<boolean>;
 			onFullScreenChange?: (callback: (isFullScreen: boolean) => void) => () => void;
+			getAppVersion?: () => Promise<string>;
 			getUpdateState?: () => Promise<UpdateState>;
 			checkForUpdates?: () => Promise<UpdateState>;
 			installUpdate?: () => Promise<boolean>;

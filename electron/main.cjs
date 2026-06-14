@@ -1008,6 +1008,8 @@ ipcMain.handle('cometline:save-provider-settings', async (_event, settings) => {
 	return saved;
 });
 
+ipcMain.handle('cometline:get-app-version', () => app.getVersion());
+
 ipcMain.handle('cometline:get-update-state', () => updateState);
 
 ipcMain.handle('cometline:check-for-updates', async () => {
