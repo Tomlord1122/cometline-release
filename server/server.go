@@ -63,6 +63,7 @@ func New(deps Deps) (*gin.Engine, error) {
 
 	api := r.Group("/api/v1")
 	api.GET("/health", app.handleHealth)
+	api.POST("/workspaces", app.handleCreateWorkspace)
 	api.POST("/sessions", app.handleCreateSession)
 	api.GET("/sessions", app.handleListSessions)
 	api.GET("/sessions/:id", app.handleGetSession)
@@ -101,6 +102,15 @@ func isAllowedLocalOrigin(origin string) bool {
 	return strings.HasPrefix(origin, "http://127.0.0.1:") ||
 		strings.HasPrefix(origin, "http://localhost:") ||
 		strings.HasPrefix(origin, "app://")
+}
+
+type createWorkspaceRequest struct {
+	WorkspacePath string `json:"workspace_path"`
+}
+
+type workspaceResource struct {
+	ID   string `json:"id"`
+	Path string `json:"path"`
 }
 
 type createSessionRequest struct {
@@ -171,6 +181,27 @@ type statusResponse struct {
 
 func (a *App) handleHealth(c *gin.Context) {
 	c.JSON(http.StatusOK, healthResponse{Status: "ok"})
+}
+
+func (a *App) handleCreateWorkspace(c *gin.Context) {
+	var req createWorkspaceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		return
+	}
+
+	clean, ok := cleanWorkspacePath(c, req.WorkspacePath)
+	if !ok {
+		return
+	}
+
+	ws, err := a.sessions.EnsureWorkspace(c.Request.Context(), clean)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	c.JSON(http.StatusCreated, workspaceResource{ID: ws.ID, Path: ws.Path})
 }
 
 func (a *App) handleCreateSession(c *gin.Context) {

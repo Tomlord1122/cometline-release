@@ -65,6 +65,46 @@ func TestCreateSessionAutoRegistersWorkspacePath(t *testing.T) {
 	}
 }
 
+func TestCreateWorkspaceRegistersPath(t *testing.T) {
+	t.Parallel()
+
+	engine, svc, cleanup := newTestEngine(t, func(sess session.Session, workspacePath string) (Runner, error) {
+		return fakeRunner(func(ctx context.Context, turn session.AgentTurn, ch chan<- event.Event) error {
+			ch <- event.Done()
+			return nil
+		}), nil
+	})
+	defer cleanup()
+
+	workspacePath := t.TempDir()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/workspaces", bytes.NewBufferString(`{"workspace_path":`+mustJSON(workspacePath)+`}`))
+	req.Header.Set("Content-Type", "application/json")
+
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+
+	var got workspaceResource
+	decodeJSON(t, rec.Body.Bytes(), &got)
+	if got.Path != filepath.Clean(workspacePath) {
+		t.Fatalf("workspace path = %q, want %q", got.Path, filepath.Clean(workspacePath))
+	}
+	if got.ID == "" {
+		t.Fatalf("expected workspace id to be populated: %+v", got)
+	}
+
+	ws, err := svc.LookupWorkspaceByPath(context.Background(), workspacePath)
+	if err != nil {
+		t.Fatalf("LookupWorkspaceByPath() error = %v", err)
+	}
+	if ws.ID != got.ID {
+		t.Fatalf("lookup workspace id = %q, want %q", ws.ID, got.ID)
+	}
+}
+
 func TestListSessionsRequiresWorkspaceScope(t *testing.T) {
 	t.Parallel()
 
