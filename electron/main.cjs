@@ -3,11 +3,13 @@ const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
+const { autoUpdater } = require('electron-updater');
 
 const COMETMIND_PORT = 7700;
 const HEALTH_URL = `http://127.0.0.1:${COMETMIND_PORT}/api/v1/health`;
 const MAX_RETRIES = 50;
 const POLL_MS = 100;
+const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 
 function defaultAppearance() {
 	return {
@@ -91,6 +93,9 @@ const VALID_PROVIDER_METHODS = ['openai-compatible', 'openai', 'anthropic', 'ope
 
 let mainWindow = null;
 let cometMindProcess = null;
+let stoppingForQuit = false;
+let stoppedForQuit = false;
+let updateCheckTimer = null;
 let windowButtonAnimationTimer = null;
 let windowButtonPosition = { x: 16, y: 17 };
 
@@ -526,11 +531,13 @@ function startCometMind() {
 
 	cometMindProcess.on('exit', (code) => {
 		console.log(`CometMind exited with code ${code}`);
+		logStream.end();
 		cometMindProcess = null;
 	});
 
 	cometMindProcess.on('error', (err) => {
 		console.error('CometMind spawn error:', err);
+		logStream.end();
 		cometMindProcess = null;
 	});
 }
@@ -542,10 +549,11 @@ function stopCometMind() {
 
 	return new Promise((resolve) => {
 		let settled = false;
+		let forceTimer = null;
 		const finish = () => {
 			if (settled) return;
 			settled = true;
-			clearTimeout(forceTimer);
+			if (forceTimer) clearTimeout(forceTimer);
 			resolve();
 		};
 
@@ -557,7 +565,7 @@ function stopCometMind() {
 
 		// Escalate to SIGKILL if graceful shutdown stalls past the server's
 		// 5s shutdown budget, then resolve once it is gone.
-		const forceTimer = setTimeout(() => {
+		forceTimer = setTimeout(() => {
 			try {
 				proc.kill('SIGKILL');
 			} catch {
@@ -585,6 +593,32 @@ async function waitForHealth() {
 		await new Promise((resolve) => setTimeout(resolve, POLL_MS));
 	}
 	return false;
+}
+
+function configureAutoUpdater() {
+	if (!app.isPackaged) return;
+
+	autoUpdater.autoDownload = true;
+	autoUpdater.autoInstallOnAppQuit = true;
+	autoUpdater.logger = {
+		info: (message) => console.log(`[auto-updater] ${message}`),
+		warn: (message) => console.warn(`[auto-updater] ${message}`),
+		error: (message) => console.error(`[auto-updater] ${message}`),
+		debug: (message) => console.debug(`[auto-updater] ${message}`)
+	};
+
+	autoUpdater.on('error', (err) => {
+		console.error('Auto-update error:', err);
+	});
+
+	const check = () => {
+		autoUpdater.checkForUpdates().catch((err) => {
+			console.error('Auto-update check failed:', err);
+		});
+	};
+
+	check();
+	updateCheckTimer = setInterval(check, UPDATE_CHECK_INTERVAL_MS);
 }
 
 async function createWindow() {
@@ -740,6 +774,7 @@ app.whenReady().then(async () => {
 		console.error('CometMind failed to become healthy');
 	}
 	await createWindow();
+	configureAutoUpdater();
 
 	app.on('activate', () => {
 		if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -748,13 +783,21 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
 	if (process.platform !== 'darwin') {
-		stopCometMind();
 		app.quit();
 	}
 });
 
-app.on('before-quit', () => {
-	stopCometMind();
+app.on('before-quit', async (event) => {
+	if (stoppedForQuit || stoppingForQuit) return;
+	event.preventDefault();
+	stoppingForQuit = true;
+	if (updateCheckTimer) {
+		clearInterval(updateCheckTimer);
+		updateCheckTimer = null;
+	}
+	await stopCometMind();
+	stoppedForQuit = true;
+	app.quit();
 });
 
 ipcMain.on('cometmind:restart', async () => {
