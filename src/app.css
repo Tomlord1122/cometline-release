@@ -38,7 +38,10 @@
 	--composer-hero-bottom: calc(50% - 11rem);
 	--composer-dock-clearance: 11.5rem;
 	--thread-scroll-gap: 1.25rem;
-	--thread-dock-inset: calc(var(--composer-dock-bottom) + var(--composer-dock-clearance));
+	/* Clip thread at composer vertical center so scroll area extends further down. */
+	--thread-dock-inset: calc(
+		var(--composer-dock-bottom) + 10rem
+	);
 	--thread-padding-bottom: var(--thread-scroll-gap);
 
 	/* Motion */
