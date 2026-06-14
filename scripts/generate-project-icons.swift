@@ -61,9 +61,10 @@ let outputs = [
 	Output(path: "static/project_avatar_96.png", size: 96, radius: 48, artworkScale: 1.0),
 	Output(path: "static/project_avatar_192.png", size: 192, radius: 96, artworkScale: 1.0),
 	Output(path: "static/project_avatar_384.png", size: 384, radius: 192, artworkScale: 1.0),
-	// macOS app icons need padding so the artwork does not fill the whole Dock tile.
-	Output(path: "static/app_icon.png", size: 1024, radius: 224, artworkScale: 0.78),
-	Output(path: "buildResources/icon.png", size: 1024, radius: 224, artworkScale: 0.78)
+	// macOS app icons fill the rounded tile edge-to-edge (object-cover) so the
+	// artwork is not letterboxed with empty padding in the Dock.
+	Output(path: "static/app_icon.png", size: 1024, radius: 224, artworkScale: 1.0),
+	Output(path: "buildResources/icon.png", size: 1024, radius: 224, artworkScale: 1.0)
 ]
 
 guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: sourcePath) as CFURL, nil),

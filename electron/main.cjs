@@ -1,11 +1,20 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, protocol, net } = require('electron');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const { autoUpdater } = require('electron-updater');
 
 const COMETMIND_PORT = 7700;
+// Custom scheme used to serve the packaged SvelteKit bundle. Loading the
+// fallback index.html over file:// breaks because adapter-static emits
+// absolute asset paths (/_app/immutable/...) that resolve against the
+// filesystem root. Serving the bundle through a registered standard scheme
+// makes those absolute paths resolve against the bundle root instead.
+const APP_SCHEME = 'app';
+const APP_HOST = 'bundle';
+const APP_ORIGIN = `${APP_SCHEME}://${APP_HOST}`;
 const HEALTH_URL = `http://127.0.0.1:${COMETMIND_PORT}/api/v1/health`;
 const MAX_RETRIES = 50;
 const POLL_MS = 100;
@@ -102,6 +111,22 @@ const OPENCODE_GO_AVAILABLE_MODELS = [
 ];
 const DEFAULT_OPENCODE_GO_ENABLED_MODELS = ['deepseek-v4-flash'];
 const VALID_PROVIDER_METHODS = ['openai-compatible', 'openai', 'anthropic', 'opencode-go'];
+
+// Must run before app `ready`. Marking the scheme standard + secure gives the
+// loaded page a normal web origin (so history API routing, fetch, and module
+// scripts behave like https) instead of the restricted file:// origin.
+protocol.registerSchemesAsPrivileged([
+	{
+		scheme: APP_SCHEME,
+		privileges: {
+			standard: true,
+			secure: true,
+			supportFetchAPI: true,
+			stream: true,
+			codeCache: true
+		}
+	}
+]);
 
 let mainWindow = null;
 let cometMindProcess = null;
@@ -659,6 +684,41 @@ function configureAutoUpdater() {
 	updateCheckTimer = setInterval(check, UPDATE_CHECK_INTERVAL_MS);
 }
 
+function getBundleDir() {
+	return path.join(__dirname, '..', 'build');
+}
+
+// Serves the packaged SvelteKit bundle over the custom app:// scheme. Absolute
+// asset paths (e.g. /_app/immutable/x.js) map onto the bundle root, and any
+// request that does not resolve to a real file falls back to index.html so the
+// SPA router can handle client-side routes on reload.
+function registerAppProtocol() {
+	const bundleDir = getBundleDir();
+	const fallback = path.join(bundleDir, 'index.html');
+
+	protocol.handle(APP_SCHEME, (request) => {
+		const requestUrl = new URL(request.url);
+		// Decode and strip the leading slash so it resolves within the bundle.
+		let relativePath = decodeURIComponent(requestUrl.pathname).replace(/^\/+/, '');
+		if (!relativePath) relativePath = 'index.html';
+
+		let resolved = path.normalize(path.join(bundleDir, relativePath));
+
+		// Guard against path traversal escaping the bundle directory.
+		const withinBundle = resolved === bundleDir || resolved.startsWith(bundleDir + path.sep);
+		if (!withinBundle) {
+			return new Response('Forbidden', { status: 403 });
+		}
+
+		// Fall back to the SPA shell for client-side routes (no real file).
+		if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
+			resolved = fallback;
+		}
+
+		return net.fetch(pathToFileURL(resolved).toString());
+	});
+}
+
 async function createWindow() {
 	const icon = getAppIconPath();
 	mainWindow = new BrowserWindow({
@@ -692,7 +752,7 @@ async function createWindow() {
 	if (process.platform === 'darwin' && icon) app.dock?.setIcon(icon);
 
 	if (app.isPackaged) {
-		mainWindow.loadFile(path.join(__dirname, '..', 'build', 'index.html'));
+		await mainWindow.loadURL(`${APP_ORIGIN}/index.html`);
 	} else {
 		await mainWindow.loadURL('http://127.0.0.1:5173');
 	}
@@ -803,6 +863,9 @@ async function fetchProviderModels(config) {
 }
 
 app.whenReady().then(async () => {
+	// Serve the packaged bundle over the custom app:// scheme.
+	if (app.isPackaged) registerAppProtocol();
+
 	// Ensure CometMind config exists before starting so the active provider is
 	// available even on first launch.
 	writeCometMindConfig(readProviderSettings());

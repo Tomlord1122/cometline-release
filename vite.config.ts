@@ -4,7 +4,6 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
-	base: './',
 	server: {
 		port: 5173,
 		strictPort: true
