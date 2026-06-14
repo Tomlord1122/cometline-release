@@ -6,9 +6,9 @@ Comet SDK is the provider-normalized LLM I/O layer for Cometline. It must stay s
 
 ## Status Snapshot
 
-- **Phase 0 — Contract Freeze**: largely done. `FinishReason` is normalized at the Stream seam (ADR-0002), sealed `Event`/`Block` sum types documented (ADR-0001), golden SSE fixtures exist for both providers. Remaining: explicit stable/experimental annotations on every public type.
-- **Phase 1 — Provider Robustness**: largely done. Cross-provider behavior consolidated in `internal/providerbase` (ADR-0003), `Retry-After` honored (ADR-0004), typed errors for auth/rate-limit/server/stream. Remaining: malformed-SSE fixtures, log redaction rules.
-- **Phase 2+**: not started.
+- **Phase 0 — Contract Freeze**: done in substance. `FinishReason` is normalized at the Stream seam (ADR-0002), sealed `Event`/`Block` sum types are documented (ADR-0001), and golden SSE fixtures exist for both providers. Remaining before calling Phase 0 closed: add explicit `// Stable:` / `// Experimental:` annotations to every public type in `sdk.go` and the `llm` package.
+- **Phase 1 — Provider Robustness**: largely done. Cross-provider behavior is consolidated in `internal/providerbase` (ADR-0003), `Retry-After` is honored (ADR-0004), and typed errors exist for auth/rate-limit/server/stream failures. Remaining: malformed-SSE fixtures, partial JSON tool-call argument fixtures, and debug-log redaction rules so API keys and sensitive message content are never logged by default.
+- **Phase 2 — Model Capability Metadata**: **next phase**. Not started.
 
 ## North Star
 
