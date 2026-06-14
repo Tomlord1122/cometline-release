@@ -6,6 +6,7 @@
 		skipOnPrepare?: boolean;
 		textareaFrom?: DOMRect | null;
 		deferReveal?: boolean;
+		deferHideParticle?: boolean;
 		skipStage?: boolean;
 	}
 
@@ -33,6 +34,10 @@
 		userFlightStyle = '';
 	}
 
+	export function dismissParticle() {
+		hideParticle();
+	}
+
 	function flightParams(text: string, opts: RunOptions = {}): FlyUserBubbleParams | null {
 		if (!root) return null;
 		return {
@@ -44,6 +49,7 @@
 			skipOnPrepare: opts.skipOnPrepare,
 			textareaFrom: opts.textareaFrom,
 			deferReveal: opts.deferReveal,
+			deferHideParticle: opts.deferHideParticle,
 			skipStage: opts.skipStage,
 			onShowParticle: showParticle,
 			onHideParticle: hideParticle

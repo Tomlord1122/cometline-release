@@ -106,6 +106,8 @@ export interface FlyUserBubbleParams {
 	textareaFrom?: DOMRect | null;
 	/** When true, the caller invokes `revealStagedUser` after coordinated animations. */
 	deferReveal?: boolean;
+	/** When true, the caller dismisses the particle after the thread handoff. */
+	deferHideParticle?: boolean;
 	/** When true, the caller already staged the user bubble. */
 	skipStage?: boolean;
 	onShowParticle: (text: string, style: string) => void;
@@ -123,6 +125,7 @@ export async function flyUserBubble(params: FlyUserBubbleParams): Promise<boolea
 		skipOnPrepare,
 		textareaFrom,
 		deferReveal,
+		deferHideParticle,
 		skipStage,
 		onShowParticle,
 		onHideParticle
@@ -162,7 +165,7 @@ export async function flyUserBubble(params: FlyUserBubbleParams): Promise<boolea
 
 	onShowParticle(text, style);
 	await wait(FLIGHT_MS);
-	onHideParticle();
+	if (!deferHideParticle) onHideParticle();
 	reveal();
 	return true;
 }

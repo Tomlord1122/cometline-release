@@ -1,13 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import UserBubbleFlight from '$lib/components/UserBubbleFlight.svelte';
-	import {
-		FLIGHT_MS,
-		afterPaint,
-		rectStyle,
-		wait,
-		waitForSelector
-	} from '$lib/first-turn-flight';
+	import { afterPaint, rectStyle, waitForSelector } from '$lib/first-turn-flight';
 
 	interface Props {
 		root: HTMLElement | null;
@@ -49,11 +43,7 @@
 		onFlightDoneChange?.(value);
 	}
 
-	async function animateAvatar(avatarFrom: DOMRect, avatarTarget: HTMLElement): Promise<void> {
-		const avatarTo = avatarTarget.getBoundingClientRect();
-		avatarFlightStyle = rectStyle(avatarFrom, avatarTo);
-		showAvatarFlight = true;
-		await wait(FLIGHT_MS);
+	function hideAvatarParticle() {
 		showAvatarFlight = false;
 		avatarFlightStyle = '';
 	}
@@ -82,34 +72,37 @@
 		await tick();
 
 		const avatarTarget = await waitForSelector(root, '[data-flight-target="avatar"]');
-
-		const animations: Promise<unknown>[] = [
-			userBubbleFlight.runAsync(text, {
-				skipOnPrepare: true,
-				skipStage: true,
-				textareaFrom,
-				deferReveal: true
-			})
-		];
-
 		if (avatarFrom && avatarTarget instanceof HTMLElement) {
-			animations.push(animateAvatar(avatarFrom, avatarTarget));
+			avatarFlightStyle = rectStyle(avatarFrom, avatarTarget.getBoundingClientRect());
+			showAvatarFlight = true;
 		}
 
-		const results = await Promise.all(animations);
-		const userFlew = results[0] === true;
+		const userFlew = await userBubbleFlight.runAsync(text, {
+			skipOnPrepare: true,
+			skipStage: true,
+			textareaFrom,
+			deferReveal: true,
+			deferHideParticle: true
+		});
 
 		if (!userFlew) {
 			revealStagedUser();
 			setFlightDone(true);
+			hideAvatarParticle();
+			userBubbleFlight.dismissParticle();
 			setActive(false);
 			onComplete?.();
 			return;
 		}
 
 		revealStagedUser();
+		// Unhide the real thread avatar slot BEFORE tearing down flight particles,
+		// so the avatar never blinks out between overlay end and the thread slot.
 		setFlightDone(true);
 		await afterPaint();
+
+		hideAvatarParticle();
+		userBubbleFlight.dismissParticle();
 		setActive(false);
 		onComplete?.();
 	}
