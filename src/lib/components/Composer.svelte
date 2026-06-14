@@ -190,7 +190,6 @@
 				? 'Type something. Anything.'
 				: 'Type something…'}
 		onkeydown={onKeydown}
-		{disabled}
 		aria-label="Message input"
 	></textarea>
 

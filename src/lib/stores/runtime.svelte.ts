@@ -27,6 +27,12 @@ function createConnectionState() {
 		}
 	}
 
+	function reconnect() {
+		status = 'connecting';
+		message = '';
+		void check();
+	}
+
 	function startPolling() {
 		check();
 		if (timer) return;
@@ -49,7 +55,8 @@ function createConnectionState() {
 		},
 		startPolling,
 		stopPolling,
-		check
+		check,
+		reconnect
 	};
 }
 

@@ -35,7 +35,6 @@ declare global {
 			getProviderSettings?: () => Promise<ProviderSettings>;
 			fetchProviderModels?: (config: ProviderConfig) => Promise<string[]>;
 			saveProviderSettings?: (settings: ProviderSettings) => Promise<ProviderSettings>;
-			setSidebarOpen?: (open: boolean) => void;
 		};
 	}
 }

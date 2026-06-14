@@ -1,6 +1,7 @@
 import type { ProviderConfig, ProviderSettings } from '$lib/types';
 import { DEFAULT_HERO_COMPOSER_APPEARANCE, normalizeHeroComposerAppearance } from '$lib/hero-composer-appearance';
 import { modelStore } from './model.svelte';
+import { connectionState } from './runtime.svelte';
 
 const OPENCODE_GO_AVAILABLE_MODELS = [
 	'deepseek-v4-flash',
@@ -252,10 +253,12 @@ function createSettingsStore() {
 			if (window.electronAPI?.saveProviderSettings) {
 				const saved = await window.electronAPI.saveProviderSettings(normalized);
 				apply(saved);
+				connectionState.reconnect();
 				return saved;
 			}
 			writeLocalSettings(normalized);
 			apply(normalized);
+			connectionState.reconnect();
 			return normalized;
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to save settings';

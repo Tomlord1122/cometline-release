@@ -6,16 +6,11 @@
 	import { shellStore } from '$lib/stores/shell.svelte';
 	import { startNewChat } from '$lib/actions/new-chat';
 	import { narrowViewportQuery } from '$lib/layout/narrow-viewport';
-	import { syncTrafficLightsForSidebar } from '$lib/electron/sync-traffic-lights';
 
 	let {
 		children,
 		workspacePath = '/'
 	}: { children: import('svelte').Snippet; workspacePath?: string } = $props();
-
-	$effect(() => {
-		syncTrafficLightsForSidebar(shellStore.sidebarOpen);
-	});
 
 	onMount(() => {
 		// Narrow viewports start with the sidebar closed so chat gets full width.
