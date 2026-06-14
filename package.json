@@ -70,9 +70,6 @@
 			"gatekeeperAssess": false,
 			"entitlements": "buildResources/entitlements.mac.plist",
 			"entitlementsInherit": "buildResources/entitlements.mac.plist",
-			"binaries": [
-				"Contents/Resources/cometmind"
-			],
 			"notarize": true,
 			"target": [
 				"dmg",
