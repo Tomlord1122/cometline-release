@@ -98,7 +98,9 @@ func isAllowedLocalOrigin(origin string) bool {
 	if origin == "" || origin == "null" || origin == "file://" {
 		return true
 	}
-	return strings.HasPrefix(origin, "http://127.0.0.1:") || strings.HasPrefix(origin, "http://localhost:")
+	return strings.HasPrefix(origin, "http://127.0.0.1:") ||
+		strings.HasPrefix(origin, "http://localhost:") ||
+		strings.HasPrefix(origin, "app://")
 }
 
 type createSessionRequest struct {

@@ -334,6 +334,43 @@ func TestLocalCORSAllowsCometlineRenderer(t *testing.T) {
 	}
 }
 
+func TestLocalCORSAllowsPackagedCometlineOrigin(t *testing.T) {
+	t.Parallel()
+
+	engine, _, cleanup := newTestEngine(t, func(sess session.Session, workspacePath string) (Runner, error) {
+		return fakeRunner(func(ctx context.Context, turn session.AgentTurn, ch chan<- event.Event) error {
+			ch <- event.Done()
+			return nil
+		}), nil
+	})
+	defer cleanup()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+	req.Header.Set("Origin", "app://bundle")
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "app://bundle" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want packaged app origin", got)
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodOptions, "/api/v1/sessions", nil)
+	req.Header.Set("Origin", "app://bundle")
+	req.Header.Set("Access-Control-Request-Method", http.MethodPost)
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("preflight status = %d, want %d body=%s", rec.Code, http.StatusNoContent, rec.Body.String())
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, http.MethodPost) || !strings.Contains(got, http.MethodDelete) {
+		t.Fatalf("Access-Control-Allow-Methods = %q, want POST and DELETE", got)
+	}
+}
+
 func TestAbortSessionCancelsRunningStream(t *testing.T) {
 	t.Parallel()
 
