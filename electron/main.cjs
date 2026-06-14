@@ -9,6 +9,15 @@ const HEALTH_URL = `http://127.0.0.1:${COMETMIND_PORT}/api/v1/health`;
 const MAX_RETRIES = 50;
 const POLL_MS = 100;
 
+function defaultAppearance() {
+	return {
+		heroComposer: {
+			glowColor: '#f43f5e',
+			ringColor: '#fb7185'
+		}
+	};
+}
+
 function defaultProviderSettings() {
 	return {
 		providers: [
@@ -57,7 +66,8 @@ function defaultProviderSettings() {
 				enabledModels: [...DEFAULT_OPENCODE_GO_ENABLED_MODELS]
 			}
 		],
-		activeProviderId: 'opencode-go'
+		activeProviderId: 'opencode-go',
+		appearance: defaultAppearance()
 	};
 }
 
@@ -186,6 +196,32 @@ function normalizeProvider(provider, fallback = {}) {
 	};
 }
 
+function normalizeHexColor(value, fallback) {
+	if (typeof value !== 'string') return fallback;
+	const trimmed = value.trim();
+	if (!/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(trimmed)) return fallback;
+	if (trimmed.length === 4) {
+		return `#${trimmed[1]}${trimmed[1]}${trimmed[2]}${trimmed[2]}${trimmed[3]}${trimmed[3]}`.toLowerCase();
+	}
+	return trimmed.toLowerCase();
+}
+
+function normalizeAppearance(appearance) {
+	const defaults = defaultAppearance();
+	return {
+		heroComposer: {
+			glowColor: normalizeHexColor(
+				appearance?.heroComposer?.glowColor,
+				defaults.heroComposer.glowColor
+			),
+			ringColor: normalizeHexColor(
+				appearance?.heroComposer?.ringColor,
+				defaults.heroComposer.ringColor
+			)
+		}
+	};
+}
+
 function normalizeProviders(providers) {
 	const defaults = defaultProviderSettings().providers;
 	const saved = Array.isArray(providers) ? providers : [];
@@ -225,6 +261,7 @@ function readProviderSettings() {
 	const base = migrated ? migrated : { ...defaults, ...saved };
 
 	base.providers = normalizeProviders(base.providers);
+	base.appearance = normalizeAppearance(saved.appearance ?? base.appearance);
 	if (!base.activeProviderId || !base.providers.find((p) => p.id === base.activeProviderId)) {
 		base.activeProviderId =
 			base.providers.find((p) => p.enabled && p.enabledModels.length > 0)?.id ??
@@ -256,7 +293,11 @@ function writeProviderSettings(settings) {
 		nextProviders.find((p) => p.enabled)?.id ??
 		nextProviders[0]?.id ??
 		'';
-	const next = { providers: nextProviders, activeProviderId: nextActive };
+	const next = {
+		providers: nextProviders,
+		activeProviderId: nextActive,
+		appearance: normalizeAppearance(settings.appearance ?? current.appearance)
+	};
 	const settingsPath = getSettingsPath();
 	fs.writeFileSync(settingsPath, JSON.stringify(next, null, 2));
 	try {

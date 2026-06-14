@@ -1,4 +1,5 @@
 import type { ProviderConfig, ProviderSettings } from '$lib/types';
+import { DEFAULT_HERO_COMPOSER_APPEARANCE, normalizeHeroComposerAppearance } from '$lib/hero-composer-appearance';
 import { modelStore } from './model.svelte';
 
 const OPENCODE_GO_AVAILABLE_MODELS = [
@@ -137,6 +138,12 @@ function newProvider(id: string): ProviderConfig {
 	};
 }
 
+function defaultAppearance() {
+	return {
+		heroComposer: { ...DEFAULT_HERO_COMPOSER_APPEARANCE }
+	};
+}
+
 function defaultSettings(): ProviderSettings {
 	const providers = DEFAULT_PROVIDERS.map(cloneProvider);
 	const active =
@@ -144,7 +151,8 @@ function defaultSettings(): ProviderSettings {
 		providers[0];
 	return {
 		providers,
-		activeProviderId: active.id
+		activeProviderId: active.id,
+		appearance: defaultAppearance()
 	};
 }
 
@@ -152,7 +160,41 @@ function fallbackSettings() {
 	const defaults = defaultSettings();
 	return {
 		providers: defaults.providers.map(cloneProvider),
-		activeProviderId: defaults.activeProviderId
+		activeProviderId: defaults.activeProviderId,
+		appearance: defaultAppearance()
+	};
+}
+
+const LOCAL_SETTINGS_KEY = 'cometline-settings';
+
+function readLocalSettings(): ProviderSettings {
+	try {
+		const raw = localStorage.getItem(LOCAL_SETTINGS_KEY);
+		if (!raw) return fallbackSettings();
+		return normalizeSettings(JSON.parse(raw) as Partial<ProviderSettings>);
+	} catch {
+		return fallbackSettings();
+	}
+}
+
+function writeLocalSettings(settings: ProviderSettings) {
+	localStorage.setItem(LOCAL_SETTINGS_KEY, JSON.stringify(settings));
+}
+
+function normalizeSettings(next: Partial<ProviderSettings>): ProviderSettings {
+	const providers = normalizeProviders(next.providers);
+	const firstEnabled = providers.find(
+		(provider) => provider.enabled && provider.enabledModels.length > 0
+	);
+	const activeProviderId =
+		firstEnabled?.id ?? next.activeProviderId ?? providers[0]?.id ?? '';
+	const appearance = {
+		heroComposer: normalizeHeroComposerAppearance(next.appearance?.heroComposer)
+	};
+	return {
+		providers,
+		activeProviderId,
+		appearance
 	};
 }
 
@@ -164,18 +206,7 @@ function createSettingsStore() {
 	let error = $state('');
 
 	function apply(next: ProviderSettings) {
-		const providers = normalizeProviders(next.providers);
-		const firstEnabled = providers.find(
-			(provider) => provider.enabled && provider.enabledModels.length > 0
-		);
-		const activeProviderId =
-			firstEnabled?.id ?? next.activeProviderId ?? providers[0]?.id ?? '';
-		settings = {
-			...fallbackSettings(),
-			...next,
-			providers,
-			activeProviderId
-		};
+		settings = normalizeSettings(next);
 		modelStore.setProviders(settings.providers);
 	}
 
@@ -183,7 +214,8 @@ function createSettingsStore() {
 		isLoading = true;
 		error = '';
 		try {
-			const next = (await window.electronAPI?.getProviderSettings?.()) ?? fallbackSettings();
+			const next =
+				(await window.electronAPI?.getProviderSettings?.()) ?? readLocalSettings();
 			apply(next);
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to load settings';
@@ -216,9 +248,15 @@ function createSettingsStore() {
 		isSaving = true;
 		error = '';
 		try {
-			const saved = (await window.electronAPI?.saveProviderSettings?.(draft)) ?? draft;
-			apply(saved);
-			return saved;
+			const normalized = normalizeSettings(draft);
+			if (window.electronAPI?.saveProviderSettings) {
+				const saved = await window.electronAPI.saveProviderSettings(normalized);
+				apply(saved);
+				return saved;
+			}
+			writeLocalSettings(normalized);
+			apply(normalized);
+			return normalized;
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to save settings';
 			throw err;
@@ -268,7 +306,8 @@ function createSettingsStore() {
 		}
 		settings = {
 			providers: nextProviders,
-			activeProviderId: nextActive
+			activeProviderId: nextActive,
+			appearance: settings.appearance
 		};
 		modelStore.setProviders(settings.providers);
 	}

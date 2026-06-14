@@ -1,9 +1,12 @@
 <script lang="ts">
 	import { fade, fly, scale } from 'svelte/transition';
-	import { Check, LoaderCircle, Plus, Settings, Trash2, X } from '@lucide/svelte';
+	import { Check, LoaderCircle, Palette, Plus, Settings, Trash2, X } from '@lucide/svelte';
 	import type { ProviderConfig, ProviderMethod, ProviderSettings } from '$lib/types';
 	import { shellStore } from '$lib/stores/shell.svelte';
 	import { settingsStore } from '$lib/stores/settings.svelte';
+	import SettingsAppearancePanel from '$lib/components/SettingsAppearancePanel.svelte';
+
+	type SettingsSection = 'providers' | 'appearance';
 
 	const METHOD_LABELS: Record<ProviderMethod, string> = {
 		'openai-compatible': 'OpenAI-compatible',
@@ -46,10 +49,14 @@
 	function cloneSettings(settings: ProviderSettings): ProviderSettings {
 		return {
 			providers: settings.providers.map(cloneProvider),
-			activeProviderId: settings.activeProviderId
+			activeProviderId: settings.activeProviderId,
+			appearance: {
+				heroComposer: { ...settings.appearance.heroComposer }
+			}
 		};
 	}
 
+	let activeSection = $state<SettingsSection>('providers');
 	let draft = $state<ProviderSettings>(cloneSettings(settingsStore.settings));
 	let selectedProviderId = $state<string>(
 		settingsStore.settings.activeProviderId || settingsStore.settings.providers[0]?.id || ''
@@ -174,7 +181,8 @@
 		draft = {
 			providers: nextProviders,
 			activeProviderId:
-				nextProviders.find((provider) => provider.enabled)?.id ?? nextProviders[0]?.id ?? ''
+				nextProviders.find((provider) => provider.enabled)?.id ?? nextProviders[0]?.id ?? '',
+			appearance: draft.appearance
 		};
 		selectedProviderId = nextProviders[0]?.id ?? '';
 	}
@@ -189,11 +197,17 @@
 			draft.providers[0];
 		const saved = await settingsStore.save({
 			providers: draft.providers.map(cloneProvider),
-			activeProviderId: activeProvider?.id ?? ''
+			activeProviderId: activeProvider?.id ?? '',
+			appearance: {
+				heroComposer: { ...draft.appearance.heroComposer }
+			}
 		});
 		draft = cloneSettings(saved);
 		selectedProviderId = selectedProvider?.id ?? saved.activeProviderId;
-		status = 'Saved. CometMind is restarting with enabled providers.';
+		status =
+			activeSection === 'appearance'
+				? 'Saved appearance settings.'
+				: 'Saved. CometMind is restarting with enabled providers.';
 	}
 
 	function methodNeedsFetch(method: ProviderMethod) {
@@ -213,9 +227,13 @@
 		<header>
 			<div class="title-mark"><Settings size={16} /></div>
 			<div>
-				<h2 id="settings-title">Providers</h2>
+				<h2 id="settings-title">Settings</h2>
 				<p>
-					Enable providers, fetch models, then choose which models appear in the composer.
+					{#if activeSection === 'providers'}
+						Enable providers, fetch models, then choose which models appear in the composer.
+					{:else}
+						Customize hero composer glow and border colors for new-chat screens.
+					{/if}
 				</p>
 			</div>
 			<button
@@ -227,6 +245,34 @@
 			</button>
 		</header>
 
+		<div class="settings-body">
+			<nav class="settings-nav" aria-label="Settings sections">
+				<button
+					class="settings-nav-item"
+					class:selected={activeSection === 'providers'}
+					onclick={() => {
+						activeSection = 'providers';
+						status = '';
+					}}
+				>
+					<Settings size={15} />
+					<span>Providers</span>
+				</button>
+				<button
+					class="settings-nav-item"
+					class:selected={activeSection === 'appearance'}
+					onclick={() => {
+						activeSection = 'appearance';
+						status = '';
+					}}
+				>
+					<Palette size={15} />
+					<span>Hero glow</span>
+				</button>
+			</nav>
+
+			<div class="settings-pane">
+				{#if activeSection === 'providers'}
 		<div class="provider-shell">
 			<aside class="provider-sidebar">
 				<div class="provider-sidebar-title">
@@ -412,6 +458,11 @@
 				</section>
 			{/if}
 		</div>
+				{:else}
+					<SettingsAppearancePanel bind:appearance={draft.appearance.heroComposer} />
+				{/if}
+			</div>
+		</div>
 
 		{#if settingsStore.error}
 			<p class="message error">{settingsStore.error}</p>
@@ -427,7 +478,7 @@
 				onclick={save}
 				disabled={settingsStore.isSaving ||
 					settingsStore.isFetchingModels ||
-					enabledModelCount === 0}
+					(activeSection === 'providers' && enabledModelCount === 0)}
 			>
 				{#if settingsStore.isSaving}<span class="spin"><LoaderCircle size={14} /></span
 					>{/if}
@@ -549,7 +600,48 @@
 		display: grid;
 		grid-template-columns: 270px 1fr;
 		gap: 16px;
+	}
+
+	.settings-body {
+		display: grid;
+		grid-template-columns: 168px 1fr;
+		gap: 16px;
 		padding: 16px 0;
+	}
+
+	.settings-nav {
+		display: grid;
+		gap: 8px;
+		align-content: start;
+	}
+
+	.settings-nav-item {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		width: 100%;
+		border: 1px solid var(--border-soft);
+		border-radius: 13px;
+		background: rgba(255, 255, 255, 0.72);
+		padding: 10px 12px;
+		font: inherit;
+		font-size: 13px;
+		font-weight: 650;
+		color: var(--text-main);
+		text-align: left;
+	}
+
+	.settings-nav-item.selected {
+		border-color: rgba(0, 102, 204, 0.4);
+		box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.08);
+	}
+
+	.settings-nav-item:hover {
+		background: rgba(15, 23, 42, 0.05);
+	}
+
+	.settings-pane {
+		min-width: 0;
 	}
 
 	.provider-sidebar,
@@ -838,6 +930,7 @@
 	}
 
 	@media (max-width: 780px) {
+		.settings-body,
 		.provider-shell,
 		.form-grid {
 			grid-template-columns: 1fr;

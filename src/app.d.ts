@@ -13,9 +13,19 @@ declare global {
 		enabledModels: string[];
 	}
 
+	interface HeroComposerAppearance {
+		glowColor: string;
+		ringColor: string;
+	}
+
+	interface AppearanceSettings {
+		heroComposer: HeroComposerAppearance;
+	}
+
 	interface ProviderSettings {
 		providers: ProviderConfig[];
 		activeProviderId: string;
+		appearance: AppearanceSettings;
 	}
 
 	interface Window {

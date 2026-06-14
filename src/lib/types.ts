@@ -43,9 +43,19 @@ export interface ProviderConfig {
 	enabledModels: string[];
 }
 
+export interface HeroComposerAppearance {
+	glowColor: string;
+	ringColor: string;
+}
+
+export interface AppearanceSettings {
+	heroComposer: HeroComposerAppearance;
+}
+
 export interface ProviderSettings {
 	providers: ProviderConfig[];
 	activeProviderId: string;
+	appearance: AppearanceSettings;
 }
 
 export interface SessionListResponse {

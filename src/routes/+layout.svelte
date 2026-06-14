@@ -6,6 +6,7 @@
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { sessionStore } from '$lib/stores/session.svelte';
 	import { shellStore } from '$lib/stores/shell.svelte';
+	import { heroComposerCssVars } from '$lib/hero-composer-appearance';
 	import { listSessions } from '$lib/client/cometmind';
 
 	let { children } = $props();
@@ -15,6 +16,14 @@
 		void settingsStore.load();
 		void initialize();
 		return () => connectionState.stopPolling();
+	});
+
+	$effect(() => {
+		const vars = heroComposerCssVars(settingsStore.settings.appearance.heroComposer);
+		const root = document.documentElement;
+		for (const [key, value] of Object.entries(vars)) {
+			root.style.setProperty(key, value);
+		}
 	});
 
 	async function initialize() {
