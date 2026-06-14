@@ -581,12 +581,6 @@
 		overflow: auto;
 	}
 
-	.fold-body p + p {
-		margin-top: 8px;
-		padding-top: 8px;
-		border-top: 1px solid var(--border-soft);
-	}
-
 	.tool-card {
 		padding: 8px 10px;
 	}
