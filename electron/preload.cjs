@@ -6,5 +6,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
 	getProviderSettings: () => ipcRenderer.invoke('cometline:get-provider-settings'),
 	fetchProviderModels: (config) => ipcRenderer.invoke('cometline:fetch-provider-models', config),
 	saveProviderSettings: (settings) =>
-		ipcRenderer.invoke('cometline:save-provider-settings', settings)
+		ipcRenderer.invoke('cometline:save-provider-settings', settings),
+	setSidebarOpen: (open) => ipcRenderer.send('cometline:set-sidebar-open', open)
 });

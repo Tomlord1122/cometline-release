@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
-	import { Settings, SquarePen, Trash2 } from '@lucide/svelte';
+	import { Settings, Search, SquarePen, Trash2 } from '@lucide/svelte';
 	import type { Session } from '$lib/types';
 	import { sessionStore } from '$lib/stores/session.svelte';
 	import { deleteSession } from '$lib/client/cometmind';
@@ -21,6 +21,7 @@
 	let pendingDelete = $state<Session | null>(null);
 	let skipDeleteConfirm = $state(false);
 	let rememberDeleteChoice = $state(false);
+	let searchQuery = $state('');
 
 	onMount(() => {
 		skipDeleteConfirm = localStorage.getItem('cometline.skipDeleteConfirm') === 'true';
@@ -80,22 +81,46 @@
 	}
 
 	let currentSessionId = $derived(page.params.id ?? null);
+	let filteredSessions = $derived.by(() => {
+		const query = searchQuery.trim().toLowerCase();
+		if (!query) return sessionStore.sessions;
+		return sessionStore.sessions.filter((session) =>
+			(session.title || 'Untitled').toLowerCase().includes(query)
+		);
+	});
 </script>
 
 <aside class="sidebar" class:collapsed aria-hidden={collapsed} data-workspace-path={workspacePath}>
 	<div class="sidebar-content">
-		<div class="sidebar-header">
-			<div class="traffic-spacer" aria-hidden="true"></div>
-			<div class="sidebar-actions">
-				<button onclick={newChat} aria-label="New chat" title="New chat">
-					<SquarePen size={16} stroke-width={1.8} />
-				</button>
-			</div>
+		<div
+			class="mb-2.5 grid h-11 w-full shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 pl-[72px]"
+		>
+			<label
+				class="flex h-7 min-w-0 items-center gap-1.5 rounded-lg border border-border-soft bg-white/70 px-2.5 text-text-soft focus-within:border-slate-900/15 focus-within:bg-white/95 focus-within:text-text-muted"
+			>
+				<Search size={14} stroke-width={2} aria-hidden="true" />
+				<input
+					type="search"
+					class="min-w-0 flex-1 border-0 bg-transparent p-0 text-xs text-text-main outline-none placeholder:text-text-soft"
+					placeholder="Search chats"
+					bind:value={searchQuery}
+					spellcheck="false"
+					autocomplete="off"
+					aria-label="Search chats by title"
+				/>
+			</label>
+			<button
+				class="grid h-7 w-7 shrink-0 place-items-center rounded-md border-0 bg-transparent text-text-muted hover:bg-black/4 hover:text-text-main active:bg-black/7"
+				onclick={newChat}
+				aria-label="New chat"
+				title="New chat"
+			>
+				<SquarePen size={16} stroke-width={1.8} />
+			</button>
 		</div>
 
 		<div class="session-list">
-			<button class="new-chat-row" onclick={newChat}>New Chat</button>
-			{#each sessionStore.sessions as session (session.id)}
+			{#each filteredSessions as session (session.id)}
 				<div class="session-row-wrap" class:selected={currentSessionId === session.id}>
 					<button class="session-row" onclick={() => selectSession(session)}>
 						<span class="session-title">{session.title || 'Untitled'}</span>
@@ -112,6 +137,11 @@
 					</button>
 				</div>
 			{/each}
+			{#if filteredSessions.length === 0}
+				<p class="session-empty">
+					{searchQuery.trim() ? 'No chats match your search' : 'No chats yet'}
+				</p>
+			{/if}
 		</div>
 
 		<div class="sidebar-footer">
@@ -175,7 +205,8 @@
 	}
 
 	.sidebar-content {
-		width: calc(var(--sidebar-width) - 20px);
+		width: 100%;
+		min-width: 0;
 		height: 100%;
 		display: flex;
 		flex-direction: column;
@@ -190,23 +221,6 @@
 		pointer-events: none;
 	}
 
-	.sidebar-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		margin-bottom: 10px;
-	}
-
-	.traffic-spacer {
-		width: 64px;
-	}
-
-	.sidebar-actions {
-		display: flex;
-		gap: 4px;
-	}
-
-	.sidebar-actions button,
 	.sidebar-footer button {
 		width: 28px;
 		height: 28px;
@@ -218,13 +232,11 @@
 		place-items: center;
 	}
 
-	.sidebar-actions button:hover,
 	.sidebar-footer button:hover {
 		background: rgba(0, 0, 0, 0.04);
 		color: var(--text-main);
 	}
 
-	.sidebar-actions button:active,
 	.sidebar-footer button:active {
 		background: rgba(0, 0, 0, 0.07);
 	}
@@ -237,7 +249,6 @@
 		gap: 2px;
 	}
 
-	.new-chat-row,
 	.session-row {
 		width: 100%;
 		text-align: left;
@@ -296,7 +307,14 @@
 		color: var(--text-soft);
 	}
 
-	.new-chat-row:hover,
+	.session-empty {
+		padding: 10px;
+		font-size: 12px;
+		line-height: 1.4;
+		color: var(--text-soft);
+		text-align: center;
+	}
+
 	.session-row-wrap:hover {
 		background: rgba(0, 0, 0, 0.04);
 	}
@@ -409,11 +427,6 @@
 	@media (max-width: 900px) {
 		.sidebar:not(.collapsed) {
 			background: var(--sidebar-overlay-bg);
-		}
-
-		.sidebar:not(.collapsed) .sidebar-content {
-			width: auto;
-			max-width: none;
 		}
 	}
 </style>

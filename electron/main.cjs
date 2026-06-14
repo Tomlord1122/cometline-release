@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
-const os = require('os');
+const { syncTrafficLights, trafficXForSidebar, TRAFFIC_Y } = require('./traffic-lights.cjs');
 
 const COMETMIND_PORT = 7700;
 const HEALTH_URL = `http://127.0.0.1:${COMETMIND_PORT}/api/v1/health`;
@@ -475,6 +475,9 @@ async function createWindow() {
 		minWidth: 880,
 		minHeight: 560,
 		titleBarStyle: 'hiddenInset',
+		...(process.platform === 'darwin'
+			? { trafficLightPosition: { x: trafficXForSidebar(true), y: TRAFFIC_Y } }
+			: {}),
 		...(icon ? { icon } : {}),
 		show: false,
 		webPreferences: {
@@ -493,6 +496,7 @@ async function createWindow() {
 	}
 
 	mainWindow.once('ready-to-show', () => {
+		syncTrafficLights(mainWindow, true, { animate: false });
 		mainWindow.show();
 	});
 
@@ -614,6 +618,10 @@ app.on('before-quit', () => {
 ipcMain.on('cometmind:restart', async () => {
 	await stopCometMind();
 	startCometMind();
+});
+
+ipcMain.on('cometline:set-sidebar-open', (_event, open) => {
+	syncTrafficLights(mainWindow, Boolean(open));
 });
 
 ipcMain.handle('cometline:get-workspace-path', () => getWorkspacePath());
