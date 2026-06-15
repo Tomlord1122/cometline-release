@@ -65,12 +65,12 @@ export const SHORTCUT_DEFINITIONS: KeyboardShortcutDefinition[] = [
 	{
 		id: 'previousSession',
 		label: 'Previous chat',
-		defaultBinding: { command: true, key: 'ArrowUp' }
+		defaultBinding: { ctrl: true, meta: false, key: 'ArrowUp' }
 	},
 	{
 		id: 'nextSession',
 		label: 'Next chat',
-		defaultBinding: { command: true, key: 'ArrowDown' }
+		defaultBinding: { ctrl: true, meta: false, key: 'ArrowDown' }
 	}
 ];
 
@@ -86,6 +86,33 @@ export function defaultKeyboardShortcuts(): KeyboardShortcuts {
 	) as KeyboardShortcuts;
 }
 
+const CTRL_ONLY_ACTIONS = new Set<ShortcutAction>(['previousSession', 'nextSession']);
+
+function normalizeCtrlOnlyBinding(
+	action: ShortcutAction,
+	binding: ShortcutBinding | undefined,
+	defaultBinding: ShortcutBinding
+): ShortcutBinding {
+	if (!CTRL_ONLY_ACTIONS.has(action)) {
+		return binding ?? defaultBinding;
+	}
+	if (!binding) return { ...defaultBinding };
+	// Legacy command shortcut or accidental Cmd+Ctrl capture → reset to ctrl-only default.
+	if (binding.command || (binding.ctrl && binding.meta)) {
+		return { ...defaultBinding };
+	}
+	if (binding.ctrl) {
+		return {
+			key: binding.key,
+			ctrl: true,
+			meta: false,
+			...(typeof binding.alt === 'boolean' && { alt: binding.alt }),
+			...(typeof binding.shift === 'boolean' && { shift: binding.shift })
+		};
+	}
+	return { ...defaultBinding };
+}
+
 export function normalizeKeyboardShortcuts(
 	saved: KeyboardShortcuts | undefined
 ): KeyboardShortcuts {
@@ -95,7 +122,7 @@ export function normalizeKeyboardShortcuts(
 	for (const def of SHORTCUT_DEFINITIONS) {
 		const binding = saved[def.id];
 		if (binding && typeof binding === 'object' && typeof binding.key === 'string') {
-			next[def.id] = {
+			const normalized: ShortcutBinding = {
 				key: binding.key,
 				...(typeof binding.command === 'boolean' && { command: binding.command }),
 				...(typeof binding.ctrl === 'boolean' && { ctrl: binding.ctrl }),
@@ -103,6 +130,9 @@ export function normalizeKeyboardShortcuts(
 				...(typeof binding.alt === 'boolean' && { alt: binding.alt }),
 				...(typeof binding.shift === 'boolean' && { shift: binding.shift })
 			};
+			next[def.id] = normalizeCtrlOnlyBinding(def.id, normalized, def.defaultBinding);
+		} else {
+			next[def.id] = normalizeCtrlOnlyBinding(def.id, undefined, def.defaultBinding);
 		}
 	}
 	return next;
@@ -141,16 +171,25 @@ export function captureShortcut(event: KeyboardEvent): ShortcutBinding | null {
 	const hasAlt = event.altKey;
 	const hasShift = event.shiftKey;
 
-	// Store a lone Ctrl or Meta as the cross-platform "command" modifier so the
-	// same binding renders and behaves as Cmd-or-Ctrl on macOS and Windows.
-	const commandModifier = (hasCtrl || hasMeta) && !hasAlt;
-	if (commandModifier && !(hasCtrl && hasMeta)) {
+	if (hasAlt) binding.alt = true;
+	if (hasShift) binding.shift = true;
+
+	// Lone Meta (Cmd on Mac) → cross-platform "command" modifier.
+	if (hasMeta && !hasCtrl) {
 		binding.command = true;
-	} else {
-		if (hasCtrl) binding.ctrl = true;
-		if (hasMeta) binding.meta = true;
-		if (hasAlt) binding.alt = true;
-		if (hasShift) binding.shift = true;
+		return binding;
+	}
+
+	// Lone Ctrl → strict Control key (not Command on Mac).
+	if (hasCtrl && !hasMeta) {
+		binding.ctrl = true;
+		binding.meta = false;
+		return binding;
+	}
+
+	if (hasCtrl && hasMeta) {
+		binding.ctrl = true;
+		binding.meta = true;
 	}
 
 	return binding;

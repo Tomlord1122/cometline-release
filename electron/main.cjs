@@ -38,8 +38,8 @@ function defaultShortcuts() {
 		sendMessage: { key: 'Enter', shift: false },
 		closeSettings: { key: 'Escape' },
 		focusSearch: { command: true, key: 'f' },
-		previousSession: { command: true, key: 'ArrowUp' },
-		nextSession: { command: true, key: 'ArrowDown' }
+		previousSession: { ctrl: true, meta: false, key: 'ArrowUp' },
+		nextSession: { ctrl: true, meta: false, key: 'ArrowDown' }
 	};
 }
 
@@ -400,6 +400,26 @@ function normalizeAppearance(appearance) {
 	};
 }
 
+function normalizeCtrlOnlyBinding(id, binding, defaultBinding) {
+	if (id !== 'previousSession' && id !== 'nextSession') {
+		return binding ?? defaultBinding;
+	}
+	if (!binding) return { ...defaultBinding };
+	if (binding.command || (binding.ctrl && binding.meta)) {
+		return { ...defaultBinding };
+	}
+	if (binding.ctrl) {
+		return {
+			key: binding.key,
+			ctrl: true,
+			meta: false,
+			...(typeof binding.alt === 'boolean' && { alt: binding.alt }),
+			...(typeof binding.shift === 'boolean' && { shift: binding.shift })
+		};
+	}
+	return { ...defaultBinding };
+}
+
 function normalizeShortcuts(shortcuts) {
 	const defaults = defaultShortcuts();
 	if (!shortcuts || typeof shortcuts !== 'object') return defaults;
@@ -407,7 +427,7 @@ function normalizeShortcuts(shortcuts) {
 	for (const id of Object.keys(defaults)) {
 		const saved = shortcuts[id];
 		if (saved && typeof saved === 'object' && typeof saved.key === 'string') {
-			next[id] = {
+			const normalized = {
 				key: saved.key,
 				...(typeof saved.command === 'boolean' && { command: saved.command }),
 				...(typeof saved.ctrl === 'boolean' && { ctrl: saved.ctrl }),
@@ -415,6 +435,9 @@ function normalizeShortcuts(shortcuts) {
 				...(typeof saved.alt === 'boolean' && { alt: saved.alt }),
 				...(typeof saved.shift === 'boolean' && { shift: saved.shift })
 			};
+			next[id] = normalizeCtrlOnlyBinding(id, normalized, defaults[id]);
+		} else {
+			next[id] = normalizeCtrlOnlyBinding(id, undefined, defaults[id]);
 		}
 	}
 	return next;
