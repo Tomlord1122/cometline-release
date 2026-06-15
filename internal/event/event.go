@@ -30,7 +30,7 @@ type Usage struct {
 }
 
 // Event is the single runtime event type shared by the agent runner, the SSE
-// server, the TUI, and the CLI. It is also the SSE wire shape: MarshalJSON emits
+// server, and the CLI. It is also the SSE wire shape: MarshalJSON emits
 // exactly the fields each Kind carries, discriminated by "type". Field names are
 // per-Kind by contract — reasoning_delta carries "text", text_delta carries
 // "delta" — so consumers read the field that matches the Kind.
@@ -42,10 +42,10 @@ type Event struct {
 	// reasoning_delta
 	Text string
 	// tool_call / tool_result
-	ID     string
-	Tool   string
-	Input  []byte // tool_call: JSON object bytes; empty marshals as {}
-	Output string // tool_result
+	ID      string
+	Tool    string
+	Input   []byte // tool_call: JSON object bytes; empty marshals as {}
+	Output  string // tool_result
 	ToolErr string // tool_result: empty if success
 	// step_finish
 	Usage Usage

@@ -9,6 +9,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
+	"strings"
 
 	cometsdk "github.com/cometline/comet-sdk"
 	"github.com/cometline/cometmind/internal/agent"
@@ -20,11 +22,12 @@ import (
 	"github.com/cometline/cometmind/internal/tools"
 )
 
-// Runtime is the composition root shared by the CLI, TUI, and server.
+// Runtime is the composition root shared by the CLI and server.
 type Runtime struct {
-	Config   *config.Config
-	DB       *sql.DB
-	Sessions *session.Service
+	Config       *config.Config
+	DB           *sql.DB
+	Sessions     *session.Service
+	SystemPrompt string
 }
 
 // New builds a Runtime from the environment and filesystem.
@@ -32,6 +35,10 @@ func New(ctx context.Context) (*Runtime, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
+	}
+	systemPrompt, err := loadSystemPrompt(cfg.SystemPromptPath)
+	if err != nil {
+		return nil, err
 	}
 
 	dbpath, err := paths.DBPath()
@@ -44,11 +51,24 @@ func New(ctx context.Context) (*Runtime, error) {
 	}
 
 	r := &Runtime{
-		Config:   cfg,
-		DB:       sqlDB,
-		Sessions: session.New(sqlDB),
+		Config:       cfg,
+		DB:           sqlDB,
+		Sessions:     session.New(sqlDB),
+		SystemPrompt: systemPrompt,
 	}
 	return r, nil
+}
+
+func loadSystemPrompt(path string) (string, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", nil
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read system prompt %q: %w", path, err)
+	}
+	return strings.TrimSpace(string(raw)), nil
 }
 
 // Close releases runtime resources.
@@ -83,10 +103,11 @@ func (r *Runtime) RunnerFor(sess session.Session, workspacePath string) (*agent.
 	}
 
 	return &agent.Runner{
-		Provider:  p,
-		Sessions:  r.Sessions,
-		Registry:  tools.NewRegistry(workspacePath),
-		MaxSteps:  r.Config.MaxSteps,
-		MaxTokens: r.Config.MaxTokens,
+		Provider:     p,
+		Sessions:     r.Sessions,
+		Registry:     tools.NewRegistry(workspacePath),
+		MaxSteps:     r.Config.MaxSteps,
+		MaxTokens:    r.Config.MaxTokens,
+		SystemPrompt: r.SystemPrompt,
 	}, nil
 }

@@ -12,10 +12,10 @@ import (
 )
 
 const (
-	ProviderAnthropic      = "anthropic"
-	ProviderOpenAI         = "openai"
-	ProviderOpenAICompat   = "openai-compatible"
-	ProviderOpencodeGo     = "opencode-go"
+	ProviderAnthropic    = "anthropic"
+	ProviderOpenAI       = "openai"
+	ProviderOpenAICompat = "openai-compatible"
+	ProviderOpencodeGo   = "opencode-go"
 )
 
 // ProviderEntry is one configured LLM provider managed by Cometline.
@@ -30,12 +30,13 @@ type ProviderEntry struct {
 
 // Config holds user-visible runtime settings loaded from ~/.cometmind/config.toml and environment.
 type Config struct {
-	Provider  string          `mapstructure:"provider"`
-	Model     string          `mapstructure:"model"`
-	BaseURL   string          `mapstructure:"base_url"`
-	MaxTokens int             `mapstructure:"max_tokens"`
-	MaxSteps  int             `mapstructure:"max_steps"`
-	Providers []ProviderEntry `mapstructure:"providers"`
+	Provider         string          `mapstructure:"provider"`
+	Model            string          `mapstructure:"model"`
+	BaseURL          string          `mapstructure:"base_url"`
+	MaxTokens        int             `mapstructure:"max_tokens"`
+	MaxSteps         int             `mapstructure:"max_steps"`
+	SystemPromptPath string          `mapstructure:"system_prompt_path"`
+	Providers        []ProviderEntry `mapstructure:"providers"`
 }
 
 // Defaults returns baseline values when the config file is missing keys.
@@ -71,6 +72,7 @@ func Load() (*Config, error) {
 	v.SetDefault("base_url", def.BaseURL)
 	v.SetDefault("max_tokens", def.MaxTokens)
 	v.SetDefault("max_steps", def.MaxSteps)
+	v.SetDefault("system_prompt_path", def.SystemPromptPath)
 
 	if _, err := os.Stat(cfgPath); errors.Is(err, os.ErrNotExist) {
 		if err := writeDefaultFile(cfgPath, def); err != nil {
@@ -101,6 +103,9 @@ func Load() (*Config, error) {
 	if c.MaxSteps == 0 {
 		c.MaxSteps = def.MaxSteps
 	}
+	if c.SystemPromptPath == "" {
+		c.SystemPromptPath = def.SystemPromptPath
+	}
 
 	return &c, nil
 }
@@ -122,6 +127,7 @@ model = %q
 base_url = %q
 max_tokens = %d
 max_steps = %d
-`, def.Provider, def.Model, def.BaseURL, def.MaxTokens, def.MaxSteps)
+system_prompt_path = %q
+`, def.Provider, def.Model, def.BaseURL, def.MaxTokens, def.MaxSteps, def.SystemPromptPath)
 	return os.WriteFile(path, []byte(content), 0o600)
 }

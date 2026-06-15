@@ -43,6 +43,22 @@ func TestLoadReadsBaseURLEnvironmentOverride(t *testing.T) {
 	}
 }
 
+func TestLoadReadsSystemPromptPathEnvironmentOverride(t *testing.T) {
+	home := t.TempDir()
+	promptPath := filepath.Join(home, "SOUL.md")
+	t.Setenv("HOME", home)
+	t.Setenv("COMETMIND_SYSTEM_PROMPT_PATH", promptPath)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.SystemPromptPath != promptPath {
+		t.Fatalf("SystemPromptPath = %q, want %q", cfg.SystemPromptPath, promptPath)
+	}
+}
+
 func TestLoadReadsProvidersArray(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

@@ -71,6 +71,44 @@ func TestRuntimeNewDoesNotRequireAPIKey(t *testing.T) {
 	}
 }
 
+func TestRuntimeLoadsSystemPromptFromConfiguredPath(t *testing.T) {
+	ctx := context.Background()
+	home := t.TempDir()
+	promptPath := filepath.Join(home, "SOUL.md")
+	t.Setenv("HOME", home)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("COMETMIND_SYSTEM_PROMPT_PATH", promptPath)
+	if err := os.WriteFile(promptPath, []byte("  custom soul prompt\n"), 0o600); err != nil {
+		t.Fatalf("write prompt: %v", err)
+	}
+
+	rt, err := New(ctx)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	defer rt.Close()
+
+	if rt.SystemPrompt != "custom soul prompt" {
+		t.Fatalf("SystemPrompt = %q, want custom soul prompt", rt.SystemPrompt)
+	}
+
+	ws, err := rt.WorkspaceForCommand(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("WorkspaceForCommand() error = %v", err)
+	}
+	sess, err := rt.Sessions.NewSession(ctx, ws.ID, rt.Config.Model, rt.Config.Provider)
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	runner, err := rt.RunnerFor(sess, ws.Path)
+	if err != nil {
+		t.Fatalf("RunnerFor() error = %v", err)
+	}
+	if runner.SystemPrompt != "custom soul prompt" {
+		t.Fatalf("runner.SystemPrompt = %q, want custom soul prompt", runner.SystemPrompt)
+	}
+}
+
 func TestRuntimeProviderForSessionUsesSessionIdentifiers(t *testing.T) {
 	ctx := context.Background()
 	t.Setenv("HOME", t.TempDir())

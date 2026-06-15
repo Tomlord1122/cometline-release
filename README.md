@@ -6,7 +6,7 @@ CometMind is the middle tier of the Cometline stack:
 
 ```
 comet-sdk   →  provider-agnostic LLM I/O layer (streaming, tool-call assembly, retries)
-cometmind   →  general agent brain: agent loop + tool registry + persistence + local HTTP/SSE server + TUI
+cometmind   →  general agent brain: agent loop + tool registry + persistence + local HTTP/SSE server + CLI
   └─ ACP ──→  opencode / claude-code (coding specialist, invoked only for coding tasks)
 cometline   →  Electron desktop shell
 ```
@@ -37,9 +37,8 @@ internal/
   provider/          builds a comet-sdk provider from config/session
   config/            config.toml loading + API key resolution
   db/                sqlc-generated querier + schema.sql + queries/*.sql
-  event/event.go     CometMind-native event union (shared by SSE/TUI/CLI)
+  event/event.go     CometMind-native event union (shared by SSE/CLI)
   store/open.go      opens SQLite (pure-Go modernc.org/sqlite — static-compile friendly)
-tui/                 Bubble Tea: session list ↔ chat screens
 openapi.yaml         OpenAPI 3.1 spec for the local serve API
 ```
 
@@ -89,8 +88,8 @@ go run . init
 # Start the local serve API
 go run . serve
 
-# Or use the interactive TUI
-go run . tui
+# Or run one CLI turn scoped to the current workspace
+go run . chat "hello"
 ```
 
 Requires Go 1.25+. `comet-sdk` is consumed via a local `replace => ../comet-sdk` directive in `go.mod`.
