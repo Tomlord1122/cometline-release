@@ -147,6 +147,26 @@ func (s *Service) SetTitleIfEmpty(ctx context.Context, sessionID, title string) 
 	})
 }
 
+// UpdateSessionModel persists a new model/provider pair for an existing session.
+func (s *Service) UpdateSessionModel(ctx context.Context, sessionID, modelID, providerID string) (Session, error) {
+	modelID = strings.TrimSpace(modelID)
+	providerID = strings.TrimSpace(providerID)
+	if modelID == "" || providerID == "" {
+		return Session{}, fmt.Errorf("model_id and provider_id are required")
+	}
+	if _, err := s.GetSession(ctx, sessionID); err != nil {
+		return Session{}, err
+	}
+	if err := s.q.UpdateSessionModel(ctx, db.UpdateSessionModelParams{
+		ModelID:    modelID,
+		ProviderID: providerID,
+		ID:         sessionID,
+	}); err != nil {
+		return Session{}, err
+	}
+	return s.GetSession(ctx, sessionID)
+}
+
 // AppendUserMessage persists a user turn.
 func (s *Service) AppendUserMessage(ctx context.Context, sessionID, text string) (Message, error) {
 	return s.AppendUserMessageContent(ctx, sessionID, []ContentBlock{{Type: "text", Text: text}})

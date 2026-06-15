@@ -195,6 +195,59 @@ func TestDeleteSessionRemovesSession(t *testing.T) {
 	}
 }
 
+func TestPatchSessionUpdatesModel(t *testing.T) {
+	t.Parallel()
+
+	var gotTurn session.AgentTurn
+	engine, svc, cleanup := newTestEngine(t, func(sess session.Session, workspacePath string) (Runner, error) {
+		return fakeRunner(func(ctx context.Context, turn session.AgentTurn, ch chan<- event.Event) error {
+			gotTurn = turn
+			ch <- event.Done()
+			return nil
+		}), nil
+	})
+	defer cleanup()
+
+	ctx := context.Background()
+	ws, err := svc.EnsureWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("EnsureWorkspace() error = %v", err)
+	}
+	sess, err := svc.NewSession(ctx, ws.ID, "old-model", "old-provider")
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/v1/sessions/"+sess.ID,
+		bytes.NewBufferString(`{"model_id":"new-model","provider_id":"new-provider"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("patch status = %d, want %d body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var patched sessionResource
+	decodeJSON(t, rec.Body.Bytes(), &patched)
+	if patched.ModelID != "new-model" || patched.ProviderID != "new-provider" {
+		t.Fatalf("patched session = %+v, want new model/provider", patched)
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+sess.ID+"/message", bytes.NewBufferString(`{"text":"hello"}`))
+	req.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("message status = %d, want %d body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if gotTurn.ModelID != "new-model" || gotTurn.ProviderID != "new-provider" {
+		t.Fatalf("runner turn = %+v, want new-model/new-provider", gotTurn)
+	}
+}
+
 func TestGetMessagesReturnsTranscriptItems(t *testing.T) {
 	t.Parallel()
 

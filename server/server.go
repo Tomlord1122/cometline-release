@@ -80,6 +80,7 @@ func New(deps Deps) (*gin.Engine, error) {
 	api.POST("/sessions", app.handleCreateSession)
 	api.GET("/sessions", app.handleListSessions)
 	api.GET("/sessions/:id", app.handleGetSession)
+	api.PATCH("/sessions/:id", app.handlePatchSession)
 	api.DELETE("/sessions/:id", app.handleDeleteSession)
 	api.GET("/sessions/:id/messages", app.handleGetMessages)
 	api.POST("/sessions/:id/message", app.handlePostMessage)
@@ -94,7 +95,7 @@ func localCORS() gin.HandlerFunc {
 		if isAllowedLocalOrigin(origin) {
 			c.Header("Access-Control-Allow-Origin", origin)
 			c.Header("Vary", "Origin")
-			c.Header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+			c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
 			c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 			c.Header("Access-Control-Max-Age", "600")
 		}
@@ -131,6 +132,11 @@ type createSessionRequest struct {
 	WorkspacePath string `json:"workspace_path"`
 	ModelID       string `json:"model_id"`
 	ProviderID    string `json:"provider_id"`
+}
+
+type patchSessionRequest struct {
+	ModelID    string `json:"model_id"`
+	ProviderID string `json:"provider_id"`
 }
 
 type postMessageRequest struct {
@@ -288,6 +294,44 @@ func (a *App) handleListSessions(c *gin.Context) {
 func (a *App) handleGetSession(c *gin.Context) {
 	sess, wsPath, ok := a.loadSessionWithWorkspace(c, c.Param("id"))
 	if !ok {
+		return
+	}
+
+	res, err := sessionResourceFromModel(sess, wsPath)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	c.JSON(http.StatusOK, res)
+}
+
+func (a *App) handlePatchSession(c *gin.Context) {
+	var req patchSessionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		return
+	}
+
+	sessID := c.Param("id")
+	sess, err := a.sessions.UpdateSessionModel(
+		c.Request.Context(),
+		sessID,
+		req.ModelID,
+		req.ProviderID,
+	)
+	if errors.Is(err, session.ErrSessionNotFound) {
+		writeError(c, http.StatusNotFound, "session_not_found", "session was not found")
+		return
+	}
+	if err != nil {
+		writeError(c, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+
+	wsPath, err := a.sessions.WorkspacePath(c.Request.Context(), sess.WorkspaceID)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
 

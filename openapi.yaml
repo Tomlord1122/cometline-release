@@ -158,6 +158,33 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+    patch:
+      tags: [Sessions]
+      summary: Update session model
+      description: Persists a new model/provider pair for an existing session. Later message turns use the updated model.
+      operationId: patchSession
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSessionRequest'
+      responses:
+        '200':
+          description: Updated session resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
     delete:
       tags: [Sessions]
       summary: Delete one session
@@ -390,6 +417,16 @@ components:
           type: string
           description: Optional provider override; defaults to current config.
       description: Provide either `workspace_id` or `workspace_path`.
+
+    UpdateSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [model_id, provider_id]
+      properties:
+        model_id:
+          type: string
+        provider_id:
+          type: string
 
     PostMessageRequest:
       type: object
