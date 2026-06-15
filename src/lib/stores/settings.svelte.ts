@@ -22,8 +22,6 @@ const OPENCODE_GO_AVAILABLE_MODELS = [
 	'qwen3.7-max',
 	'qwen3.7-plus'
 ];
-const DEFAULT_OPENCODE_GO_ENABLED_MODELS = ['deepseek-v4-flash'];
-
 const DEFAULT_PROVIDERS: ProviderConfig[] = [
 	{
 		id: 'openai-compatible',
@@ -65,9 +63,9 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
 		enabled: true,
 		baseURL: 'https://opencode.ai/zen/go/v1',
 		apiKey: '',
-		selectedModel: DEFAULT_OPENCODE_GO_ENABLED_MODELS[0],
+		selectedModel: '',
 		models: [...OPENCODE_GO_AVAILABLE_MODELS],
-		enabledModels: [...DEFAULT_OPENCODE_GO_ENABLED_MODELS]
+		enabledModels: []
 	}
 ];
 
@@ -91,17 +89,14 @@ function normalizeProvider(
 		method === 'opencode-go'
 			? Array.from(new Set([...OPENCODE_GO_AVAILABLE_MODELS, ...models]))
 			: models;
-	const legacySelected = provider.selectedModel || fallback?.selectedModel || modelList[0] || '';
+	const legacySelected = provider.selectedModel || fallback?.selectedModel || '';
 	const enabledModelsSource = Array.isArray(provider.enabledModels)
 		? provider.enabledModels
 		: legacySelected
 			? [legacySelected]
 			: [];
 	const enabledModels = enabledModelsSource.filter((model) => modelList.includes(model));
-	const selectedModel =
-		enabledModels[0] ??
-		(modelList.includes(legacySelected) ? legacySelected : modelList[0]) ??
-		'';
+	const selectedModel = enabledModels[0] ?? '';
 
 	const id = String(provider.id || fallback?.id || `provider-${Date.now()}`).trim();
 	const builtIn = DEFAULT_PROVIDERS.find((item) => item.id === id);
@@ -241,9 +236,7 @@ function createSettingsStore() {
 			const enabledModels = provider.enabledModels.filter((model) => models.includes(model));
 			const selectedModel =
 				enabledModels[0] ??
-				(models.includes(provider.selectedModel)
-					? provider.selectedModel
-					: (models[0] ?? ''));
+				(models.includes(provider.selectedModel) ? provider.selectedModel : '');
 			return { ...provider, models, enabledModels, selectedModel };
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to fetch models';

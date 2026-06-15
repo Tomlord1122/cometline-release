@@ -86,9 +86,9 @@ function defaultProviderSettings() {
 				enabled: true,
 				baseURL: 'https://opencode.ai/zen/go/v1',
 				apiKey: '',
-				selectedModel: DEFAULT_OPENCODE_GO_ENABLED_MODELS[0],
+				selectedModel: '',
 				models: [...OPENCODE_GO_AVAILABLE_MODELS],
-				enabledModels: [...DEFAULT_OPENCODE_GO_ENABLED_MODELS]
+				enabledModels: []
 			}
 		],
 		activeProviderId: 'opencode-go',
@@ -112,7 +112,6 @@ const OPENCODE_GO_AVAILABLE_MODELS = [
 	'qwen3.7-max',
 	'qwen3.7-plus'
 ];
-const DEFAULT_OPENCODE_GO_ENABLED_MODELS = ['deepseek-v4-flash'];
 const VALID_PROVIDER_METHODS = ['openai-compatible', 'openai', 'anthropic', 'opencode-go'];
 const BUILTIN_PROVIDER_NAMES = {
 	'openai-compatible': 'OpenAI Compatible',
@@ -341,7 +340,7 @@ function normalizeProvider(provider, fallback = {}) {
 			? Array.from(new Set([...OPENCODE_GO_AVAILABLE_MODELS, ...models]))
 			: models;
 	const legacySelected = String(
-		provider?.selectedModel || fallback.selectedModel || modelList[0] || ''
+		provider?.selectedModel || fallback.selectedModel || ''
 	).trim();
 	const rawEnabledModels = Array.isArray(provider?.enabledModels)
 		? provider.enabledModels
@@ -366,9 +365,7 @@ function normalizeProvider(provider, fallback = {}) {
 			typeof provider?.enabled === 'boolean' ? provider.enabled : Boolean(fallback.enabled),
 		baseURL: String(provider?.baseURL ?? fallback.baseURL ?? '').trim(),
 		apiKey: String(provider?.apiKey ?? fallback.apiKey ?? '').trim(),
-		selectedModel:
-			enabledModels[0] ||
-			(modelList.includes(legacySelected) ? legacySelected : modelList[0] || ''),
+		selectedModel: enabledModels[0] || '',
 		models: modelList,
 		enabledModels
 	};

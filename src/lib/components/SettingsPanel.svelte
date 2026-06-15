@@ -57,7 +57,6 @@
 		'qwen3.7-max',
 		'qwen3.7-plus'
 	];
-	const DEFAULT_OPENCODE_GO_ENABLED_MODELS = ['deepseek-v4-flash'];
 
 	function cloneProvider(provider: ProviderConfig): ProviderConfig {
 		return {
@@ -238,9 +237,7 @@
 			updateSelected({
 				method,
 				baseURL: 'https://opencode.ai/zen/go/v1',
-				models: [...OPENCODE_GO_AVAILABLE_MODELS],
-				enabledModels: [...DEFAULT_OPENCODE_GO_ENABLED_MODELS],
-				selectedModel: DEFAULT_OPENCODE_GO_ENABLED_MODELS[0]
+				models: [...OPENCODE_GO_AVAILABLE_MODELS]
 			});
 			return;
 		}
@@ -731,7 +728,8 @@
 		display: flex;
 		flex-direction: column;
 		width: min(980px, 100%);
-		max-height: min(760px, 100%);
+		height: min(760px, calc(100vh - 60px));
+		max-height: min(760px, calc(100vh - 60px));
 		overflow: hidden;
 		background: rgba(255, 255, 255, 0.96);
 		border: 1px solid rgba(229, 231, 235, 0.95);
@@ -800,6 +798,10 @@
 		color: var(--text-muted);
 	}
 
+	header p {
+		min-height: calc(1.45em * 2);
+	}
+
 	.icon-button {
 		margin-left: auto;
 		width: 30px;
@@ -827,6 +829,8 @@
 		display: grid;
 		grid-template-columns: 270px 1fr;
 		gap: 16px;
+		align-items: start;
+		min-height: 0;
 	}
 
 	.settings-body {
@@ -835,8 +839,7 @@
 		gap: 16px;
 		flex: 1;
 		min-height: 0;
-		overflow-y: auto;
-		scrollbar-gutter: stable;
+		overflow: hidden;
 		padding: 16px 0;
 	}
 
@@ -873,6 +876,9 @@
 
 	.settings-pane {
 		min-width: 0;
+		min-height: 0;
+		overflow-y: auto;
+		scrollbar-gutter: stable;
 	}
 
 	.provider-sidebar,
@@ -880,10 +886,19 @@
 		border: 1px solid var(--border-soft);
 		border-radius: 18px;
 		background: rgba(251, 251, 250, 0.72);
+		min-height: 0;
 	}
 
 	.provider-sidebar {
 		padding: 12px;
+		align-self: start;
+	}
+
+	.provider-detail {
+		padding: 16px;
+		overflow-y: auto;
+		scrollbar-gutter: stable;
+		max-height: min(560px, calc(100vh - 220px));
 	}
 
 	.provider-sidebar-title {
@@ -896,17 +911,22 @@
 
 	.provider-list {
 		display: grid;
-		gap: 8px;
+		gap: 6px;
+		align-content: start;
+		max-height: min(420px, calc(100vh - 280px));
+		overflow-y: auto;
+		scrollbar-gutter: stable;
 	}
 
 	.provider-card {
 		justify-content: space-between;
 		gap: 12px;
 		width: 100%;
+		align-self: start;
 		border: 1px solid var(--border-soft);
 		border-radius: 13px;
 		background: rgba(255, 255, 255, 0.72);
-		padding: 10px 12px;
+		padding: 8px 12px;
 		color: var(--text-main);
 		text-align: left;
 	}
@@ -951,10 +971,6 @@
 
 	.provider-card.enabled .provider-dot {
 		background: #7aa1aa;
-	}
-
-	.provider-detail {
-		padding: 16px;
 	}
 
 	.detail-heading,
@@ -1259,6 +1275,7 @@
 		}
 
 		.modal {
+			height: calc(100vh - 40px);
 			max-height: calc(100vh - 40px);
 		}
 	}

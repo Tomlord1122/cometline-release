@@ -9,19 +9,6 @@ export interface ModelOption {
 	modelId: string;
 }
 
-const DEFAULT_OPENCODE_GO_ENABLED_MODELS = ['deepseek-v4-flash'];
-
-export const defaultModelOptions: ModelOption[] = [
-	{
-		id: 'opencode-go:deepseek-v4-flash',
-		label: 'DeepSeek V4 Flash',
-		providerId: 'opencode-go',
-		providerName: 'OpenCode Go',
-		providerMethod: 'opencode-go',
-		modelId: 'deepseek-v4-flash'
-	}
-];
-
 function labelForModel(modelID: string) {
 	return modelID
 		.split(/[-_:/.]+/)
@@ -32,13 +19,7 @@ function labelForModel(modelID: string) {
 
 function optionsFromProvider(provider: ProviderConfig): ModelOption[] {
 	if (!provider.enabled) return [];
-	const models =
-		provider.enabledModels.length > 0
-			? provider.enabledModels
-			: provider.method === 'opencode-go'
-				? DEFAULT_OPENCODE_GO_ENABLED_MODELS
-				: [];
-	return models.map((modelId) => ({
+	return provider.enabledModels.map((modelId) => ({
 		id: `${provider.id}:${modelId}`,
 		label: labelForModel(modelId),
 		providerId: provider.id,
@@ -49,8 +30,8 @@ function optionsFromProvider(provider: ProviderConfig): ModelOption[] {
 }
 
 function createModelStore() {
-	let options = $state<ModelOption[]>(defaultModelOptions);
-	let selected = $state<ModelOption | null>(defaultModelOptions[0]);
+	let options = $state<ModelOption[]>([]);
+	let selected = $state<ModelOption | null>(null);
 
 	function select(option: ModelOption) {
 		selected = option;
