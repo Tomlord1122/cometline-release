@@ -36,6 +36,7 @@
 		}
 		if (sessionStore.hasPendingMessage(sessionId)) return;
 		if (chatStore.isStreaming && chatStore.sessionID === sessionId) return;
+		if (chatStore.sessionID === sessionId && chatStore.items.length > 0) return;
 		void chatStore.loadTranscript(sessionId);
 	});
 
@@ -60,6 +61,7 @@
 	});
 
 	let hasVisibleConversation = $derived.by(() => {
+		if (firstTurnActive || awaitingFirstAssistant) return true;
 		if (chatStore.sessionID === sessionId) {
 			return chatStore.items.length > 0 || chatStore.isLoading;
 		}
@@ -146,8 +148,7 @@
 	});
 
 	$effect(() => {
-		if (!hasVisibleConversation && !firstTurnActive) {
-			awaitingFirstAssistant = false;
+		if (!hasVisibleConversation && !firstTurnActive && !awaitingFirstAssistant) {
 			firstTurnFlightDone = false;
 			heroFrameExiting = false;
 		}

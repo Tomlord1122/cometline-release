@@ -281,7 +281,14 @@
 	});
 
 	$effect(() => {
-		if (!isSessionSynced || chatStore.isLoading) {
+		if (!isSessionSynced) {
+			isInitialTranscriptPaint = true;
+			return;
+		}
+		// Only hide the transcript while loading an empty session. If local items
+		// already exist (first-turn flight, streaming), keep them visible even
+		// when isLoading is stale.
+		if (chatStore.isLoading && threadItems.length === 0) {
 			isInitialTranscriptPaint = true;
 			return;
 		}

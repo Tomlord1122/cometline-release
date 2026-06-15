@@ -111,7 +111,7 @@ function createChatStore() {
 		loadPromiseSession = null;
 		sessionID = nextSessionID;
 		items = [];
-		isLoading = true;
+		isLoading = false;
 		error = '';
 	}
 
@@ -132,6 +132,8 @@ function createChatStore() {
 				const transcript = await getSessionMessages(nextSessionID);
 				if (run !== loadRun) return;
 				if (isStreaming && sessionID === nextSessionID) return;
+				// First-turn flight may stage a user message while this fetch was in flight.
+				if (sessionID === nextSessionID && items.length > 0) return;
 				items = itemsFromTranscript(transcript.items);
 				chatDebug('store:load-transcript', {
 					sessionID: nextSessionID,
@@ -141,6 +143,7 @@ function createChatStore() {
 			} catch (err) {
 				if (run !== loadRun) return;
 				if (isStreaming && sessionID === nextSessionID) return;
+				if (sessionID === nextSessionID && items.length > 0) return;
 				error = err instanceof Error ? err.message : 'Failed to load transcript';
 				items = [{ id: localID('error'), type: 'error', text: error }];
 			} finally {
