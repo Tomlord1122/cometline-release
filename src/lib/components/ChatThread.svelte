@@ -44,6 +44,10 @@
 
 	let scroller: HTMLDivElement;
 	let scrollFrame = 0;
+	let followStream = $state(true);
+	let suppressScrollPin = false;
+	let wasStreaming = $state(false);
+	const SCROLL_PIN_THRESHOLD = 96;
 	let expandedToolOutput = $state(new Set<string>());
 	let expandedThinking = $state(new Set<string>());
 	let copiedId = $state<string | null>(null);
@@ -136,6 +140,45 @@
 	function thinkingPending(block: ThinkingBlock) {
 		return block.reasoning?.pending === true || block.tools.some((tool) => tool.pending);
 	}
+
+	function isNearBottom(element: HTMLElement) {
+		return (
+			element.scrollHeight - element.scrollTop - element.clientHeight <= SCROLL_PIN_THRESHOLD
+		);
+	}
+
+	function onThreadScroll() {
+		if (suppressScrollPin || !scroller) return;
+		followStream = isNearBottom(scroller);
+	}
+
+	function pinScrollTop(behavior: ScrollBehavior = 'auto') {
+		if (!scroller) return;
+		suppressScrollPin = true;
+		if (behavior === 'auto') {
+			scroller.scrollTop = scroller.scrollHeight;
+		} else {
+			scroller.scrollTo({ top: scroller.scrollHeight, behavior });
+		}
+		requestAnimationFrame(() => {
+			suppressScrollPin = false;
+		});
+	}
+
+	$effect(() => {
+		sessionId;
+		followStream = true;
+		isInitialTranscriptPaint = true;
+	});
+
+	$effect(() => {
+		const streaming = chatStore.isStreaming;
+		if (streaming && !wasStreaming) {
+			followStream = true;
+		}
+		wasStreaming = streaming;
+	});
+
 	let scrollKey = $derived(
 		`${chatStore.isStreaming}:${threadItems
 			.map((item) => {
@@ -297,6 +340,8 @@
 			return;
 		}
 
+		if (!isInitialTranscriptPaint) return;
+
 		let cancelled = false;
 		let settleFrame = 0;
 		let lastHeight = 0;
@@ -348,18 +393,11 @@
 			void tick().then(() => {
 				scrollFrame = 0;
 				if (!scroller) return;
+				if (!followStream && !isInitialTranscriptPaint && !chatStore.isLoading) return;
+
 				const instant =
-					chatStore.isLoading ||
-					chatStore.isStreaming ||
-					isInitialTranscriptPaint;
-				if (instant) {
-					scroller.scrollTop = scroller.scrollHeight;
-					return;
-				}
-				scroller.scrollTo({
-					top: scroller.scrollHeight,
-					behavior: 'smooth'
-				});
+					isInitialTranscriptPaint || chatStore.isLoading || chatStore.isStreaming;
+				pinScrollTop(instant ? 'auto' : 'smooth');
 			});
 		});
 		return () => {
@@ -458,7 +496,7 @@
 	</div>
 {/snippet}
 
-<div class="thread" bind:this={scroller} aria-live="polite">
+<div class="thread" bind:this={scroller} onscroll={onThreadScroll} aria-live="polite">
 	<div class="thread-inner">
 		{#if showMessages}
 			<div class="thread-messages" class:hydrating={isInitialTranscriptPaint} in:fade={transcriptFadeIn}>

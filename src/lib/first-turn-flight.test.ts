@@ -1,7 +1,20 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from 'vitest';
-import { dockUserOrigin, textareaUserOrigin } from './first-turn-flight';
+import { blendFlightOrigin, dockUserOrigin, textareaUserOrigin } from './first-turn-flight';
+
+describe('blendFlightOrigin', () => {
+	it('shortens horizontal and vertical travel toward the thread target', () => {
+		const from = new DOMRect(320, 616, 280, 72);
+		const to = new DOMRect(280, 120, 280, 72);
+
+		const blended = blendFlightOrigin(from, to);
+
+		expect(blended.left).toBeCloseTo(294, 5);
+		expect(blended.top).toBeCloseTo(293.6, 5);
+		expect(blended.width).toBe(280);
+	});
+});
 
 describe('textareaUserOrigin', () => {
 	it('right-aligns to the textarea and vertically centers on it', () => {

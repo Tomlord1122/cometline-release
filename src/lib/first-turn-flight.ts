@@ -3,6 +3,15 @@ import type { ImageAttachment } from '$lib/types';
 
 export const FLIGHT_MS = 560;
 export const FLIGHT_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
+/** Fraction of horizontal travel from composer → thread (lower = shorter slide-in). */
+export const USER_BUBBLE_FLIGHT_HORIZONTAL_BLEND = 0.35;
+/** Fraction of vertical travel from composer → thread (lower = shorter slide-in). */
+export const USER_BUBBLE_FLIGHT_VERTICAL_BLEND = 0.35;
+
+export interface BlendFlightOriginOptions {
+	horizontalBlend?: number;
+	verticalBlend?: number;
+}
 
 export function prefersReducedMotion(): boolean {
 	return (
@@ -45,6 +54,19 @@ export function translateStyle(from: DOMRect, to: DOMRect): string {
 		`top:${from.top}px`,
 		`width:${to.width}px`
 	].join(';');
+}
+
+/** Pull the flight origin closer to the target so the bubble does not slide as far. */
+export function blendFlightOrigin(
+	from: DOMRect,
+	to: DOMRect,
+	options: BlendFlightOriginOptions = {}
+): DOMRect {
+	const horizontalBlend = options.horizontalBlend ?? USER_BUBBLE_FLIGHT_HORIZONTAL_BLEND;
+	const verticalBlend = options.verticalBlend ?? USER_BUBBLE_FLIGHT_VERTICAL_BLEND;
+	const left = to.left + (from.left - to.left) * horizontalBlend;
+	const top = to.top + (from.top - to.top) * verticalBlend;
+	return new DOMRect(left, top, from.width, from.height);
 }
 
 export type UserBubbleFlightOrigin = 'textarea' | 'above-composer';
@@ -198,6 +220,8 @@ export async function flyUserBubble(params: FlyUserBubbleParams): Promise<boolea
 		reveal();
 		return false;
 	}
+
+	fromRect = blendFlightOrigin(fromRect, userTo);
 
 	const style = translateStyle(fromRect, userTo);
 
