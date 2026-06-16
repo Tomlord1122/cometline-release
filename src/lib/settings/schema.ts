@@ -80,11 +80,19 @@ export interface CometMindMemorySettings {
 	};
 }
 
+export interface CometMindStorageSettings {
+	retentionDays: number;
+	maxSessionsPerWorkspace: number;
+	archivedMemoryPurgeDays: number;
+	vacuumAfterPurge: boolean;
+}
+
 export interface CometMindSettings {
 	systemPromptPath: string;
 	acp: CometMindACPSettings;
 	skills: CometMindSkillsSettings;
 	memory: CometMindMemorySettings;
+	storage: CometMindStorageSettings;
 	gateway: {
 		discord: CometMindDiscordGatewaySettings;
 	};
@@ -183,6 +191,20 @@ function cleanStringList(values: unknown): string[] {
 	return values.map((v) => String(v).trim()).filter(Boolean);
 }
 
+function normalizeNonNegativeInt(value: unknown, fallback: number): number {
+	if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+	return Math.max(0, Math.floor(value));
+}
+
+export function defaultCometMindStorageSettings(): CometMindStorageSettings {
+	return {
+		retentionDays: 90,
+		maxSessionsPerWorkspace: 0,
+		archivedMemoryPurgeDays: 90,
+		vacuumAfterPurge: true
+	};
+}
+
 export function defaultCometMindSettings(workspacePath = ''): CometMindSettings {
 	return {
 		systemPromptPath: '',
@@ -208,6 +230,7 @@ export function defaultCometMindSettings(workspacePath = ''): CometMindSettings 
 				apiKey: ''
 			}
 		},
+		storage: defaultCometMindStorageSettings(),
 		gateway: {
 			discord: {
 				enabled: false,
@@ -233,6 +256,7 @@ export function normalizeCometMindSettings(
 	const skills: Partial<CometMindSkillsSettings> = input?.skills ?? {};
 	const memory: Partial<CometMindMemorySettings> = input?.memory ?? {};
 	const embedding: Partial<CometMindMemorySettings['embedding']> = memory.embedding ?? {};
+	const storage: Partial<CometMindStorageSettings> = input?.storage ?? {};
 	const discord: Partial<CometMindDiscordGatewaySettings> = input?.gateway?.discord ?? {};
 	const args = Array.isArray(acp.args)
 		? acp.args.map((a) => String(a).trim()).filter(Boolean)
@@ -273,6 +297,21 @@ export function normalizeCometMindSettings(
 				apiKey: String(embedding.apiKey ?? defaults.memory.embedding.apiKey).trim()
 			}
 		},
+		storage: {
+			retentionDays: normalizeNonNegativeInt(storage.retentionDays, defaults.storage.retentionDays),
+			maxSessionsPerWorkspace: normalizeNonNegativeInt(
+				storage.maxSessionsPerWorkspace,
+				defaults.storage.maxSessionsPerWorkspace
+			),
+			archivedMemoryPurgeDays: normalizeNonNegativeInt(
+				storage.archivedMemoryPurgeDays,
+				defaults.storage.archivedMemoryPurgeDays
+			),
+			vacuumAfterPurge:
+				typeof storage.vacuumAfterPurge === 'boolean'
+					? storage.vacuumAfterPurge
+					: defaults.storage.vacuumAfterPurge
+		},
 		gateway: {
 			discord: {
 				enabled:
@@ -311,6 +350,7 @@ export function cloneCometMindSettings(settings: CometMindSettings): CometMindSe
 		memory: {
 			embedding: { ...settings.memory.embedding }
 		},
+		storage: { ...settings.storage },
 		gateway: {
 			discord: {
 				...settings.gateway.discord,
@@ -608,6 +648,12 @@ const providerSettingsSchema = z.object({
 				baseURL: z.string(),
 				apiKey: z.string()
 			})
+		}),
+		storage: z.object({
+			retentionDays: z.number().int().min(0),
+			maxSessionsPerWorkspace: z.number().int().min(0),
+			archivedMemoryPurgeDays: z.number().int().min(0),
+			vacuumAfterPurge: z.boolean()
 		}),
 		gateway: z.object({
 			discord: z.object({

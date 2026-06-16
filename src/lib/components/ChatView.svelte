@@ -97,12 +97,10 @@
 	);
 
 	let heroFrameExiting = $state(false);
-	let turnProcessing = $state(false);
 
 	function syncQueueState() {
 		queuedCount = conversation.pendingCount;
 		queuedMessages = [...conversation.pendingMessages];
-		turnProcessing = conversation.processing;
 	}
 
 	function syncSessionFromStore() {
@@ -247,7 +245,6 @@
 				{queuedCount}
 				{queuedMessages}
 				waitingForReply={chatStore.isStreaming || firstTurnActive}
-				{turnProcessing}
 				variant={composerVariant}
 			/>
 		</HeroComposerFrame>

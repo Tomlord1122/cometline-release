@@ -13,6 +13,23 @@ describe('settings schema', () => {
 		const settings = defaultSettings();
 		expect(settings.providers).toHaveLength(4);
 		expect(settings.cometmind.systemPromptPath).toBe('');
+		expect(settings.cometmind.storage.retentionDays).toBe(90);
+		expect(settings.cometmind.storage.maxSessionsPerWorkspace).toBe(0);
+	});
+
+	it('allows disabling session retention with zero days', () => {
+		const settings = normalizeSettings({
+			...defaultSettings(),
+			cometmind: {
+				...defaultSettings().cometmind,
+				storage: {
+					...defaultSettings().cometmind.storage,
+					retentionDays: 0
+				}
+			}
+		});
+		expect(settings.cometmind.storage.retentionDays).toBe(0);
+		expect(settings.cometmind.storage.archivedMemoryPurgeDays).toBe(90);
 	});
 
 	it('migrates legacy single-provider format', () => {

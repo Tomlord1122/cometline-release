@@ -6,7 +6,8 @@ export {
 	type CometMindDiscordGatewaySettings,
 	type CometMindMemorySettings,
 	type CometMindSettings,
-	type CometMindSkillsSettings
+	type CometMindSkillsSettings,
+	type CometMindStorageSettings
 } from './settings/schema';
 
 /** Parse comma- or newline-separated IDs for text inputs. */

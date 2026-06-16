@@ -17,6 +17,10 @@
 	import AssistantMarkdown from '$lib/components/AssistantMarkdown.svelte';
 	import { imageDataURL } from '$lib/files/images';
 	import { memoryUpdateHint, memoryUpdateTooltip } from '$lib/memory-updates';
+	import {
+		buildThinkingAttribution,
+		type ThinkingBlock
+	} from '$lib/conversation/thinking-attribution';
 
 	const ASSISTANT_ROW_IN = { y: 10, duration: 220 };
 	const TOOL_ROW_IN = { y: 8, duration: 200 };
@@ -81,69 +85,8 @@
 		awaitingFirstAssistant || isInitialTranscriptPaint ? { duration: 0 } : TRANSCRIPT_IN
 	);
 
-	type InjectedMemory = Extract<ChatItem, { type: 'memory' }>['memories'][number];
 
-	type ThinkingBlock = {
-		reasoning?: { text: string; pending?: boolean };
-		tools: Extract<ChatItem, { type: 'tool' }>[];
-		memories: InjectedMemory[];
-	};
-
-	let thinkingScanStart = $derived.by(() => {
-		for (let i = threadItems.length - 1; i >= 0; i--) {
-			if (threadItems[i].type === 'user') return i;
-		}
-		return 0;
-	});
-
-	let thinkingForAssistant = $derived.by(() => {
-		const map = new Map<string, ThinkingBlock>();
-		const toolIdsInBuffer = new Set<string>();
-		const memoryIdsInBuffer = new Set<string>();
-		let currentAssistantId: string | null = null;
-		let pendingMemories: InjectedMemory[] = [];
-
-		for (let index = thinkingScanStart; index < threadItems.length; index++) {
-			const item = threadItems[index];
-			if (item.type === 'user' || item.type === 'status' || item.type === 'error') {
-				currentAssistantId = null;
-				pendingMemories = [];
-				continue;
-			}
-			if (item.type === 'memory') {
-				pendingMemories = item.memories;
-				memoryIdsInBuffer.add(item.id);
-				continue;
-			}
-			if (item.type === 'assistant') {
-				currentAssistantId = item.id;
-				const existing = map.get(item.id);
-				if (!existing) {
-					map.set(item.id, {
-						reasoning: item.reasoning,
-						tools: [],
-						memories: pendingMemories
-					});
-				} else {
-					if (item.reasoning && !existing.reasoning) {
-						existing.reasoning = item.reasoning;
-					}
-					if (pendingMemories.length > 0) {
-						existing.memories = pendingMemories;
-					}
-				}
-				pendingMemories = [];
-			} else if (item.type === 'tool' && currentAssistantId) {
-				const block = map.get(currentAssistantId);
-				if (block) {
-					block.tools.push(item);
-					toolIdsInBuffer.add(item.id);
-				}
-			}
-		}
-
-		return { map, toolIdsInBuffer, memoryIdsInBuffer };
-	});
+	let thinkingForAssistant = $derived(buildThinkingAttribution(threadItems));
 
 	function isToolInBuffer(item: Extract<ChatItem, { type: 'tool' }>) {
 		return thinkingForAssistant.toolIdsInBuffer.has(item.id);

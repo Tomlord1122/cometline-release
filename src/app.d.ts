@@ -115,11 +115,19 @@ declare global {
 		};
 	}
 
+	interface CometMindStorageSettings {
+		retentionDays: number;
+		maxSessionsPerWorkspace: number;
+		archivedMemoryPurgeDays: number;
+		vacuumAfterPurge: boolean;
+	}
+
 	interface CometMindSettings {
 		systemPromptPath: string;
 		acp: CometMindACPSettings;
 		skills: CometMindSkillsSettings;
 		memory: CometMindMemorySettings;
+		storage: CometMindStorageSettings;
 		gateway: {
 			discord: CometMindDiscordGatewaySettings;
 		};

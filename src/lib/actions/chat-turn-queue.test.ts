@@ -143,6 +143,28 @@ describe('createChatTurnQueue', () => {
 		expect(runTurn).toHaveBeenCalledWith('hello');
 	});
 
+	it('ignores duplicate submits during a pre-stream flight window', async () => {
+		let releaseFlight: (() => void) | undefined;
+		const flightGate = new Promise<void>((resolve) => {
+			releaseFlight = resolve;
+		});
+		const runTurn = vi.fn().mockImplementation(async (text: string) => {
+			if (text === 'hello') await flightGate;
+		});
+		const queue = createChatTurnQueue(runTurn);
+
+		void queue.enqueue('hello');
+		await vi.waitFor(() => expect(queue.processing).toBe(true));
+
+		await expect(queue.enqueue('hello')).resolves.toBe(false);
+		expect(queue.pendingCount).toBe(0);
+
+		releaseFlight!();
+		await vi.waitFor(() => expect(queue.processing).toBe(false));
+
+		expect(runTurn).toHaveBeenCalledTimes(1);
+	});
+
 	it('ignores duplicate consecutive queued messages', async () => {
 		let releaseFirst: (() => void) | undefined;
 		const firstGate = new Promise<void>((resolve) => {

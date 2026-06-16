@@ -864,6 +864,7 @@
 				{:else if activeSection === 'general'}
 					<SettingsGeneralPanel
 						bind:openAtLogin={draft.app.openAtLogin}
+						bind:storage={draft.cometmind.storage}
 						onOpenAtLoginChange={setOpenAtLogin}
 					/>
 				{:else if activeSection === 'cometmind'}

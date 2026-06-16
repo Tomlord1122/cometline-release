@@ -40,20 +40,19 @@ If `runLoop(initialText)` were ever invoked while `processing` was already true,
    - If `runLoop` is called while `processing`, queue (or dedupe) instead of running in parallel.
 
 2. **`ChatView.svelte`**
-   - Expose `turnQueue.processing` as `turnProcessing` via `syncQueueState`.
+   - ~~Expose `turnQueue.processing` as `turnProcessing` via `syncQueueState`.~~ Removed 2026-06-16; queue state stays internal.
 
 3. **`Composer.svelte`**
-   - `sendLocked = turnProcessing && !streaming` — block submit during flight / refresh, but still allow queueing while streaming (Stop button visible).
-   - Apply `sendLocked` in `submit()` and on the send button `disabled` state.
+   - ~~`sendLocked = turnProcessing && !streaming`~~ **Removed (2026-06-16):** Composer no longer reads `turnProcessing`. Duplicate protection is queue-only (`activeTurnText` dedupe). Send unlock aligns with `!isStreaming` so post-stream `refreshSession` does not block the composer.
 
 Intentional queueing during an active **stream** is unchanged: different messages can still be queued with Enter while the assistant reply is streaming.
 
 ## How to avoid regressions
 
 - **Dedupe on enqueue**, not only in the UI — double events can bypass button disabled state; the queue is the source of truth.
-- **Do not use `isStreaming` alone as “turn busy”** — a turn includes flight, send, and `refreshSession`; `turnQueue.processing` covers the full `startChat` call.
-- **`waitingForReply` is UX copy** — if it should block input, wire it (or `turnProcessing`) into `submit()`, not just the placeholder.
-- **While streaming**, keep allowing queue submits; only lock when `turnProcessing && !streaming`.
+- **`turnQueue.processing` is internal** — covers flight + send + `refreshSession` for serialization; do not expose it to Composer as a send lock.
+- **`waitingForReply` is UX copy** — tracks `isStreaming || firstTurnActive`; it does not gate submit.
+- **While streaming**, keep allowing queue submits.
 
 ## Verification
 

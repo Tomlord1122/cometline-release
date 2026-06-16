@@ -26,6 +26,7 @@ __export(schema_exports, {
   cloneCometMindSettings: () => cloneCometMindSettings,
   cloneProvider: () => cloneProvider,
   defaultCometMindSettings: () => defaultCometMindSettings,
+  defaultCometMindStorageSettings: () => defaultCometMindStorageSettings,
   defaultSettings: () => defaultSettings,
   migrateSingleProvider: () => migrateSingleProvider,
   newProvider: () => newProvider,
@@ -4340,6 +4341,18 @@ function cleanStringList(values) {
   if (!Array.isArray(values)) return [];
   return values.map((v) => String(v).trim()).filter(Boolean);
 }
+function normalizeNonNegativeInt(value, fallback) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return Math.max(0, Math.floor(value));
+}
+function defaultCometMindStorageSettings() {
+  return {
+    retentionDays: 90,
+    maxSessionsPerWorkspace: 0,
+    archivedMemoryPurgeDays: 90,
+    vacuumAfterPurge: true
+  };
+}
 function defaultCometMindSettings(workspacePath = "") {
   return {
     systemPromptPath: "",
@@ -4365,6 +4378,7 @@ function defaultCometMindSettings(workspacePath = "") {
         apiKey: ""
       }
     },
+    storage: defaultCometMindStorageSettings(),
     gateway: {
       discord: {
         enabled: false,
@@ -4386,6 +4400,7 @@ function normalizeCometMindSettings(input, fallbackWorkspacePath = "") {
   const skills = input?.skills ?? {};
   const memory = input?.memory ?? {};
   const embedding = memory.embedding ?? {};
+  const storage = input?.storage ?? {};
   const discord = input?.gateway?.discord ?? {};
   const args = Array.isArray(acp.args) ? acp.args.map((a) => String(a).trim()).filter(Boolean) : defaults.acp.args;
   const { botToken, botTokenEnv } = migrateDiscordTokenFields(discord);
@@ -4412,6 +4427,18 @@ function normalizeCometMindSettings(input, fallbackWorkspacePath = "") {
         baseURL: String(embedding.baseURL ?? defaults.memory.embedding.baseURL).trim(),
         apiKey: String(embedding.apiKey ?? defaults.memory.embedding.apiKey).trim()
       }
+    },
+    storage: {
+      retentionDays: normalizeNonNegativeInt(storage.retentionDays, defaults.storage.retentionDays),
+      maxSessionsPerWorkspace: normalizeNonNegativeInt(
+        storage.maxSessionsPerWorkspace,
+        defaults.storage.maxSessionsPerWorkspace
+      ),
+      archivedMemoryPurgeDays: normalizeNonNegativeInt(
+        storage.archivedMemoryPurgeDays,
+        defaults.storage.archivedMemoryPurgeDays
+      ),
+      vacuumAfterPurge: typeof storage.vacuumAfterPurge === "boolean" ? storage.vacuumAfterPurge : defaults.storage.vacuumAfterPurge
     },
     gateway: {
       discord: {
@@ -4444,6 +4471,7 @@ function cloneCometMindSettings(settings) {
     memory: {
       embedding: { ...settings.memory.embedding }
     },
+    storage: { ...settings.storage },
     gateway: {
       discord: {
         ...settings.gateway.discord,
@@ -4675,6 +4703,12 @@ var providerSettingsSchema = external_exports.object({
         apiKey: external_exports.string()
       })
     }),
+    storage: external_exports.object({
+      retentionDays: external_exports.number().int().min(0),
+      maxSessionsPerWorkspace: external_exports.number().int().min(0),
+      archivedMemoryPurgeDays: external_exports.number().int().min(0),
+      vacuumAfterPurge: external_exports.boolean()
+    }),
     gateway: external_exports.object({
       discord: external_exports.object({
         enabled: external_exports.boolean(),
@@ -4722,6 +4756,7 @@ function parseAndNormalizeSettings(raw, options = {}) {
   cloneCometMindSettings,
   cloneProvider,
   defaultCometMindSettings,
+  defaultCometMindStorageSettings,
   defaultSettings,
   migrateSingleProvider,
   newProvider,

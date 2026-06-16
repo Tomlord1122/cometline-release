@@ -28,7 +28,6 @@
 		queuedCount = 0,
 		queuedMessages = [],
 		waitingForReply = false,
-		turnProcessing = false,
 		variant = 'dock',
 		autofocus = true
 	}: {
@@ -41,7 +40,6 @@
 		queuedCount?: number;
 		queuedMessages?: QueuedMessage[];
 		waitingForReply?: boolean;
-		turnProcessing?: boolean;
 		variant?: 'hero' | 'dock';
 		autofocus?: boolean;
 	} = $props();
@@ -64,7 +62,6 @@
 	let dropMessage = $state('');
 	let dropProcessing = $state(false);
 	let dropMessageTimer: ReturnType<typeof setTimeout> | null = null;
-	let sendLocked = $derived(turnProcessing && !streaming);
 	let dragActive = $derived(dragDepth > 0 || dropProcessing);
 	let canSubmit = $derived(Boolean(value.trim() || images.length > 0));
 	let skillCommandMatch = $derived(/^\s*\/([\w-]*)$/.exec(value));
@@ -151,7 +148,7 @@
 	function submit() {
 		const trimmed = value.trim();
 		const expanded = expandBuiltinSlashCommand(trimmed) ?? expandSkillCommand(trimmed);
-		if (!canSubmit || disabled || sendLocked || !modelStore.selected) return;
+		if (!canSubmit || disabled || !modelStore.selected) return;
 		onSend(expanded, images.length > 0 ? images : undefined);
 		input?.clear();
 		value = '';
@@ -626,7 +623,7 @@
 				<button
 					class="send-button"
 					onclick={submit}
-					disabled={!canSubmit || disabled || sendLocked || !modelStore.selected}
+					disabled={!canSubmit || disabled || !modelStore.selected}
 					aria-label="Send"
 				>
 					<Send size={16} stroke-width={1.8} />

@@ -47,7 +47,7 @@ The rule: **Cometline is not the brain.** CometMind is the brain. Comet SDK is o
 - **Providers** — OpenAI, Anthropic, OpenAI-compatible, OpenCode Go, plus custom providers; fetch models from the provider API
 - **CometMind** — ACP (OpenCode) config, Agent Skills management, Discord gateway toggle and config
 - **Memory** — auto retrieve/extract, thresholds, embedding model, compaction
-- **General** — open at login (macOS)
+- **General** — open at login (macOS); session retention, max sessions per workspace, archived memory purge
 - **Hero glow** — composer glow/border presets and custom colors; caret trail animation
 - **Shortcuts** — rebind all keyboard shortcuts
 
