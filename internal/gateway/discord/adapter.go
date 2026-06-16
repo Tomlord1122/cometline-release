@@ -12,6 +12,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/cometline/cometmind/internal/config"
 	"github.com/cometline/cometmind/internal/gateway"
+	skillpkg "github.com/cometline/cometmind/internal/skills"
 )
 
 const platformName = "discord"
@@ -107,11 +108,15 @@ func (a *Adapter) KeepTyping(ctx context.Context, channelID string) func() {
 func (a *Adapter) Start(ctx context.Context) error {
 	a.Session.AddHandler(a.onMessageCreate)
 	a.Session.AddHandler(a.onInteractionCreate)
+	a.Session.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
+		if err := a.registerCommands(s, r); err != nil {
+			log.Printf("discord: slash command registration failed: %v", err)
+		} else {
+			log.Printf("discord: slash commands registered (thread, create-skill)")
+		}
+	})
 	if err := a.Session.Open(); err != nil {
 		return err
-	}
-	if err := a.registerCommands(); err != nil {
-		log.Printf("discord: slash command registration failed: %v", err)
 	}
 	go func() {
 		<-ctx.Done()
@@ -120,11 +125,8 @@ func (a *Adapter) Start(ctx context.Context) error {
 	return nil
 }
 
-func (a *Adapter) registerCommands() error {
-	if a.Session.State == nil || a.Session.State.User == nil {
-		return fmt.Errorf("discord session user is not ready")
-	}
-	_, err := a.Session.ApplicationCommandBulkOverwrite(a.Session.State.User.ID, "", []*discordgo.ApplicationCommand{
+func applicationCommands() []*discordgo.ApplicationCommand {
+	return []*discordgo.ApplicationCommand{
 		{
 			Name:        "thread",
 			Description: "Start a new CometMind conversation in a thread",
@@ -137,7 +139,33 @@ func (a *Adapter) registerCommands() error {
 				},
 			},
 		},
-	})
+		{
+			Name:        "create-skill",
+			Description: "Build a new Agent Skill in ~/.cometmind/skills",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "request",
+					Description: "What the skill should do (optional)",
+					Required:    false,
+				},
+			},
+		},
+	}
+}
+
+func (a *Adapter) registerCommands(s *discordgo.Session, ready *discordgo.Ready) error {
+	appID := ""
+	if ready != nil && ready.Application.ID != "" {
+		appID = ready.Application.ID
+	}
+	if appID == "" && s.State != nil && s.State.User != nil {
+		appID = s.State.User.ID
+	}
+	if appID == "" {
+		return fmt.Errorf("discord application id is not available")
+	}
+	_, err := s.ApplicationCommandBulkOverwrite(appID, "", applicationCommands())
 	return err
 }
 
@@ -249,9 +277,15 @@ func (a *Adapter) onInteractionCreate(s *discordgo.Session, i *discordgo.Interac
 		return
 	}
 	data := i.ApplicationCommandData()
-	if data.Name != "thread" {
-		return
+	switch data.Name {
+	case "thread":
+		a.handleThreadCommand(s, i, data)
+	case "create-skill":
+		a.handleCreateSkillCommand(s, i, data)
 	}
+}
+
+func (a *Adapter) handleThreadCommand(s *discordgo.Session, i *discordgo.InteractionCreate, data discordgo.ApplicationCommandInteractionData) {
 	if i.GuildID == "" {
 		_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -367,6 +401,52 @@ func (a *Adapter) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCrea
 		ThreadID:        threadID,
 		Text:            text,
 		Mentioned:       mentioned,
+	})
+}
+
+func (a *Adapter) handleCreateSkillCommand(s *discordgo.Session, i *discordgo.InteractionCreate, data discordgo.ApplicationCommandInteractionData) {
+	request := ""
+	for _, opt := range data.Options {
+		if opt.Name == "request" && opt.Type == discordgo.ApplicationCommandOptionString {
+			if v := strings.TrimSpace(opt.StringValue()); v != "" {
+				request = v
+			}
+		}
+	}
+
+	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: "Creating skill… CometMind will reply in this channel.",
+			Flags:   discordgo.MessageFlagsEphemeral,
+		},
+	})
+
+	if a.onInbound == nil {
+		return
+	}
+
+	parentChannelID := ""
+	if i.GuildID != "" {
+		if ch, err := s.Channel(i.ChannelID); err == nil && ch != nil && ch.ParentID != "" {
+			parentChannelID = ch.ParentID
+		}
+	}
+	routingChannelID, threadID := discordRoutingIDs(i.ChannelID, parentChannelID)
+	userID := interactionUserID(i)
+	if userID == "" {
+		return
+	}
+
+	a.onInbound(context.Background(), gateway.InboundMessage{
+		Platform:        platformName,
+		GuildID:         i.GuildID,
+		ParentChannelID: parentChannelID,
+		UserID:          userID,
+		ChannelID:       routingChannelID,
+		ThreadID:        threadID,
+		Text:            skillpkg.ExpandCreateSkillCommand(request),
+		Mentioned:       true,
 	})
 }
 

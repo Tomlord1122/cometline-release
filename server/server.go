@@ -98,6 +98,8 @@ func New(deps Deps) (*gin.Engine, error) {
 	api.POST("/sessions/:id/abort", app.handleAbortSession)
 	api.GET("/skills", app.handleListSkills)
 	api.POST("/skills/sync", app.handleSyncSkills)
+	api.GET("/skills/:name/export", app.handleExportSkill)
+	api.DELETE("/skills/:name", app.handleDeleteSkill)
 	api.GET("/skills/:name", app.handleGetSkill)
 	api.GET("/memories", app.handleListMemories)
 	api.POST("/memories", app.handleCreateMemory)
@@ -240,6 +242,9 @@ type skillResource struct {
 	Path        string `json:"path"`
 	Source      string `json:"source"`
 	Internal    bool   `json:"internal"`
+	IsSymlink   bool   `json:"is_symlink"`
+	CanDelete   bool   `json:"can_delete"`
+	CanExport   bool   `json:"can_export"`
 }
 
 type listSkillsResponse struct {
@@ -291,6 +296,57 @@ func (a *App) handleSyncSkills(c *gin.Context) {
 	c.JSON(http.StatusOK, syncSkillsResponse{Created: created, Skipped: skipped, Errors: reg.Errors})
 }
 
+func (a *App) handleExportSkill(c *gin.Context) {
+	reg := a.skillsForRequest(c)
+	name := strings.TrimSpace(c.Param("name"))
+	skill, ok := reg.Find(name)
+	if !ok {
+		writeError(c, http.StatusNotFound, "skill_not_found", "unknown skill: "+name)
+		return
+	}
+	caps, err := skillpkg.SkillCapabilities(skill)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	if !caps.CanExport {
+		writeError(c, http.StatusForbidden, "export_forbidden", "skill cannot be exported")
+		return
+	}
+	data, err := skillpkg.ExportSkill(skill)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "export_failed", err.Error())
+		return
+	}
+	c.Header("Content-Type", "application/zip")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", name+".zip"))
+	c.Data(http.StatusOK, "application/zip", data)
+}
+
+func (a *App) handleDeleteSkill(c *gin.Context) {
+	reg := a.skillsForRequest(c)
+	name := strings.TrimSpace(c.Param("name"))
+	skill, ok := reg.Find(name)
+	if !ok {
+		writeError(c, http.StatusNotFound, "skill_not_found", "unknown skill: "+name)
+		return
+	}
+	caps, err := skillpkg.SkillCapabilities(skill)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	if !caps.CanDelete {
+		writeError(c, http.StatusForbidden, "delete_forbidden", "external or symlink skills cannot be deleted")
+		return
+	}
+	if err := skillpkg.DeleteManagedSkill(skill); err != nil {
+		writeError(c, http.StatusInternalServerError, "delete_failed", err.Error())
+		return
+	}
+	c.JSON(http.StatusOK, statusResponse{Status: "deleted"})
+}
+
 func (a *App) skillsForRequest(c *gin.Context) skillpkg.Registry {
 	workspacePath := strings.TrimSpace(c.Query("workspace_path"))
 	if workspacePath == "" && strings.TrimSpace(c.Query("workspace_id")) != "" {
@@ -302,12 +358,16 @@ func (a *App) skillsForRequest(c *gin.Context) skillpkg.Registry {
 }
 
 func skillResourceFromModel(skill skillpkg.Skill) skillResource {
+	caps, _ := skillpkg.SkillCapabilities(skill)
 	return skillResource{
 		Name:        skill.Name,
 		Description: skill.Description,
 		Path:        skill.Path,
 		Source:      skill.Source,
 		Internal:    skill.Internal,
+		IsSymlink:   caps.IsSymlink,
+		CanDelete:   caps.CanDelete,
+		CanExport:   caps.CanExport,
 	}
 }
 

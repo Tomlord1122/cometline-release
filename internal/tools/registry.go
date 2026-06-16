@@ -36,6 +36,7 @@ func NewRegistry(workspaceRoot string, opts ...RegistryOptions) *Registry {
 	if opt.Skills != nil {
 		add(LoadSkill{Skills: opt.Skills})
 		add(ReadSkillFile{Skills: opt.Skills})
+		add(WriteSkill{})
 	}
 	if opt.Sessions != nil {
 		add(DelegateCodingTask{

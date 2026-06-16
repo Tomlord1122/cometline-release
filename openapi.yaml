@@ -473,6 +473,65 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [Skills]
+      summary: Delete a managed Agent Skill from ~/.cometmind/skills
+      operationId: deleteSkill
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: workspace_path
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Skill deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/skills/{name}/export:
+    get:
+      tags: [Skills]
+      summary: Export one Agent Skill as a zip archive
+      operationId: exportSkill
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: workspace_path
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Skill zip archive
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /api/v1/memories:
     get:
@@ -592,6 +651,16 @@ components:
             error:
               code: session_not_found
               message: session was not found
+    Forbidden:
+      description: Operation is not allowed for this resource
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: forbidden
+              message: operation is not allowed
     InternalError:
       description: Unexpected server error
       content:
@@ -807,7 +876,7 @@ components:
     Skill:
       type: object
       additionalProperties: false
-      required: [name, description, path, source, internal]
+      required: [name, description, path, source, internal, is_symlink, can_delete, can_export]
       properties:
         name:
           type: string
@@ -818,6 +887,12 @@ components:
         source:
           type: string
         internal:
+          type: boolean
+        is_symlink:
+          type: boolean
+        can_delete:
+          type: boolean
+        can_export:
           type: boolean
 
     ListSkillsResponse:

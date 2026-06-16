@@ -15,6 +15,7 @@ import (
 	"github.com/cometline/cometmind/internal/config"
 	"github.com/cometline/cometmind/internal/event"
 	"github.com/cometline/cometmind/internal/session"
+	"github.com/cometline/cometmind/internal/skills"
 	"github.com/cometline/cometmind/internal/store"
 	"github.com/gin-gonic/gin"
 )
@@ -567,6 +568,55 @@ func TestAbortSessionCancelsRunningStream(t *testing.T) {
 	}
 }
 
+func TestSkillsDeleteAndExport(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	content := "---\nname: api-skill\ndescription: api test skill\n---\n\n# API\n"
+	if err := skills.WriteSkill("api-skill", content, false); err != nil {
+		t.Fatalf("WriteSkill() error = %v", err)
+	}
+
+	engine, _, cleanup := newTestEngine(t, func(sess session.Session, workspacePath string) (Runner, error) {
+		return fakeRunner(func(ctx context.Context, turn session.AgentTurn, ch chan<- event.Event) error {
+			ch <- event.Done()
+			return nil
+		}), nil
+	})
+	defer cleanup()
+
+	exportRec := httptest.NewRecorder()
+	exportReq := httptest.NewRequest(http.MethodGet, "/api/v1/skills/api-skill/export", nil)
+	engine.ServeHTTP(exportRec, exportReq)
+	if exportRec.Code != http.StatusOK {
+		t.Fatalf("export status = %d, want %d body=%s", exportRec.Code, http.StatusOK, exportRec.Body.String())
+	}
+	if ct := exportRec.Header().Get("Content-Type"); !strings.Contains(ct, "application/zip") {
+		t.Fatalf("export content-type = %q", ct)
+	}
+	if exportRec.Body.Len() == 0 {
+		t.Fatal("export body is empty")
+	}
+
+	deleteRec := httptest.NewRecorder()
+	deleteReq := httptest.NewRequest(http.MethodDelete, "/api/v1/skills/api-skill", nil)
+	engine.ServeHTTP(deleteRec, deleteReq)
+	if deleteRec.Code != http.StatusOK {
+		t.Fatalf("delete status = %d, want %d body=%s", deleteRec.Code, http.StatusOK, deleteRec.Body.String())
+	}
+
+	listRec := httptest.NewRecorder()
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/skills", nil)
+	engine.ServeHTTP(listRec, listReq)
+	var list listSkillsResponse
+	decodeJSON(t, listRec.Body.Bytes(), &list)
+	for _, skill := range list.Skills {
+		if skill.Name == "api-skill" {
+			t.Fatalf("skill still listed after delete: %+v", list.Skills)
+		}
+	}
+}
+
 func newTestEngine(t *testing.T, newRunner RunnerFactory) (*gin.Engine, *session.Service, func()) {
 	t.Helper()
 
@@ -585,6 +635,11 @@ func newTestEngine(t *testing.T, newRunner RunnerFactory) (*gin.Engine, *session
 			Model:     "test-model",
 			MaxTokens: 256,
 			MaxSteps:  8,
+			Skills: config.SkillsConfig{
+				Enabled:         true,
+				IncludeOpenCode: false,
+				IncludeClaude:   false,
+			},
 		},
 		Sessions:  svc,
 		NewRunner: newRunner,

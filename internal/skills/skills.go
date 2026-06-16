@@ -270,7 +270,7 @@ func expandPath(p string) (string, error) {
 		return "", nil
 	}
 	if strings.HasPrefix(p, "~/") || p == "~" {
-		home, err := os.UserHomeDir()
+		home, err := userHome()
 		if err != nil {
 			return "", err
 		}
@@ -281,4 +281,11 @@ func expandPath(p string) (string, error) {
 		}
 	}
 	return filepath.Abs(p)
+}
+
+func userHome() (string, error) {
+	if home := strings.TrimSpace(os.Getenv("HOME")); home != "" {
+		return home, nil
+	}
+	return os.UserHomeDir()
 }

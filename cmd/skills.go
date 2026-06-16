@@ -82,8 +82,55 @@ var skillsSyncCmd = &cobra.Command{
 	},
 }
 
+var skillsDeleteCmd = &cobra.Command{
+	Use:   "delete <name>",
+	Short: "Delete a managed skill from ~/.cometmind/skills",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(_ *cobra.Command, args []string) error {
+		ctx := context.Background()
+		rt, reg, err := skillsRegistryForCommand(ctx)
+		if err != nil {
+			return err
+		}
+		defer rt.Close()
+		skill, ok := reg.Find(args[0])
+		if !ok {
+			return fmt.Errorf("unknown skill: %s", args[0])
+		}
+		if err := skills.DeleteManagedSkill(skill); err != nil {
+			return err
+		}
+		fmt.Printf("deleted %s\n", skill.Name)
+		return nil
+	},
+}
+
+var skillsExportCmd = &cobra.Command{
+	Use:   "export <name>",
+	Short: "Export a skill directory as zip bytes to stdout",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(_ *cobra.Command, args []string) error {
+		ctx := context.Background()
+		rt, reg, err := skillsRegistryForCommand(ctx)
+		if err != nil {
+			return err
+		}
+		defer rt.Close()
+		skill, ok := reg.Find(args[0])
+		if !ok {
+			return fmt.Errorf("unknown skill: %s", args[0])
+		}
+		data, err := skills.ExportSkill(skill)
+		if err != nil {
+			return err
+		}
+		_, err = os.Stdout.Write(data)
+		return err
+	},
+}
+
 func init() {
-	skillsCmd.AddCommand(skillsListCmd, skillsShowCmd, skillsSyncCmd)
+	skillsCmd.AddCommand(skillsListCmd, skillsShowCmd, skillsSyncCmd, skillsDeleteCmd, skillsExportCmd)
 	rootCmd.AddCommand(skillsCmd)
 }
 
