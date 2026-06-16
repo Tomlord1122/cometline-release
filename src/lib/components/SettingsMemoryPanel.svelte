@@ -15,20 +15,23 @@
 		type MemorySettings
 	} from '$lib/client/cometmind';
 	import {
+		buildEmbeddingDropdownOptions,
+		embeddingKeyForFields,
 		embeddingOptionKey,
 		embeddingProviderForMethod,
-		listEmbeddingModelOptions,
-		resolveEmbeddingSelection
+		mergeEmbeddingFields,
+		type SavedEmbeddingRef
 	} from '$lib/embedding-models';
 	import type { ProviderConfig } from '$lib/types';
 	import { onMount } from 'svelte';
 
 	interface Props {
 		providers?: ProviderConfig[];
+		savedEmbedding?: SavedEmbeddingRef;
 		onEmbeddingSaved?: (embedding: MemorySettings['embedding']) => void | Promise<void>;
 	}
 
-	let { providers = [], onEmbeddingSaved }: Props = $props();
+	let { providers = [], savedEmbedding, onEmbeddingSaved }: Props = $props();
 
 	let settings = $state<MemorySettings | null>(null);
 	let memories = $state<MemoryResource[]>([]);
@@ -42,23 +45,20 @@
 
 	let loadError = $state('');
 
-	const embeddingOptions = $derived(listEmbeddingModelOptions(providers));
+	const embeddingDropdownOptions = $derived(
+		buildEmbeddingDropdownOptions(providers, savedEmbedding)
+	);
 
 	function embeddingKeyForSettings(next: MemorySettings | null) {
 		if (!next) return '';
-		const match = resolveEmbeddingSelection(
-			providers,
-			next.embedding.provider_id,
-			next.embedding.model
-		);
-		return match ? embeddingOptionKey(match) : '';
+		return embeddingKeyForFields(providers, next.embedding, savedEmbedding);
 	}
 
 	$effect(() => {
 		if (!settings) return;
 		if (
 			selectedEmbeddingKey &&
-			embeddingOptions.some((opt) => embeddingOptionKey(opt) === selectedEmbeddingKey)
+			embeddingDropdownOptions.some((opt) => embeddingOptionKey(opt) === selectedEmbeddingKey)
 		) {
 			return;
 		}
@@ -67,7 +67,7 @@
 
 	function applyEmbeddingSelection(): MemorySettings | null {
 		if (!settings) return null;
-		const option = embeddingOptions.find(
+		const option = embeddingDropdownOptions.find(
 			(opt) => embeddingOptionKey(opt) === selectedEmbeddingKey
 		);
 		if (!option) {
@@ -110,8 +110,13 @@
 		status = '';
 		try {
 			const [s, list] = await Promise.all([getMemorySettings(), listMemories()]);
-			settings = s;
-			selectedEmbeddingKey = embeddingKeyForSettings(s);
+			const mergedEmbedding = mergeEmbeddingFields(s.embedding, savedEmbedding);
+			let nextSettings: MemorySettings = { ...s, embedding: mergedEmbedding };
+			if (!s.embedding.model.trim() && savedEmbedding?.model.trim()) {
+				nextSettings = await putMemorySettings(nextSettings);
+			}
+			settings = nextSettings;
+			selectedEmbeddingKey = embeddingKeyForSettings(nextSettings);
 			memories = list.memories ?? [];
 		} catch (error) {
 			loadError =
@@ -260,7 +265,7 @@
 			<div class="embedding-row">
 				<label>
 					<span>Embedding model</span>
-					{#if embeddingOptions.length === 0}
+					{#if embeddingDropdownOptions.length === 0}
 						<p class="empty-embedding">
 							No embedding models enabled. Enable an embedding model under Settings → Providers.
 						</p>
@@ -272,9 +277,11 @@
 							}}
 						>
 							<option value="">Select embedding model…</option>
-							{#each embeddingOptions as option (embeddingOptionKey(option))}
+							{#each embeddingDropdownOptions as option (embeddingOptionKey(option))}
 								<option value={embeddingOptionKey(option)}>
-									{option.providerName} · {option.model}
+									{option.providerName} · {option.model}{option.orphan
+										? ' (enable in Providers)'
+										: ''}
 								</option>
 							{/each}
 						</select>

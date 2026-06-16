@@ -438,8 +438,24 @@
 	}
 
 	async function persistMemoryEmbedding(embedding: MemorySettings['embedding']) {
+		const providerId = embedding.provider_id.trim();
+		const model = embedding.model.trim();
+		let nextProviders = draft.providers.map(cloneProvider);
+		if (providerId && model) {
+			nextProviders = nextProviders.map((provider) => {
+				if (provider.id !== providerId) return provider;
+				const enabledModels = provider.enabledModels.includes(model)
+					? provider.enabledModels
+					: [...provider.enabledModels, model];
+				const models = provider.models.includes(model)
+					? provider.models
+					: [...provider.models, model];
+				return { ...provider, enabled: true, models, enabledModels };
+			});
+		}
 		const nextDraft = {
 			...draft,
+			providers: nextProviders,
 			cometmind: {
 				...draft.cometmind,
 				memory: {
@@ -819,6 +835,7 @@
 						<SettingsMemoryPanel
 							bind:this={memoryPanel}
 							providers={draft.providers}
+							savedEmbedding={draft.cometmind.memory.embedding}
 							onEmbeddingSaved={persistMemoryEmbedding}
 						/>
 					{/key}
