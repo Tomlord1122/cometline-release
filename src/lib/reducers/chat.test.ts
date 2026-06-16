@@ -23,6 +23,19 @@ describe('reduceChatState', () => {
 		expect(state.assistant?.text).toBe('Hello world');
 	});
 
+	it('reuses unchanged item references on streaming deltas', () => {
+		const user = {
+			id: 'user-1',
+			type: 'user' as const,
+			text: 'question'
+		};
+		let state = initChatState();
+		state = reduceChatState(state, { type: 'text_delta', delta: 'Hi' });
+		state = { ...state, items: [user, ...state.items] };
+		state = reduceChatState(state, { type: 'text_delta', delta: ' there' });
+		expect(state.items[0]).toBe(user);
+	});
+
 	it('attaches reasoning to the assistant bubble', () => {
 		let state = initChatState();
 		state = reduceChatState(state, { type: 'reasoning_start' });

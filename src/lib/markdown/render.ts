@@ -141,6 +141,21 @@ const urlEmbedExtension: TokenizerAndRendererExtension = {
 /** Per-render cache of pre-highlighted code HTML, keyed by code token text. */
 type CodeHtmlCache = Map<string, string>;
 
+const CODE_CACHE_MAX = 128;
+let activeRenderCodeKeys: Set<string> | null = null;
+
+function pruneCodeCache() {
+	if (!activeRenderCodeKeys) return;
+	for (const key of codeCache.keys()) {
+		if (!activeRenderCodeKeys.has(key)) codeCache.delete(key);
+	}
+	while (codeCache.size > CODE_CACHE_MAX) {
+		const first = codeCache.keys().next().value;
+		if (first === undefined) break;
+		codeCache.delete(first);
+	}
+}
+
 /**
  * Builds a Marked instance with GFM, raw HTML escaped, and Shiki code blocks.
  *
@@ -161,6 +176,7 @@ function createMarkedInstance(codeCache: CodeHtmlCache): Marked {
 			if (token.type !== 'code') return;
 			const code = token as Tokens.Code;
 			const key = `${code.lang ?? ''}\u0000${code.text}`;
+			activeRenderCodeKeys?.add(key);
 			if (!codeCache.has(key)) {
 				codeCache.set(key, await highlightCodeBlock(code.text, code.lang));
 			}
@@ -288,12 +304,15 @@ const SANITIZE_CONFIG = {
 export async function renderMarkdown(source: string): Promise<string> {
 	if (!source) return '';
 	ensureDomPurifyHooks();
-	// Keep the content-keyed code cache bounded; each render only needs the code
-	// blocks present in the current source.
-	codeCache.clear();
-	const healed = remend(source);
-	const rawHtml = await markedInstance.parse(healed);
-	return DOMPurify.sanitize(rawHtml, SANITIZE_CONFIG);
+	activeRenderCodeKeys = new Set();
+	try {
+		const healed = remend(source);
+		const rawHtml = await markedInstance.parse(healed);
+		pruneCodeCache();
+		return DOMPurify.sanitize(rawHtml, SANITIZE_CONFIG);
+	} finally {
+		activeRenderCodeKeys = null;
+	}
 }
 
 /** Global URL matcher used to linkify plain user text. */

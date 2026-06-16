@@ -7,37 +7,56 @@
 	import ChatThread from '$lib/components/ChatThread.svelte';
 	import FirstTurnFlight from '$lib/components/FirstTurnFlight.svelte';
 	import UserBubbleFlight from '$lib/components/UserBubbleFlight.svelte';
+	import {
+		createConversationController,
+		refreshConversationSession
+	} from '$lib/conversation/conversation-controller';
+	import type { QueuedMessage } from '$lib/actions/chat-turn-queue';
 	import { sessionStore } from '$lib/stores/session.svelte';
-	import { getSession, updateSession } from '$lib/client/cometmind';
+	import { updateSession } from '$lib/client/cometmind';
 	import { chatStore } from '$lib/stores/chat.svelte';
 	import { connectionState } from '$lib/stores/runtime.svelte';
 	import { modelStore } from '$lib/stores/model.svelte';
 	import { shellStore } from '$lib/stores/shell.svelte';
 	import { settingsStore } from '$lib/stores/settings.svelte';
-	import { startChat } from '$lib/actions/start-chat';
-	import { createChatTurnQueue, type QueuedMessage } from '$lib/actions/chat-turn-queue';
 	import { matchesShortcut } from '$lib/keyboard-shortcuts';
 	import type { ImageAttachment, ChatItem } from '$lib/types';
 	import type { ModelOption } from '$lib/stores/model.svelte';
 
 	const THREAD_IN = { duration: 140 };
 
-	// This component is keyed on sessionId by the route, so it remounts per
-	// session and sessionId is constant for the instance's lifetime. That lets
-	// per-session work live in onMount instead of sessionId-watching effects.
 	let { sessionId, bootMessage = '' }: { sessionId: string; bootMessage?: string } = $props();
 
-	$effect.pre(() => {
-		chatStore.bindSession(sessionId);
-		// Keep composer docked while the next transcript loads so it never flashes
-		// to hero layout during session switches (including crossfade overlap).
-		if (shellStore.composerPhase === 'docked' || chatStore.isLoading) {
-			shellStore.dockComposer();
+	const conversation = createConversationController({
+		getSessionId: () => sessionId,
+		getHasVisibleConversation: () => hasVisibleConversation,
+		send: (payload, opts) => chatStore.send(sessionId, payload, opts),
+		refreshSession: () => refreshConversationSession(sessionId),
+		onQueueChange: syncQueueState,
+		onAwaitingFirstAssistantChange: (value) => {
+			awaitingFirstAssistant = value;
+		},
+		flight: {
+			onUserMessageFlight: (payloadOrText, { firstTurn }) => {
+				const payload =
+					typeof payloadOrText === 'string' ? { text: payloadOrText } : payloadOrText;
+				if (firstTurn) {
+					awaitingFirstAssistant = true;
+					firstTurnFlight?.run(payload.text, payload.images);
+					return;
+				}
+				userBubbleFlight?.run(payload.text, payload.images, {
+					origin: 'above-composer'
+				});
+			}
 		}
-		if (sessionStore.hasPendingMessage(sessionId)) return;
-		if (chatStore.isStreaming && chatStore.sessionID === sessionId) return;
-		if (chatStore.sessionID === sessionId && chatStore.items.length > 0) return;
-		void chatStore.loadTranscript(sessionId);
+	});
+
+	$effect.pre(() => {
+		conversation.bindSession();
+		if (!conversation.shouldSkipTranscriptLoad()) {
+			void chatStore.loadTranscript(sessionId);
+		}
 	});
 
 	let chatHome = $state<HTMLDivElement | null>(null);
@@ -49,8 +68,6 @@
 	let queuedCount = $state(0);
 	let queuedMessages = $state<QueuedMessage[]>([]);
 
-	// Snapshot the last synced transcript so a fading-out instance does not
-	// collapse to hero layout when bindSession() switches the global store.
 	let snapshotItems = $state.raw<ChatItem[]>([]);
 	let snapshotLoading = $state(false);
 
@@ -83,41 +100,10 @@
 	let turnProcessing = $state(false);
 
 	function syncQueueState() {
-		queuedCount = turnQueue?.pendingCount ?? 0;
-		queuedMessages = turnQueue ? [...turnQueue.pendingMessages] : [];
-		turnProcessing = turnQueue?.processing ?? false;
+		queuedCount = conversation.pendingCount;
+		queuedMessages = [...conversation.pendingMessages];
+		turnProcessing = conversation.processing;
 	}
-
-	const turnQueue = createChatTurnQueue(async (text, images) => {
-		await startChat(
-			{
-				get sessionId() {
-					return sessionId;
-				},
-				get hasVisibleConversation() {
-					return hasVisibleConversation;
-				},
-				send: (payload, opts) => chatStore.send(sessionId, payload, opts),
-				onUserMessageFlight: (payloadOrText, { firstTurn }) => {
-					const payload =
-						typeof payloadOrText === 'string' ? { text: payloadOrText } : payloadOrText;
-					if (firstTurn) {
-						awaitingFirstAssistant = true;
-						firstTurnFlight?.run(payload.text, payload.images);
-						return;
-					}
-					userBubbleFlight?.run(payload.text, payload.images, {
-						origin: 'above-composer'
-					});
-				},
-				onFirstTurnComplete: () => {
-					awaitingFirstAssistant = false;
-				},
-				refreshSession
-			},
-			{ text, images }
-		);
-	}, syncQueueState);
 
 	function syncSessionFromStore() {
 		const session = sessionStore.sessions.find((item) => item.id === sessionId);
@@ -135,27 +121,15 @@
 
 	onMount(() => {
 		syncSessionFromStore();
-
-		// A pending first message (queued by the composer before navigation) takes
-		// priority and is submitted as the first turn; otherwise load the
-		// transcript for an existing session.
-		const pending = sessionStore.takePendingMessage(sessionId);
-		if (pending) {
-			submit(pending.text, pending.images);
-		} else {
-			void chatStore.loadTranscript(sessionId);
-		}
+		conversation.onMount();
 	});
 
 	$effect(() => {
-		if (chatStore.sessionID !== sessionId) return;
-		if (firstTurnActive) return;
-
-		if (hasVisibleConversation) {
-			shellStore.dockComposer();
-		} else if (!chatStore.isLoading) {
-			shellStore.centerComposer();
-		}
+		conversation.syncComposerPhase({
+			hasVisibleConversation,
+			firstTurnActive,
+			awaitingFirstAssistant
+		});
 	});
 
 	$effect(() => {
@@ -167,15 +141,15 @@
 
 	function submit(text: string, images?: ImageAttachment[]) {
 		if (connectionState.status !== 'ready') return;
-		void turnQueue.enqueue(text, images);
+		void conversation.enqueue(text, images);
 	}
 
 	function stop() {
-		void chatStore.cancel(sessionId);
+		conversation.cancel();
 	}
 
 	function removeQueuedMessage(id: string) {
-		turnQueue.remove(id);
+		conversation.removeQueued(id);
 	}
 
 	function onWindowKeydown(e: KeyboardEvent) {
@@ -187,14 +161,6 @@
 		}
 		e.preventDefault();
 		stop();
-	}
-
-	async function refreshSession() {
-		try {
-			sessionStore.updateSession(await getSession(sessionId));
-		} catch {
-			// The transcript is the source of truth; title refresh is best effort.
-		}
 	}
 
 	async function onModelChange(option: ModelOption) {

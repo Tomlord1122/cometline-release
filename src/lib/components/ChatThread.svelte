@@ -89,6 +89,13 @@
 		memories: InjectedMemory[];
 	};
 
+	let thinkingScanStart = $derived.by(() => {
+		for (let i = threadItems.length - 1; i >= 0; i--) {
+			if (threadItems[i].type === 'user') return i;
+		}
+		return 0;
+	});
+
 	let thinkingForAssistant = $derived.by(() => {
 		const map = new Map<string, ThinkingBlock>();
 		const toolIdsInBuffer = new Set<string>();
@@ -96,7 +103,8 @@
 		let currentAssistantId: string | null = null;
 		let pendingMemories: InjectedMemory[] = [];
 
-		for (const item of threadItems) {
+		for (let index = thinkingScanStart; index < threadItems.length; index++) {
+			const item = threadItems[index];
 			if (item.type === 'user' || item.type === 'status' || item.type === 'error') {
 				currentAssistantId = null;
 				pendingMemories = [];
@@ -324,22 +332,22 @@
 		wasStreaming = streaming;
 	});
 
-	let scrollKey = $derived(
-		`${chatStore.isStreaming}:${threadItems
-			.map((item) => {
-				if (item.type === 'tool') {
-					return `${item.id}:${item.output?.length ?? 0}:${item.pending ?? false}`;
-				}
-				if (item.type === 'assistant') {
-					return `${item.id}:${item.text.length}:${item.reasoning?.text.length ?? 0}:${item.reasoning?.pending ?? false}:${item.pending ?? false}`;
-				}
-				if (item.type === 'user') {
-					return `${item.id}:${item.text.length}:${item.images?.length ?? 0}:${item.reveal === false}`;
-				}
-				return `${item.id}:${'text' in item ? item.text.length : 0}:${item.type}`;
-			})
-			.join('|')}`
-	);
+	let scrollKey = $derived.by(() => {
+		if (!chatStore.isStreaming) {
+			const last = threadItems.at(-1);
+			return `idle:${threadItems.length}:${last?.id ?? ''}`;
+		}
+		for (let i = threadItems.length - 1; i >= 0; i--) {
+			const item = threadItems[i];
+			if (item.type === 'assistant') {
+				return `stream:assistant:${item.id}:${item.text.length}:${item.reasoning?.text.length ?? 0}:${item.reasoning?.pending ?? false}:${item.pending ?? false}`;
+			}
+			if (item.type === 'tool') {
+				return `stream:tool:${item.id}:${item.output?.length ?? 0}:${item.pending ?? false}`;
+			}
+		}
+		return `stream:empty:${threadItems.length}`;
+	});
 	let renderDebugSnapshot = $derived.by(() => ({
 		awaitingFirstAssistant,
 		firstTurnFlightDone,

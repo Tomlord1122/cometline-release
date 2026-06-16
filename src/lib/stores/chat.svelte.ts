@@ -249,9 +249,9 @@ function createChatStore() {
 		);
 	}
 
-	/** Shallow-copy the items array so Svelte picks up streaming updates. */
-	function notifyItems() {
-		items = items.slice();
+	/** Publish items array reference for Svelte reactivity (caller may already have a new array). */
+	function notifyItems(alreadyNew = false) {
+		if (!alreadyNew) items = items.slice();
 	}
 
 	function applyEvent(
@@ -276,7 +276,57 @@ function createChatStore() {
 		ctx.assistant.current = reduced.assistant;
 		ctx.reasoning.current = reduced.reasoning;
 		nextId = reduced.nextId;
-		notifyItems();
+		notifyItems(true);
+	}
+
+	const BATCHABLE_EVENTS = new Set(['text_delta', 'reasoning_delta', 'reasoning_start']);
+	let pendingBatchEvents: StreamEvent[] = [];
+	let batchFrame = 0;
+
+	function flushBatch(
+		ctx: {
+			assistant: { current: Extract<ChatItem, { type: 'assistant' }> | null };
+			reasoning: { current: { text: string; pending: boolean } | null };
+		}
+	) {
+		if (pendingBatchEvents.length === 0) return;
+		const batch = pendingBatchEvents;
+		pendingBatchEvents = [];
+		for (const event of batch) {
+			applyEvent(event, ctx);
+		}
+	}
+
+	function scheduleBatch(
+		event: StreamEvent,
+		ctx: {
+			assistant: { current: Extract<ChatItem, { type: 'assistant' }> | null };
+			reasoning: { current: { text: string; pending: boolean } | null };
+		}
+	) {
+		pendingBatchEvents.push(event);
+		if (batchFrame) return;
+		batchFrame = requestAnimationFrame(() => {
+			batchFrame = 0;
+			flushBatch(ctx);
+		});
+	}
+
+	function applyStreamEvent(
+		event: StreamEvent,
+		ctx: {
+			assistant: { current: Extract<ChatItem, { type: 'assistant' }> | null };
+			reasoning: { current: { text: string; pending: boolean } | null };
+		}
+	) {
+		if (BATCHABLE_EVENTS.has(event.type)) {
+			scheduleBatch(event, ctx);
+			return;
+		}
+		if (pendingBatchEvents.length > 0) {
+			flushBatch(ctx);
+		}
+		applyEvent(event, ctx);
 	}
 
 	async function send(
@@ -328,7 +378,7 @@ function createChatStore() {
 				if (run !== streamRun) return;
 				eventIndex += 1;
 				const before = summarizeChatItems(items);
-				applyEvent(event, ctx);
+				applyStreamEvent(event, ctx);
 				chatDebug('store:stream-event', {
 					sessionID: nextSessionID,
 					run,
@@ -347,7 +397,7 @@ function createChatStore() {
 				chatDebug('store:send-aborted', { sessionID: nextSessionID, run });
 				return;
 			}
-			applyEvent(
+			applyStreamEvent(
 				{
 					type: 'error',
 					message: err instanceof Error ? err.message : 'Failed to send message'
@@ -356,6 +406,9 @@ function createChatStore() {
 			);
 		} finally {
 			if (run === streamRun) {
+				if (pendingBatchEvents.length > 0) {
+					flushBatch(ctx);
+				}
 				const beforeDone = summarizeChatItems(items);
 				applyEvent({ type: 'done' }, ctx);
 				isStreaming = false;
@@ -414,7 +467,7 @@ function createChatStore() {
 					assistant: { current: null as Extract<ChatItem, { type: 'assistant' }> | null },
 					reasoning: { current: null as { text: string; pending: boolean } | null }
 				};
-				applyEvent(event, ctx);
+				applyStreamEvent(event, ctx);
 				if (event.type === 'done') break;
 			}
 		} catch (err) {

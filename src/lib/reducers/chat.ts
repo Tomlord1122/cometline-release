@@ -491,9 +491,41 @@ function cloneChatState(state: ChatState): ChatState {
 	};
 }
 
+function isDeltaOnlyEvent(event: StreamEvent): boolean {
+	return (
+		event.type === 'text_delta' ||
+		event.type === 'reasoning_delta' ||
+		event.type === 'reasoning_start' ||
+		event.type === 'step_finish'
+	);
+}
+
+/** Shallow-copy items array only; mutates assistant/reasoning in place for streaming deltas. */
+function reduceChatStateDelta(state: ChatState, event: StreamEvent): ChatState {
+	const items = state.items.slice();
+	const draft: ChatState = {
+		items,
+		error: state.error,
+		assistant: state.assistant,
+		reasoning: state.reasoning ? { ...state.reasoning } : null,
+		nextId: state.nextId
+	};
+	const ctx = {
+		assistant: { current: draft.assistant },
+		reasoning: { current: draft.reasoning }
+	};
+	applyEvent(draft, event, ctx);
+	draft.assistant = ctx.assistant.current;
+	draft.reasoning = ctx.reasoning.current;
+	return draft;
+}
+
 /** Reduce a chat state by one stream event. The input state is never mutated;
  *  a new ChatState is returned. */
 export function reduceChatState(state: ChatState, event: StreamEvent): ChatState {
+	if (isDeltaOnlyEvent(event)) {
+		return reduceChatStateDelta(state, event);
+	}
 	const draft = cloneChatState(state);
 	const ctx = {
 		assistant: { current: draft.assistant },
