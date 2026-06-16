@@ -24,32 +24,54 @@
 		onfiles?: (files: File[]) => void;
 	} = $props();
 
-	type TrailPoint = { x: number; y: number; t: number };
-
 	let wrap = $state<HTMLDivElement | null>(null);
 	let editor = $state<HTMLDivElement | null>(null);
 	let customCaret = $state<HTMLSpanElement | null>(null);
-	let trailPath = $state<SVGPathElement | null>(null);
+	let trailPoly = $state<SVGPolygonElement | null>(null);
 	let focused = $state(false);
 	// Guard so our own DOM writes don't recursively re-trigger input handling.
 	let syncing = false;
 	// IME composition guard — Enter during candidate selection must not trigger send.
 	let composing = false;
 	let raf = 0;
+	// Guard so the temporary marker we insert to measure an empty line doesn't
+	// re-enter measurement via selectionchange.
+	let measuring = false;
 	let caretReady = $state(false);
-	let currentX = 0;
-	let currentY = 0;
-	let targetX = 0;
+	// Caret geometry in wrap-local coordinates.
+	let caretW = 2;
+	let caretH = 22.5;
+	// Trail smear model (mirrors cursor_tail.glsl): a quad is drawn between the
+	// previous caret position (tail) and the current target (head); both ends
+	// ease independently with easeOutCirc so the trail extends then collapses.
+	let originX = 0; // tail anchor (where the smear starts from)
+	let originY = 0;
+	let targetX = 0; // head target (where the caret is heading)
 	let targetY = 0;
-	let lastMeasuredX = 0;
-	let lastMeasuredY = 0;
-	let lastMeasuredAt = 0;
-	let trailPoints: TrailPoint[] = [];
+	let animStart = 0; // performance.now() when the current move began
+	let animating = false;
 
 	let caretTrailEnabled = $derived(caretTrail.enabled);
-	let caretStyle = $derived(
-		`--rce-caret-color: ${caretColor}; --rce-trail-opacity: ${0.28 + caretTrail.intensity * 0.42}`
-	);
+	let baseTrailOpacity = $derived(0.32 + clampUnit(caretTrail.intensity) * 0.5);
+	let caretStyle = $derived(`--rce-caret-color: ${caretColor}`);
+
+	// easeOutCirc — matches the shader's chosen easing curve.
+	function easeOutCirc(x: number): number {
+		const c = clampUnit(x);
+		return Math.sqrt(1 - (c - 1) * (c - 1));
+	}
+
+	// Move animation duration in ms, shorter when "speed" is high.
+	function moveDuration(): number {
+		return 90 + (1 - clampUnit(caretTrail.speed)) * 220;
+	}
+
+	// Distance above which a jump (newline, click far away) is treated as a
+	// teleport: the caret snaps without drawing a comet trail. Mirrors the
+	// shader's THRESHOLD_MAX_DISTANCE gate, scaled to caret height.
+	function maxTrailDistance(): number {
+		return caretH * 2.2;
+	}
 
 	/**
 	 * Serializes the contenteditable DOM back to plain text. URL chips serialize
@@ -95,93 +117,197 @@
 		customCaret.style.transform = `translate3d(${x}px, ${y}px, 0)`;
 	}
 
-	function setTrailVisual(now: number) {
-		if (!trailPath) return;
-		const lifetime = 120 + clampUnit(caretTrail.intensity) * 420;
-		trailPoints = trailPoints.filter((point) => now - point.t <= lifetime);
-		if (trailPoints.length < 2) {
-			trailPath.setAttribute('d', '');
-			return;
+	function clearTrail() {
+		trailPoly?.setAttribute('points', '');
+	}
+
+	/**
+	 * Measures the caret position in wrap-local coords. For a collapsed caret
+	 * this is the caret itself; for a selection it's the *focus* end (the moving
+	 * end driven by Shift+Arrow or mouse drag), so the comet rides the part of
+	 * the selection the user is actively extending. The native blue highlight
+	 * stays underneath. On an empty line getClientRects() returns nothing, so we
+	 * temporarily insert a zero-width marker, measure it, then remove it.
+	 * Returns null if the selection isn't inside the editor.
+	 */
+	function readCaretRect(): { x: number; y: number; h: number } | null {
+		if (!wrap || !editor) return null;
+		const selection = window.getSelection();
+		if (!selection || selection.rangeCount === 0 || selection.focusNode == null) return null;
+		const focusNode = selection.focusNode;
+		if (focusNode !== editor && !editor.contains(focusNode)) return null;
+
+		// Build a collapsed range at the selection's focus (moving) end.
+		const range = document.createRange();
+		try {
+			range.setStart(focusNode, selection.focusOffset);
+		} catch {
+			return null;
 		}
-		trailPath.setAttribute(
-			'd',
-			trailPoints
-				.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
-				.join(' ')
-		);
+		range.collapse(true);
+
+		const wrapRect = wrap.getBoundingClientRect();
+		const lineHeight = Number.parseFloat(getComputedStyle(editor).lineHeight) || 22.5;
+
+		let rect: DOMRect | undefined = range.getClientRects()[0];
+		if (!rect || (rect.width === 0 && rect.height === 0)) {
+			// Empty line / boundary: insert a zero-width marker to get a real rect.
+			// We snapshot the live selection, probe, then restore it exactly so a
+			// drag selection isn't collapsed by our measurement.
+			measuring = true;
+			const snap = {
+				anchorNode: selection.anchorNode,
+				anchorOffset: selection.anchorOffset,
+				focusNode: selection.focusNode,
+				focusOffset: selection.focusOffset
+			};
+			const marker = document.createElement('span');
+			marker.textContent = '\u200b';
+			const probe = range.cloneRange();
+			probe.insertNode(marker);
+			rect = marker.getBoundingClientRect();
+			marker.remove();
+			// Restore the original selection (anchor → focus) verbatim.
+			if (snap.anchorNode && snap.focusNode) {
+				try {
+					selection.setBaseAndExtent(
+						snap.anchorNode,
+						snap.anchorOffset,
+						snap.focusNode,
+						snap.focusOffset
+					);
+				} catch {
+					/* node may have been normalized away; ignore */
+				}
+			}
+			measuring = false;
+		}
+		if (!rect) return null;
+		return {
+			x: rect.left - wrapRect.left,
+			y: rect.top - wrapRect.top,
+			h: rect.height || lineHeight
+		};
 	}
 
 	function measureCaret() {
 		if (!wrap || !editor || !caretTrailEnabled || !focused) return;
-		const selection = window.getSelection();
-		if (!selection || selection.rangeCount === 0 || !selection.isCollapsed) {
-			resetCaretTrail();
-			return;
-		}
-		const range = selection.getRangeAt(0);
-		const container = range.commonAncestorContainer;
-		if (container !== editor && !editor.contains(container)) {
-			resetCaretTrail();
+		const measured = readCaretRect();
+		if (!measured) {
+			// Selection focus is outside the editor or unmeasurable: keep the
+			// caret where it is but stop drawing a trail.
+			clearTrail();
 			return;
 		}
 
-		const rect = range.getClientRects()[0] ?? range.getBoundingClientRect();
-		const wrapRect = wrap.getBoundingClientRect();
-		const editorRect = editor.getBoundingClientRect();
-		const lineHeight = Number.parseFloat(getComputedStyle(editor).lineHeight) || 22.5;
-		const measuredX = rect && rect.left ? rect.left - wrapRect.left : editorRect.left - wrapRect.left;
-		const measuredY = rect && rect.top ? rect.top - wrapRect.top : editorRect.top - wrapRect.top;
-		const now = performance.now();
-		const dt = lastMeasuredAt > 0 ? Math.max(8, now - lastMeasuredAt) : 16;
-		const vx = (measuredX - lastMeasuredX) / dt;
-		const vy = (measuredY - lastMeasuredY) / dt;
-		const predictionMs = 14 + clampUnit(caretTrail.speed) * 30;
-		targetX = measuredX + vx * predictionMs;
-		targetY = measuredY + vy * predictionMs;
-		lastMeasuredX = measuredX;
-		lastMeasuredY = measuredY;
-		lastMeasuredAt = now;
-		if (customCaret) customCaret.style.height = `${lineHeight}px`;
-		startCaretAnimation();
-	}
+		caretH = measured.h;
+		if (customCaret) customCaret.style.height = `${caretH}px`;
 
-	function animateCaret(now: number) {
-		const follow = 0.2 + clampUnit(caretTrail.speed) * 0.52;
-		currentX += (targetX - currentX) * follow;
-		currentY += (targetY - currentY) * follow;
-		setCaretVisual(currentX, currentY);
-		trailPoints.push({ x: currentX + 1, y: currentY + 11, t: now });
-		if (trailPoints.length > 42) trailPoints = trailPoints.slice(-42);
-		setTrailVisual(now);
-
-		if (Math.abs(targetX - currentX) > 0.35 || Math.abs(targetY - currentY) > 0.35) {
-			raf = requestAnimationFrame(animateCaret);
-		} else {
-			raf = 0;
-		}
-	}
-
-	function startCaretAnimation() {
-		if (!caretTrailEnabled || !focused) return;
 		if (!caretReady) {
-			currentX = targetX;
-			currentY = targetY;
+			// First placement — snap, no trail.
+			targetX = originX = measured.x;
+			targetY = originY = measured.y;
 			caretReady = true;
-			setCaretVisual(currentX, currentY);
+			setCaretVisual(targetX, targetY);
+			clearTrail();
+			return;
 		}
+
+		const dx = measured.x - targetX;
+		const dy = measured.y - targetY;
+		const dist = Math.hypot(dx, dy);
+		if (dist < 0.5) return; // no meaningful move
+
+		if (dist > maxTrailDistance()) {
+			// Teleport (newline wrap, click far, programmatic jump): snap without
+			// streaking a long diagonal trail across the editor.
+			targetX = originX = measured.x;
+			targetY = originY = measured.y;
+			setCaretVisual(targetX, targetY);
+			clearTrail();
+			return;
+		}
+
+		// Begin a smear from the current head toward the new target.
+		originX = targetX;
+		originY = targetY;
+		targetX = measured.x;
+		targetY = measured.y;
+		animStart = performance.now();
+		animating = true;
 		if (!raf) raf = requestAnimationFrame(animateCaret);
+	}
+
+	function setTrailQuad(headX: number, headY: number, tailX: number, tailY: number, alpha: number) {
+		if (!trailPoly) return;
+		// Build a quad spanning the bar caret from the tail position to the head
+		// position. The bar is `caretW` wide and `caretH` tall.
+		const x0 = headX;
+		const x1 = headX + caretW;
+		const tx0 = tailX;
+		const tx1 = tailX + caretW;
+		const pts = [
+			`${x0.toFixed(1)},${headY.toFixed(1)}`,
+			`${x1.toFixed(1)},${headY.toFixed(1)}`,
+			`${(tx1).toFixed(1)},${(tailY + caretH).toFixed(1)}`,
+			`${(tx0).toFixed(1)},${(tailY + caretH).toFixed(1)}`
+		];
+		trailPoly.setAttribute('points', pts.join(' '));
+		trailPoly.style.opacity = String(clampUnit(alpha) * baseTrailOpacity);
+	}
+
+	function animateCaret() {
+		if (!animating) {
+			raf = 0;
+			return;
+		}
+		const now = performance.now();
+		const duration = moveDuration();
+		const progress = clampUnit((now - animStart) / duration);
+
+		// Head leads, tail follows with a delay so the smear stretches then
+		// collapses — same head/tail easing split as cursor_tail.glsl.
+		const headEased = easeOutCirc(progress);
+		const tailDelay = 0.18 + clampUnit(caretTrail.intensity) * 0.32;
+		const tailEased = easeOutCirc(clampUnit((progress - tailDelay) / (1 - tailDelay)));
+
+		const headX = originX + (targetX - originX) * headEased;
+		const headY = originY + (targetY - originY) * headEased;
+		const tailX = originX + (targetX - originX) * tailEased;
+		const tailY = originY + (targetY - originY) * tailEased;
+
+		setCaretVisual(headX, headY);
+
+		const span = Math.hypot(headX - tailX, headY - tailY);
+		if (span > 0.6) {
+			// Fade the trail out as the move completes.
+			setTrailQuad(headX, headY, tailX, tailY, 1 - progress * 0.35);
+		} else {
+			clearTrail();
+		}
+
+		if (progress >= 1) {
+			animating = false;
+			originX = targetX;
+			originY = targetY;
+			setCaretVisual(targetX, targetY);
+			clearTrail();
+			raf = 0;
+			return;
+		}
+		raf = requestAnimationFrame(animateCaret);
 	}
 
 	function resetCaretTrail() {
 		if (raf) cancelAnimationFrame(raf);
 		raf = 0;
 		caretReady = false;
-		trailPoints = [];
-		trailPath?.setAttribute('d', '');
+		animating = false;
+		clearTrail();
 	}
 
 	function scheduleCaretMeasure() {
-		if (!caretTrailEnabled) return;
+		if (!caretTrailEnabled || measuring) return;
 		requestAnimationFrame(measureCaret);
 	}
 
@@ -551,7 +677,7 @@
 	{#if caretTrailEnabled}
 		<div class="rce-caret-layer" class:visible={focused && caretReady} aria-hidden="true">
 			<svg class="rce-trail" focusable="false">
-				<path bind:this={trailPath}></path>
+				<polygon bind:this={trailPoly}></polygon>
 			</svg>
 			<span bind:this={customCaret} class="rce-caret"></span>
 		</div>
@@ -632,14 +758,11 @@
 		overflow: visible;
 	}
 
-	.rce-trail path {
-		fill: none;
-		stroke: var(--rce-caret-color);
-		stroke-width: 2.5;
-		stroke-linecap: round;
-		stroke-linejoin: round;
-		opacity: var(--rce-trail-opacity);
-		filter: drop-shadow(0 0 7px var(--rce-caret-color));
+	.rce-trail polygon {
+		fill: var(--rce-caret-color);
+		stroke: none;
+		opacity: 0;
+		filter: drop-shadow(0 0 6px var(--rce-caret-color));
 	}
 
 	.rce-caret {

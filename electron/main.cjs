@@ -33,6 +33,11 @@ function defaultAppearance() {
 		heroComposer: {
 			glowColor: '#72c0ff',
 			ringColor: '#9ed8ff'
+		},
+		caretTrail: {
+			enabled: true,
+			intensity: 0.72,
+			speed: 0.68
 		}
 	};
 }
@@ -533,6 +538,11 @@ function normalizeHexColor(value, fallback) {
 	return trimmed.toLowerCase();
 }
 
+function normalizeUnitValue(value, fallback) {
+	if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+	return Math.min(1, Math.max(0, value));
+}
+
 function normalizeAppearance(appearance) {
 	const defaults = defaultAppearance();
 	return {
@@ -545,6 +555,17 @@ function normalizeAppearance(appearance) {
 				appearance?.heroComposer?.ringColor,
 				defaults.heroComposer.ringColor
 			)
+		},
+		caretTrail: {
+			enabled:
+				typeof appearance?.caretTrail?.enabled === 'boolean'
+					? appearance.caretTrail.enabled
+					: defaults.caretTrail.enabled,
+			intensity: normalizeUnitValue(
+				appearance?.caretTrail?.intensity,
+				defaults.caretTrail.intensity
+			),
+			speed: normalizeUnitValue(appearance?.caretTrail?.speed, defaults.caretTrail.speed)
 		}
 	};
 }
