@@ -1,6 +1,6 @@
 # Postmortems
 
-Short write-ups of non-obvious bugs in the Cometline UI layer: symptoms, root cause, fix, and how to avoid regressions. Read these before changing `chat.svelte.ts`, `reducers/chat.ts`, `ChatView.svelte`, `ChatThread.svelte`, `chat-turn-queue.ts`, `Composer.svelte`, `HeroComposerFrame.svelte`, or `hero-composer-appearance.ts`.
+Short write-ups of non-obvious bugs in the Cometline UI layer: symptoms, root cause, fix, and how to avoid regressions. Read these before changing `chat.svelte.ts`, `reducers/chat.ts`, `ChatView.svelte`, `ChatThread.svelte`, `chat-turn-queue.ts`, `Composer.svelte`, `HeroComposerFrame.svelte`, `hero-composer-appearance.ts`, `settings.svelte.ts`, or Electron IPC in `preload.cjs` / `main.cjs`.
 
 | Date       | Topic                                                   | File                                                                                                 |
 | ---------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
@@ -15,6 +15,7 @@ Short write-ups of non-obvious bugs in the Cometline UI layer: symptoms, root ca
 | 2026-06-14 | Composer stuck in hero layout after session switch      | [session-switch-composer-stuck-hero.md](./session-switch-composer-stuck-hero.md)                     |
 | 2026-06-14 | Duplicate user message on rapid submit                  | [duplicate-user-message-on-rapid-submit.md](./duplicate-user-message-on-rapid-submit.md)             |
 | 2026-06-15 | First-turn transcript invisible after user bubble flight | [first-turn-transcript-invisible.md](./first-turn-transcript-invisible.md)                           |
+| 2026-06-16 | Fetch models IPC fails with DataCloneError                | [fetch-models-data-clone-error.md](./fetch-models-data-clone-error.md)                               |
 
 ## When to add a postmortem
 

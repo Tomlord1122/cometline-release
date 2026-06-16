@@ -5,11 +5,13 @@
 	import type { QueuedMessage } from '$lib/actions/chat-turn-queue';
 	import { modelStore, type ModelOption } from '$lib/stores/model.svelte';
 	import { settingsStore } from '$lib/stores/settings.svelte';
+	import { shellStore } from '$lib/stores/shell.svelte';
 	import { matchesShortcut } from '$lib/keyboard-shortcuts';
 	import RichComposerInput from '$lib/components/RichComposerInput.svelte';
+	import { listSkills } from '$lib/client/cometmind';
 	import { formatDroppedFiles, readDroppedTextFiles } from '$lib/files/dropped-files';
 	import { imageDataURL, isSupportedImageFile, readImageAttachments } from '$lib/files/images';
-import type { ImageAttachment } from '$lib/types';
+	import type { ImageAttachment, SkillResource } from '$lib/types';
 
 	let {
 		onSend,
@@ -46,6 +48,12 @@ import type { ImageAttachment } from '$lib/types';
 	let modelSearch = $state('');
 	let queuePreviewOpen = $state(false);
 	let queuePicker = $state<HTMLDivElement | null>(null);
+	let skillMenu = $state<HTMLDivElement | null>(null);
+	let skills = $state<SkillResource[]>([]);
+	let skillsLoaded = $state(false);
+	let skillsLoading = $state(false);
+	let skillHighlight = $state(0);
+	let dismissedSkillCommand = $state('');
 	let dragDepth = $state(0);
 	let dropMessage = $state('');
 	let dropProcessing = $state(false);
@@ -53,6 +61,21 @@ import type { ImageAttachment } from '$lib/types';
 	let sendLocked = $derived(turnProcessing && !streaming);
 	let dragActive = $derived(dragDepth > 0 || dropProcessing);
 	let canSubmit = $derived(Boolean(value.trim() || images.length > 0));
+	let skillCommandMatch = $derived(/^\s*\/([\w-]*)$/.exec(value));
+	let skillCommandQuery = $derived(skillCommandMatch?.[1]?.toLowerCase() ?? '');
+	let skillMenuOpen = $derived(
+		Boolean(skillCommandMatch && skillCommandMatch[0] !== dismissedSkillCommand)
+	);
+	let filteredSkills = $derived.by(() => {
+		if (!skillCommandMatch) return [];
+		if (!skillCommandQuery) return skills;
+		return skills.filter(
+			(skill) =>
+				skill.name.toLowerCase().includes(skillCommandQuery) ||
+				skill.description.toLowerCase().includes(skillCommandQuery)
+		);
+	});
+	let skillNames = $derived(skills.map((skill) => skill.name));
 	let filteredModelOptions = $derived.by(() => {
 		const query = modelSearch.trim().toLowerCase();
 		if (!query) return modelStore.options;
@@ -96,6 +119,21 @@ import type { ImageAttachment } from '$lib/types';
 	});
 
 	$effect(() => {
+		if (!skillCommandMatch) {
+			dismissedSkillCommand = '';
+			return;
+		}
+		void ensureSkillsLoaded();
+	});
+
+	$effect(() => {
+		if (!skillMenuOpen) return;
+		if (skillHighlight >= filteredSkills.length) {
+			skillHighlight = Math.max(0, filteredSkills.length - 1);
+		}
+	});
+
+	$effect(() => {
 		if (!queuePreviewOpen) return;
 		function onPointerDown(e: PointerEvent) {
 			if (queuePicker?.contains(e.target as Node)) return;
@@ -110,7 +148,7 @@ import type { ImageAttachment } from '$lib/types';
 	});
 
 	function submit() {
-		const text = value.trim();
+		const text = expandSkillCommand(value.trim());
 		if (!canSubmit || disabled || sendLocked || !modelStore.selected) return;
 		onSend(text, images.length > 0 ? images : undefined);
 		input?.clear();
@@ -119,6 +157,7 @@ import type { ImageAttachment } from '$lib/types';
 	}
 
 	function onKeydown(e: KeyboardEvent) {
+		if (handleSkillMenuKeydown(e)) return;
 		if (matchesShortcut(e, settingsStore.settings.shortcuts.stopResponse) && streaming) {
 			// Only intercept when there's no text selection in the editor.
 			const sel = window.getSelection();
@@ -135,6 +174,91 @@ import type { ImageAttachment } from '$lib/types';
 			e.preventDefault();
 			submit();
 		}
+	}
+
+	async function ensureSkillsLoaded() {
+		if (skillsLoaded || skillsLoading) return;
+		skillsLoading = true;
+		try {
+			const result = await listSkills(shellStore.workspacePath);
+			skills = result.skills.filter((skill) => !skill.internal);
+			skillsLoaded = true;
+		} catch {
+			skills = [];
+			skillsLoaded = true;
+		} finally {
+			skillsLoading = false;
+		}
+	}
+
+	function handleSkillMenuKeydown(e: KeyboardEvent): boolean {
+		if (!skillMenuOpen) return false;
+		if (e.key === 'Escape') {
+			e.preventDefault();
+			dismissedSkillCommand = skillCommandMatch?.[0] ?? value;
+			return true;
+		}
+		if (e.key === 'ArrowDown') {
+			e.preventDefault();
+			if (filteredSkills.length > 0) {
+				skillHighlight = (skillHighlight + 1) % filteredSkills.length;
+				void scrollHighlightedSkillIntoView();
+			}
+			return true;
+		}
+		if (e.key === 'ArrowUp') {
+			e.preventDefault();
+			if (filteredSkills.length > 0) {
+				skillHighlight = (skillHighlight - 1 + filteredSkills.length) % filteredSkills.length;
+				void scrollHighlightedSkillIntoView();
+			}
+			return true;
+		}
+		if (e.key === 'Tab' || e.key === 'Enter') {
+			const skill = filteredSkills[skillHighlight];
+			if (!skill) {
+				if (e.key === 'Tab') {
+					e.preventDefault();
+					return true;
+				}
+				return false;
+			}
+			e.preventDefault();
+			selectSkillCommand(skill);
+			return true;
+		}
+		return false;
+	}
+
+	async function scrollHighlightedSkillIntoView() {
+		await tick();
+		const option = skillMenu?.querySelector(`[data-skill-index="${skillHighlight}"]`);
+		if (option instanceof HTMLElement) {
+			option.scrollIntoView({ block: 'nearest' });
+		}
+	}
+
+	function selectSkillCommand(skill: SkillResource) {
+		const next = `/${skill.name} `;
+		input?.setText(next);
+		value = next;
+		dismissedSkillCommand = next;
+		skillHighlight = 0;
+	}
+
+	function parseLeadingSkillCommand(text: string) {
+		const match = /^\s*\/([\w-]+)(?:\s+([\s\S]*))?$/.exec(text);
+		if (!match) return null;
+		const skillName = match[1];
+		if (!skills.some((skill) => skill.name === skillName)) return null;
+		return { skillName, rest: match[2]?.trimStart() ?? '' };
+	}
+
+	function expandSkillCommand(text: string) {
+		const command = parseLeadingSkillCommand(text);
+		if (!command) return text;
+		const rest = command.rest ? `\n\n${command.rest}` : '';
+		return `Use the \`${command.skillName}\` skill for this request. Load it with the \`load_skill\` tool before proceeding.${rest}`;
 	}
 
 	function selectModel(option: ModelOption) {
@@ -277,6 +401,41 @@ import type { ImageAttachment } from '$lib/types';
 		<div class="drop-message" role="status" transition:fade={{ duration: 120 }}>{dropMessage}</div>
 	{/if}
 
+	{#if skillMenuOpen}
+		<div
+			class="skill-command-menu"
+			role="listbox"
+			aria-label="Skill commands"
+			bind:this={skillMenu}
+			transition:fly={{ y: 6, duration: 120 }}
+		>
+			{#if skillsLoading && !skillsLoaded}
+				<p class="skill-command-empty">Loading skills...</p>
+			{:else if filteredSkills.length === 0}
+				<p class="skill-command-empty">No matching skills.</p>
+			{:else}
+				{#each filteredSkills as skill, index (skill.name)}
+					<button
+						type="button"
+						class="skill-command-option"
+						class:highlighted={index === skillHighlight}
+						data-skill-index={index}
+						role="option"
+						aria-selected={index === skillHighlight}
+						onpointerenter={() => (skillHighlight = index)}
+						onpointerdown={(e) => {
+							e.preventDefault();
+							selectSkillCommand(skill);
+						}}
+					>
+						<span class="skill-command-name">/{skill.name}</span>
+						<span class="skill-command-description">{skill.description}</span>
+					</button>
+				{/each}
+			{/if}
+		</div>
+	{/if}
+
 	{#if queuedCount > 0}
 		<div
 			class="queue-picker"
@@ -333,6 +492,7 @@ import type { ImageAttachment } from '$lib/types';
 	<RichComposerInput
 		bind:this={input}
 		bind:value
+		{skillNames}
 		onkeydown={onKeydown}
 		placeholder={waitingForReply
 			? 'Waiting for reply…'
@@ -508,6 +668,64 @@ import type { ImageAttachment } from '$lib/types';
 		color: var(--text-muted);
 		font-size: 12px;
 		line-height: 1.35;
+	}
+
+	.skill-command-menu {
+		position: absolute;
+		left: 14px;
+		right: 14px;
+		bottom: calc(100% + 8px);
+		z-index: 28;
+		max-height: 260px;
+		overflow: auto;
+		padding: 6px;
+		border: 1px solid var(--border-soft);
+		border-radius: 14px;
+		background: rgba(246, 249, 252, 0.98);
+		box-shadow: var(--shadow-card);
+		scrollbar-gutter: stable;
+	}
+
+	.skill-command-option {
+		display: flex;
+		width: 100%;
+		flex-direction: column;
+		gap: 3px;
+		padding: 9px 10px;
+		border: none;
+		border-radius: 10px;
+		background: transparent;
+		text-align: left;
+		cursor: pointer;
+	}
+
+	.skill-command-option:hover,
+	.skill-command-option.highlighted {
+		background: rgba(15, 23, 42, 0.06);
+	}
+
+	.skill-command-name {
+		font-size: 12px;
+		font-weight: 700;
+		color: var(--text-main);
+	}
+
+	.skill-command-description {
+		font-size: 11px;
+		line-height: 1.35;
+		color: var(--text-soft);
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		overflow: hidden;
+	}
+
+	.skill-command-empty {
+		margin: 0;
+		padding: 10px 12px;
+		font-size: 12px;
+		color: var(--text-muted);
 	}
 
 	.image-attachments {

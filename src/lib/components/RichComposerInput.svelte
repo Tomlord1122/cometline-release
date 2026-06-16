@@ -7,12 +7,14 @@
 		value = $bindable(''),
 		placeholder = '',
 		ariaLabel = 'Message input',
+		skillNames = [],
 		onkeydown,
 		onfiles
 	}: {
 		value?: string;
 		placeholder?: string;
 		ariaLabel?: string;
+		skillNames?: string[];
 		onkeydown?: (e: KeyboardEvent) => void;
 		onfiles?: (files: File[]) => void;
 	} = $props();
@@ -36,6 +38,8 @@
 				} else if (child instanceof HTMLElement) {
 					if (child.dataset.url) {
 						out += child.dataset.url;
+					} else if (child.dataset.skillCommand) {
+						out += child.dataset.skillCommand;
 					} else if (child.tagName === 'BR') {
 						out += '\n';
 					} else {
@@ -78,6 +82,31 @@
 		chip.appendChild(img);
 		chip.appendChild(label);
 		return chip;
+	}
+
+	function makeSkillChip(name: string): HTMLElement {
+		const chip = document.createElement('span');
+		chip.className = 'rce-chip rce-skill-chip';
+		chip.contentEditable = 'false';
+		chip.dataset.skillCommand = `/${name}`;
+		chip.title = `Use the ${name} skill`;
+
+		const label = document.createElement('span');
+		label.className = 'rce-chip-label';
+		label.textContent = `/${name}`;
+		chip.appendChild(label);
+		return chip;
+	}
+
+	function escapeRegex(value: string): string {
+		return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	}
+
+	function skillNameRegex() {
+		const names = skillNames.map((name) => name.trim()).filter(Boolean);
+		if (names.length === 0) return null;
+		const pattern = names.sort((a, b) => b.length - a.length).map(escapeRegex).join('|');
+		return new RegExp(`(^|\\s)\\/(${pattern})(?=\\s|$)`, 'g');
 	}
 
 	/**
@@ -157,10 +186,78 @@
 		return didChange;
 	}
 
+	function skillifyEditor(opts?: { allowCaretEnd?: boolean }) {
+		const re = skillNameRegex();
+		if (!editor || !re) return;
+		const allowCaretEnd = opts?.allowCaretEnd ?? false;
+		const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+		const textNodes: Text[] = [];
+		let n = walker.nextNode();
+		while (n) {
+			if (!(n.parentElement && n.parentElement.closest('.rce-chip'))) {
+				textNodes.push(n as Text);
+			}
+			n = walker.nextNode();
+		}
+
+		const sel = window.getSelection();
+		const caretNode = sel && sel.rangeCount > 0 ? sel.focusNode : null;
+		const caretOffset = sel && sel.rangeCount > 0 ? sel.focusOffset : 0;
+
+		let didChange = false;
+		for (const textNode of textNodes) {
+			const text = textNode.textContent ?? '';
+			re.lastIndex = 0;
+			if (!re.test(text)) continue;
+
+			const frag = document.createDocumentFragment();
+			let cursor = 0;
+			let replaced = false;
+			re.lastIndex = 0;
+			let match: RegExpExecArray | null;
+			while ((match = re.exec(text)) !== null) {
+				const prefix = match[1] ?? '';
+				const name = match[2];
+				const commandStart = match.index + prefix.length;
+				const commandEnd = commandStart + name.length + 1;
+				const caretInThisNode = caretNode === textNode;
+				const caretAtCommandEnd = caretInThisNode && caretOffset === commandEnd;
+				const hasTrailingBoundary = commandEnd < text.length && /\s/.test(text[commandEnd]);
+				if (caretAtCommandEnd && !allowCaretEnd && !hasTrailingBoundary) continue;
+
+				if (commandStart > cursor) {
+					frag.appendChild(document.createTextNode(text.slice(cursor, commandStart)));
+				}
+				frag.appendChild(makeSkillChip(name));
+				cursor = commandEnd;
+				replaced = true;
+			}
+			if (!replaced) continue;
+			if (cursor < text.length) frag.appendChild(document.createTextNode(text.slice(cursor)));
+
+			textNode.replaceWith(frag);
+			didChange = true;
+		}
+		if (didChange) {
+			const range = document.createRange();
+			range.selectNodeContents(editor);
+			range.collapse(false);
+			sel?.removeAllRanges();
+			sel?.addRange(range);
+		}
+		return didChange;
+	}
+
+	function decorateEditor(opts?: { allowCaretEnd?: boolean }) {
+		const didSkillify = skillifyEditor(opts);
+		const didLinkify = linkifyEditor(opts);
+		return didSkillify || didLinkify;
+	}
+
 	function onInput() {
 		if (syncing || !editor) return;
 		syncing = true;
-		linkifyEditor();
+		decorateEditor();
 		syncing = false;
 		readValue();
 	}
@@ -184,7 +281,7 @@
 		document.execCommand('insertText', false, text);
 		if (!editor) return;
 		syncing = true;
-		linkifyEditor({ allowCaretEnd: true });
+		decorateEditor({ allowCaretEnd: true });
 		syncing = false;
 		readValue();
 	}
@@ -244,6 +341,20 @@
 		insertPlainText(text);
 	}
 
+	export function setText(text: string) {
+		if (!editor) {
+			value = text;
+			return;
+		}
+		editor.textContent = text;
+		value = text;
+		focus();
+		syncing = true;
+		decorateEditor({ allowCaretEnd: true });
+		syncing = false;
+		readValue();
+	}
+
 	/** Clears the editor (used after send). */
 	export function clear() {
 		if (editor) editor.innerHTML = '';
@@ -256,6 +367,15 @@
 		if (value === '' && editor && editor.textContent !== '') {
 			editor.innerHTML = '';
 		}
+	});
+
+	$effect(() => {
+		const key = skillNames.join('\n');
+		if (!editor || key === '') return;
+		syncing = true;
+		decorateEditor();
+		syncing = false;
+		readValue();
 	});
 
 	let isEmpty = $derived(value.trim() === '');
@@ -329,6 +449,13 @@
 		white-space: nowrap;
 		user-select: none;
 		cursor: pointer;
+	}
+
+	.rce-editor :global(.rce-skill-chip) {
+		border-color: rgba(37, 99, 235, 0.18);
+		background: rgba(37, 99, 235, 0.06);
+		color: #31517a;
+		font-weight: 650;
 	}
 
 	.rce-editor :global(.rce-chip-icon) {

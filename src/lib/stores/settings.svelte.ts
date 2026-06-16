@@ -252,7 +252,10 @@ function createSettingsStore() {
 		isFetchingModels = true;
 		error = '';
 		try {
-			const models = (await window.electronAPI?.fetchProviderModels?.(provider)) ?? [];
+			// Plain object required: Electron IPC uses structured clone, which rejects
+			// Svelte 5 reactive proxies from $state/$derived.
+			const models =
+				(await window.electronAPI?.fetchProviderModels?.(cloneProvider(provider))) ?? [];
 			const enabledModels = provider.enabledModels.filter((model) => models.includes(model));
 			const selectedModel =
 				enabledModels[0] ??

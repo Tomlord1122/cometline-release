@@ -1476,29 +1476,55 @@ async function createWindow() {
 	});
 }
 
-function normalizeModelsBaseURL(rawBaseURL) {
-	let baseURL = String(rawBaseURL || '').trim();
+const FETCH_MODELS_TIMEOUT_MS = 30_000;
+
+function stripTrailingSlashes(url) {
+	return String(url || '').trim().replace(/\/+$/, '');
+}
+
+// Mirrors comet-sdk providerbase.Endpoint: tolerates base URLs that already end in /v1.
+function openAICompatibleEndpoint(rawBaseURL, path) {
+	let baseURL = stripTrailingSlashes(rawBaseURL);
 	if (!baseURL) throw new Error('Base URL is required');
-	baseURL = baseURL.replace(/\/+$/, '');
 	baseURL = baseURL.replace(/\/chat\/completions$/i, '');
-	return `${baseURL}/models`;
+	const suffix = path.startsWith('/') ? path : `/${path}`;
+	if (baseURL.endsWith('/v1')) {
+		return `${baseURL}${suffix}`;
+	}
+	return `${baseURL}/v1${suffix}`;
+}
+
+function normalizeModelsBaseURL(rawBaseURL) {
+	return openAICompatibleEndpoint(rawBaseURL, '/models');
 }
 
 function normalizeAnthropicModelsURL(rawBaseURL) {
-	let baseURL = String(rawBaseURL || '').trim();
-	if (!baseURL) throw new Error('Base URL is required');
-	baseURL = baseURL.replace(/\/+$/, '');
-	return `${baseURL}/v1/models`;
+	return openAICompatibleEndpoint(rawBaseURL, '/models');
+}
+
+async function fetchModelsFromURL(url, headers) {
+	try {
+		return await fetch(url, {
+			headers,
+			signal: AbortSignal.timeout(FETCH_MODELS_TIMEOUT_MS)
+		});
+	} catch (err) {
+		if (err?.name === 'TimeoutError' || err?.name === 'AbortError') {
+			throw new Error(
+				`Timed out after ${FETCH_MODELS_TIMEOUT_MS / 1000}s contacting ${url}. ` +
+					'Check the base URL, VPN or network access, and that the provider exposes GET /v1/models.'
+			);
+		}
+		const message = err instanceof Error ? err.message : String(err);
+		throw new Error(`Failed to reach ${url}: ${message}`);
+	}
 }
 
 async function fetchOpenAIModels(baseURL, apiKey) {
 	const url = normalizeModelsBaseURL(baseURL);
-	const res = await fetch(url, {
-		headers: {
-			Authorization: `Bearer ${apiKey}`,
-			Accept: 'application/json'
-		},
-		signal: AbortSignal.timeout(12000)
+	const res = await fetchModelsFromURL(url, {
+		Authorization: `Bearer ${apiKey}`,
+		Accept: 'application/json'
 	});
 	if (!res.ok) {
 		const body = await res.text();
@@ -1520,13 +1546,10 @@ async function fetchOpenAIModels(baseURL, apiKey) {
 
 async function fetchAnthropicModels(baseURL, apiKey) {
 	const url = normalizeAnthropicModelsURL(baseURL);
-	const res = await fetch(url, {
-		headers: {
-			'x-api-key': apiKey,
-			'anthropic-version': '2023-06-01',
-			Accept: 'application/json'
-		},
-		signal: AbortSignal.timeout(12000)
+	const res = await fetchModelsFromURL(url, {
+		'x-api-key': apiKey,
+		'anthropic-version': '2023-06-01',
+		Accept: 'application/json'
 	});
 	if (!res.ok) {
 		const body = await res.text();
