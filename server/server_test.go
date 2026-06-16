@@ -624,6 +624,144 @@ func TestSkillsDeleteAndExport(t *testing.T) {
 	}
 }
 
+func TestListWorkspaces(t *testing.T) {
+	t.Parallel()
+
+	engine, _, cleanup := newTestEngine(t, func(sess session.Session, workspacePath string) (Runner, error) {
+		return fakeRunner(func(ctx context.Context, turn session.AgentTurn, ch chan<- event.Event) error {
+			ch <- event.Done()
+			return nil
+		}), nil
+	})
+	defer cleanup()
+
+	workspacePath := t.TempDir()
+	createRec := httptest.NewRecorder()
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/workspaces", bytes.NewBufferString(`{"workspace_path":`+mustJSON(workspacePath)+`}`))
+	createReq.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create workspace status = %d, want %d body=%s", createRec.Code, http.StatusCreated, createRec.Body.String())
+	}
+
+	listRec := httptest.NewRecorder()
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/workspaces", nil)
+	engine.ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list workspaces status = %d, want %d body=%s", listRec.Code, http.StatusOK, listRec.Body.String())
+	}
+
+	var got listWorkspacesResponse
+	decodeJSON(t, listRec.Body.Bytes(), &got)
+	if len(got.Workspaces) == 0 {
+		t.Fatal("expected at least one workspace")
+	}
+	found := false
+	for _, ws := range got.Workspaces {
+		if ws.Path == filepath.Clean(workspacePath) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("workspaces = %+v, want path %q", got.Workspaces, workspacePath)
+	}
+}
+
+func TestChangeSessionWorkspace(t *testing.T) {
+	t.Parallel()
+
+	engine, svc, cleanup := newTestEngine(t, func(sess session.Session, workspacePath string) (Runner, error) {
+		return fakeRunner(func(ctx context.Context, turn session.AgentTurn, ch chan<- event.Event) error {
+			ch <- event.Done()
+			return nil
+		}), nil
+	})
+	defer cleanup()
+
+	ctx := context.Background()
+	ws1 := t.TempDir()
+	ws2 := t.TempDir()
+
+	createRec := httptest.NewRecorder()
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(`{"workspace_path":`+mustJSON(ws1)+`}`))
+	createReq.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create session status = %d, want %d body=%s", createRec.Code, http.StatusCreated, createRec.Body.String())
+	}
+
+	var created sessionResource
+	decodeJSON(t, createRec.Body.Bytes(), &created)
+
+	patchRec := httptest.NewRecorder()
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/v1/sessions/"+created.ID+"/workspace", bytes.NewBufferString(`{"workspace_path":`+mustJSON(ws2)+`}`))
+	patchReq.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(patchRec, patchReq)
+	if patchRec.Code != http.StatusOK {
+		t.Fatalf("change workspace status = %d, want %d body=%s", patchRec.Code, http.StatusOK, patchRec.Body.String())
+	}
+
+	var updated sessionResource
+	decodeJSON(t, patchRec.Body.Bytes(), &updated)
+	if updated.WorkspacePath != filepath.Clean(ws2) {
+		t.Fatalf("workspace_path = %q, want %q", updated.WorkspacePath, filepath.Clean(ws2))
+	}
+
+	sess, err := svc.GetSession(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("GetSession() error = %v", err)
+	}
+	path, err := svc.WorkspacePath(ctx, sess.WorkspaceID)
+	if err != nil {
+		t.Fatalf("WorkspacePath() error = %v", err)
+	}
+	if path != filepath.Clean(ws2) {
+		t.Fatalf("persisted workspace path = %q, want %q", path, filepath.Clean(ws2))
+	}
+
+	msgRec := httptest.NewRecorder()
+	msgReq := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+created.ID+"/messages", nil)
+	engine.ServeHTTP(msgRec, msgReq)
+	if msgRec.Code != http.StatusOK {
+		t.Fatalf("messages status = %d, want %d body=%s", msgRec.Code, http.StatusOK, msgRec.Body.String())
+	}
+	var transcript transcriptResponse
+	decodeJSON(t, msgRec.Body.Bytes(), &transcript)
+	if len(transcript.Items) != 1 || transcript.Items[0].Type != "system" {
+		t.Fatalf("transcript items = %+v, want one system notice", transcript.Items)
+	}
+}
+
+func TestChangeSessionWorkspaceRejectsMissingDirectory(t *testing.T) {
+	t.Parallel()
+
+	engine, _, cleanup := newTestEngine(t, func(sess session.Session, workspacePath string) (Runner, error) {
+		return fakeRunner(func(ctx context.Context, turn session.AgentTurn, ch chan<- event.Event) error {
+			ch <- event.Done()
+			return nil
+		}), nil
+	})
+	defer cleanup()
+
+	ws1 := t.TempDir()
+	createRec := httptest.NewRecorder()
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(`{"workspace_path":`+mustJSON(ws1)+`}`))
+	createReq.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(createRec, createReq)
+	var created sessionResource
+	decodeJSON(t, createRec.Body.Bytes(), &created)
+
+	patchRec := httptest.NewRecorder()
+	missing := filepath.Join(t.TempDir(), "missing-workspace")
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/v1/sessions/"+created.ID+"/workspace", bytes.NewBufferString(`{"workspace_path":`+mustJSON(missing)+`}`))
+	patchReq.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(patchRec, patchReq)
+	if patchRec.Code != http.StatusBadRequest {
+		t.Fatalf("change workspace status = %d, want %d body=%s", patchRec.Code, http.StatusBadRequest, patchRec.Body.String())
+	}
+}
+
 func newTestEngine(t *testing.T, newRunner RunnerFactory) (*gin.Engine, *session.Service, func()) {
 	t.Helper()
 

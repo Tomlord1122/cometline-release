@@ -69,6 +69,12 @@ func runGateway(_ *cobra.Command, _ []string) error {
 		adapter.SetThreadCreatedHandler(func(ctx context.Context, userID, parentChannelID, threadID string) error {
 			return router.EnsureThreadSession(ctx, userID, parentChannelID, threadID)
 		})
+		adapter.SetChangeWorkspaceHandler(func(ctx context.Context, msg gateway.InboundMessage, path string) (string, error) {
+			return router.ChangeWorkspace(ctx, msg, path)
+		})
+		adapter.SetWorkspaceSuggestHandler(func(ctx context.Context, query string) ([]string, error) {
+			return router.SuggestWorkspacePaths(ctx, query, 25)
+		})
 		adapter.SetInboundHandler(func(ctx context.Context, msg gateway.InboundMessage) {
 			if err := router.HandleInbound(ctx, msg); err != nil {
 				log.Printf("discord: handle inbound failed: %v", err)

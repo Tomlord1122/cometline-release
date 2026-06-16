@@ -48,6 +48,24 @@ func (q *Queries) GetGatewaySession(ctx context.Context, arg GetGatewaySessionPa
 	return i, err
 }
 
+const updateGatewaySessionWorkspace = `-- name: UpdateGatewaySessionWorkspace :exec
+UPDATE gateway_sessions
+SET
+    workspace_id = ?,
+    last_active_at = unixepoch ('now', 'subsec') * 1000
+WHERE cometmind_session_id = ?
+`
+
+type UpdateGatewaySessionWorkspaceParams struct {
+	WorkspaceID        string `json:"workspace_id"`
+	CometmindSessionID string `json:"cometmind_session_id"`
+}
+
+func (q *Queries) UpdateGatewaySessionWorkspace(ctx context.Context, arg UpdateGatewaySessionWorkspaceParams) error {
+	_, err := q.db.ExecContext(ctx, updateGatewaySessionWorkspace, arg.WorkspaceID, arg.CometmindSessionID)
+	return err
+}
+
 const upsertGatewaySession = `-- name: UpsertGatewaySession :one
 INSERT INTO gateway_sessions (
     id,

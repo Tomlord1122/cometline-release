@@ -98,3 +98,110 @@ func TestEnsureThreadSessionCreatesSeparateMapping(t *testing.T) {
 		t.Fatalf("thread and parent share session %q", threadMapped.CometmindSessionID)
 	}
 }
+
+func TestChangeWorkspaceUpdatesSessionPath(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "cometmind.db")
+	sqlDB, err := store.OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatalf("OpenSQLite() error = %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+
+	svc := session.New(sqlDB)
+	ws1, err := svc.EnsureWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("EnsureWorkspace(ws1) error = %v", err)
+	}
+	ws2Dir := t.TempDir()
+	ws2, err := svc.EnsureWorkspace(ctx, ws2Dir)
+	if err != nil {
+		t.Fatalf("EnsureWorkspace(ws2) error = %v", err)
+	}
+
+	r := &Router{
+		Sessions: svc,
+		Config: &config.Config{
+			Gateway: config.GatewayConfig{
+				Discord: config.DiscordGatewayConfig{
+					WorkspacePath: ws1.Path,
+				},
+			},
+		},
+	}
+
+	sess, err := svc.NewSession(ctx, ws1.ID, "test-model", "test-provider")
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	if _, err := svc.UpsertGatewaySession(ctx, "discord", "user-1", "chan-1", "", sess.ID, ws1.ID); err != nil {
+		t.Fatalf("UpsertGatewaySession() error = %v", err)
+	}
+
+	msg, err := r.ChangeWorkspace(ctx, InboundMessage{
+		Platform:  "discord",
+		UserID:    "user-1",
+		ChannelID: "chan-1",
+		Mentioned: true,
+	}, ws2Dir)
+	if err != nil {
+		t.Fatalf("ChangeWorkspace() error = %v", err)
+	}
+	if msg == "" {
+		t.Fatal("expected confirmation message")
+	}
+
+	updated, err := svc.GetSession(ctx, sess.ID)
+	if err != nil {
+		t.Fatalf("GetSession() error = %v", err)
+	}
+	if updated.WorkspaceID != ws2.ID {
+		t.Fatalf("workspace_id = %q, want %q", updated.WorkspaceID, ws2.ID)
+	}
+}
+
+func TestSuggestWorkspacePathsIncludesConfiguredDefault(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "cometmind.db")
+	sqlDB, err := store.OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatalf("OpenSQLite() error = %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+
+	svc := session.New(sqlDB)
+	ws, err := svc.EnsureWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("EnsureWorkspace() error = %v", err)
+	}
+
+	r := &Router{
+		Sessions: svc,
+		Config: &config.Config{
+			Gateway: config.GatewayConfig{
+				Discord: config.DiscordGatewayConfig{
+					WorkspacePath: ws.Path,
+				},
+			},
+		},
+	}
+
+	paths, err := r.SuggestWorkspacePaths(ctx, "", 25)
+	if err != nil {
+		t.Fatalf("SuggestWorkspacePaths() error = %v", err)
+	}
+	found := false
+	for _, path := range paths {
+		if path == ws.Path {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("paths = %+v, want %q", paths, ws.Path)
+	}
+}

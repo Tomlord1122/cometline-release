@@ -33,6 +33,19 @@ paths:
                 status: ok
 
   /api/v1/workspaces:
+    get:
+      tags: [Workspaces]
+      summary: List registered workspaces
+      operationId: listWorkspaces
+      responses:
+        '200':
+          description: Registered workspace roots
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceListResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
     post:
       tags: [Workspaces]
       summary: Register or resolve a workspace by path
@@ -224,6 +237,36 @@ paths:
       responses:
         '204':
           description: Session deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/sessions/{id}/workspace:
+    patch:
+      tags: [Sessions]
+      summary: Change session workspace
+      description: |
+        Reassigns an existing session to a different workspace root while preserving
+        transcript history. Writes a system notice into the transcript.
+      operationId: changeSessionWorkspace
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeSessionWorkspaceRequest'
+      responses:
+        '200':
+          description: Updated session resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -820,6 +863,25 @@ components:
         provider_id:
           type: string
 
+    ChangeSessionWorkspaceRequest:
+      type: object
+      additionalProperties: false
+      required: [workspace_path]
+      properties:
+        workspace_path:
+          type: string
+          description: Absolute filesystem path for the new workspace root.
+
+    WorkspaceListResponse:
+      type: object
+      additionalProperties: false
+      required: [workspaces]
+      properties:
+        workspaces:
+          type: array
+          items:
+            $ref: '#/components/schemas/Workspace'
+
     PostMessageRequest:
       type: object
       additionalProperties: false
@@ -948,7 +1010,7 @@ components:
       properties:
         type:
           type: string
-          enum: [user, reasoning, assistant, tool]
+          enum: [user, reasoning, assistant, tool, system]
         text:
           type: string
         images:

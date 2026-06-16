@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -85,11 +86,13 @@ func New(deps Deps) (*gin.Engine, error) {
 
 	api := r.Group("/api/v1")
 	api.GET("/health", app.handleHealth)
+	api.GET("/workspaces", app.handleListWorkspaces)
 	api.POST("/workspaces", app.handleCreateWorkspace)
 	api.POST("/sessions", app.handleCreateSession)
 	api.GET("/sessions", app.handleListSessions)
 	api.GET("/sessions/:id", app.handleGetSession)
 	api.PATCH("/sessions/:id", app.handlePatchSession)
+	api.PATCH("/sessions/:id/workspace", app.handleChangeSessionWorkspace)
 	api.DELETE("/sessions/:id", app.handleDeleteSession)
 	api.GET("/sessions/:id/messages", app.handleGetMessages)
 	api.GET("/sessions/:id/children", app.handleListChildSessions)
@@ -162,6 +165,14 @@ type createSessionRequest struct {
 type patchSessionRequest struct {
 	ModelID    string `json:"model_id"`
 	ProviderID string `json:"provider_id"`
+}
+
+type changeSessionWorkspaceRequest struct {
+	WorkspacePath string `json:"workspace_path"`
+}
+
+type listWorkspacesResponse struct {
+	Workspaces []workspaceResource `json:"workspaces"`
 }
 
 type postMessageRequest struct {
@@ -392,6 +403,19 @@ func (a *App) handleCreateWorkspace(c *gin.Context) {
 	c.JSON(http.StatusCreated, workspaceResource{ID: ws.ID, Path: ws.Path})
 }
 
+func (a *App) handleListWorkspaces(c *gin.Context) {
+	list, err := a.sessions.ListWorkspaces(c.Request.Context())
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	items := make([]workspaceResource, 0, len(list))
+	for _, ws := range list {
+		items = append(items, workspaceResource{ID: ws.ID, Path: ws.Path})
+	}
+	c.JSON(http.StatusOK, listWorkspacesResponse{Workspaces: items})
+}
+
 func (a *App) handleCreateSession(c *gin.Context) {
 	var req createSessionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -509,6 +533,51 @@ func (a *App) handlePatchSession(c *gin.Context) {
 	)
 	if errors.Is(err, session.ErrSessionNotFound) {
 		writeError(c, http.StatusNotFound, "session_not_found", "session was not found")
+		return
+	}
+	if err != nil {
+		writeError(c, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+
+	wsPath, err := a.sessions.WorkspacePath(c.Request.Context(), sess.WorkspaceID)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	res, err := sessionResourceFromModel(sess, wsPath)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	c.JSON(http.StatusOK, res)
+}
+
+func (a *App) handleChangeSessionWorkspace(c *gin.Context) {
+	var req changeSessionWorkspaceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		return
+	}
+
+	clean, ok := cleanWorkspacePath(c, req.WorkspacePath)
+	if !ok {
+		return
+	}
+	if !validateWorkspaceDirectory(c, clean) {
+		return
+	}
+
+	sessID := c.Param("id")
+	sess, err := a.sessions.ChangeSessionWorkspace(c.Request.Context(), sessID, clean)
+	if errors.Is(err, session.ErrSessionNotFound) {
+		writeError(c, http.StatusNotFound, "session_not_found", "session was not found")
+		return
+	}
+	if errors.Is(err, session.ErrActiveDelegation) {
+		writeError(c, http.StatusBadRequest, "active_delegation", err.Error())
 		return
 	}
 	if err != nil {
@@ -919,6 +988,23 @@ func cleanWorkspacePath(c *gin.Context, workspacePath string) (string, bool) {
 	return filepath.Clean(workspacePath), true
 }
 
+func validateWorkspaceDirectory(c *gin.Context, workspacePath string) bool {
+	info, err := os.Stat(workspacePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeError(c, http.StatusBadRequest, "bad_request", "workspace_path does not exist")
+			return false
+		}
+		writeError(c, http.StatusBadRequest, "bad_request", err.Error())
+		return false
+	}
+	if !info.IsDir() {
+		writeError(c, http.StatusBadRequest, "bad_request", "workspace_path must be a directory")
+		return false
+	}
+	return true
+}
+
 func sessionResourceFromModel(sess session.Session, workspacePath string) (sessionResource, error) {
 	usage, err := decodeTokenUsage(sess.TokenUsage)
 	if err != nil {
@@ -981,6 +1067,8 @@ func transcriptItemFromModel(item session.TranscriptEntry) transcriptItem {
 			ToolOutput: item.ToolOutput,
 			ToolError:  item.ToolIsError,
 		}
+	case session.TranscriptKindSystem:
+		return transcriptItem{Type: "system", Text: item.Text}
 	default:
 		return transcriptItem{Type: string(item.Kind), Text: item.Text}
 	}

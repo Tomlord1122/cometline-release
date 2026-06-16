@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/cometline/cometmind/internal/acp"
@@ -64,6 +66,11 @@ func (r *Router) HandleInbound(ctx context.Context, msg InboundMessage) error {
 		return err
 	}
 
+	runPath, err := r.Sessions.WorkspacePath(ctx, sess.WorkspaceID)
+	if err != nil {
+		return err
+	}
+
 	if child, err := r.Sessions.GetActiveChildForParent(ctx, sess.ID); err == nil {
 		switch child.DelegationStatus {
 		case "awaiting_user", "awaiting_permission":
@@ -80,9 +87,9 @@ func (r *Router) HandleInbound(ctx context.Context, msg InboundMessage) error {
 		defer stopTyping()
 	}
 
-	log.Printf("discord: running agent turn session=%s", sess.ID)
+	log.Printf("discord: running agent turn session=%s workspace=%s", sess.ID, runPath)
 	var reply strings.Builder
-	err = r.Runner.RunTurn(ctx, sess, ws.Path, msg.Text, func(ev event.Event) {
+	err = r.Runner.RunTurn(ctx, sess, runPath, msg.Text, func(ev event.Event) {
 		switch ev.Kind {
 		case event.KindTextDelta:
 			reply.WriteString(ev.Delta)
@@ -217,6 +224,101 @@ func (r *Router) EnsureThreadSession(ctx context.Context, userID, parentChannelI
 	}
 	_, err = r.Sessions.UpsertGatewaySession(ctx, "discord", userID, parentChannelID, threadID, sess.ID, ws.ID)
 	return err
+}
+
+// ChangeWorkspace reassigns the CometMind session mapped to a platform identity.
+func (r *Router) ChangeWorkspace(ctx context.Context, msg InboundMessage, workspacePath string) (string, error) {
+	if r == nil || r.Sessions == nil {
+		return "", fmt.Errorf("gateway router is not configured")
+	}
+	if !r.allowed(msg) {
+		return "", fmt.Errorf("not allowed")
+	}
+
+	workspacePath = strings.TrimSpace(workspacePath)
+	if workspacePath == "" {
+		return "", fmt.Errorf("workspace path is required")
+	}
+	if !filepath.IsAbs(workspacePath) {
+		return "", fmt.Errorf("workspace path must be absolute")
+	}
+	workspacePath = filepath.Clean(workspacePath)
+	info, err := os.Stat(workspacePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("workspace path does not exist")
+		}
+		return "", err
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("workspace path must be a directory")
+	}
+
+	mapped, err := r.Sessions.LookupGatewaySession(ctx, msg.Platform, msg.UserID, msg.ChannelID, msg.ThreadID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("no active session in this channel; send a message first")
+	}
+	if err != nil {
+		return "", err
+	}
+
+	sess, err := r.Sessions.ChangeSessionWorkspace(ctx, mapped.CometmindSessionID, workspacePath)
+	if err != nil {
+		return "", err
+	}
+	runPath, err := r.Sessions.WorkspacePath(ctx, sess.WorkspaceID)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Switched workspace to `%s`.", runPath), nil
+}
+
+// SuggestWorkspacePaths returns workspace roots matching query for autocomplete UIs.
+func (r *Router) SuggestWorkspacePaths(ctx context.Context, query string, limit int) ([]string, error) {
+	if r == nil || r.Sessions == nil {
+		return nil, fmt.Errorf("gateway router is not configured")
+	}
+	if limit <= 0 {
+		limit = 25
+	}
+
+	seen := make(map[string]struct{})
+	var out []string
+	add := func(path string) {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			return
+		}
+		if _, ok := seen[path]; ok {
+			return
+		}
+		seen[path] = struct{}{}
+		out = append(out, path)
+	}
+
+	query = strings.ToLower(strings.TrimSpace(query))
+	for _, path := range recentWorkspacePaths(r.Config.Gateway.Discord.WorkspacePath) {
+		if query == "" || strings.Contains(strings.ToLower(path), query) {
+			add(path)
+		}
+		if len(out) >= limit {
+			return out, nil
+		}
+	}
+
+	list, err := r.Sessions.ListWorkspaces(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, ws := range list {
+		if query == "" || strings.Contains(strings.ToLower(ws.Path), query) {
+			add(ws.Path)
+		}
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
 }
 
 func deliveryChannelID(msg InboundMessage) string {

@@ -30,3 +30,10 @@ WHERE
     AND platform_channel_id = ?
     AND thread_id = ?
 LIMIT 1;
+
+-- name: UpdateGatewaySessionWorkspace :exec
+UPDATE gateway_sessions
+SET
+    workspace_id = ?,
+    last_active_at = unixepoch ('now', 'subsec') * 1000
+WHERE cometmind_session_id = ?;

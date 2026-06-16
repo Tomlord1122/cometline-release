@@ -23,6 +23,8 @@ type Adapter struct {
 	Session   *discordgo.Session
 	onInbound func(context.Context, gateway.InboundMessage)
 	onThread  func(context.Context, string, string, string) error
+	onChange  func(context.Context, gateway.InboundMessage, string) (string, error)
+	onSuggest func(context.Context, string) ([]string, error)
 
 	mu sync.Mutex
 }
@@ -84,6 +86,16 @@ func (a *Adapter) SetThreadCreatedHandler(fn func(context.Context, string, strin
 	a.onThread = fn
 }
 
+// SetChangeWorkspaceHandler registers the callback used for /change slash commands.
+func (a *Adapter) SetChangeWorkspaceHandler(fn func(context.Context, gateway.InboundMessage, string) (string, error)) {
+	a.onChange = fn
+}
+
+// SetWorkspaceSuggestHandler registers autocomplete suggestions for /change path.
+func (a *Adapter) SetWorkspaceSuggestHandler(fn func(context.Context, string) ([]string, error)) {
+	a.onSuggest = fn
+}
+
 // KeepTyping sends ChannelTyping periodically until stop is called.
 func (a *Adapter) KeepTyping(ctx context.Context, channelID string) func() {
 	stop := make(chan struct{})
@@ -112,7 +124,7 @@ func (a *Adapter) Start(ctx context.Context) error {
 		if err := a.registerCommands(s, r); err != nil {
 			log.Printf("discord: slash command registration failed: %v", err)
 		} else {
-			log.Printf("discord: slash commands registered (thread, create-skill)")
+			log.Printf("discord: slash commands registered (thread, create-skill, change)")
 		}
 	})
 	if err := a.Session.Open(); err != nil {
@@ -148,6 +160,19 @@ func applicationCommands() []*discordgo.ApplicationCommand {
 					Name:        "request",
 					Description: "What the skill should do (optional)",
 					Required:    false,
+				},
+			},
+		},
+		{
+			Name:        "change",
+			Description: "Switch workspace for this thread's session",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:         discordgo.ApplicationCommandOptionString,
+					Name:         "path",
+					Description:  "Absolute path to project root",
+					Required:     true,
+					Autocomplete: true,
 				},
 			},
 		},
@@ -273,15 +298,134 @@ func createCometMindThread(
 }
 
 func (a *Adapter) onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	if i.Type != discordgo.InteractionApplicationCommand {
+	switch i.Type {
+	case discordgo.InteractionApplicationCommandAutocomplete:
+		a.handleAutocomplete(s, i)
+	case discordgo.InteractionApplicationCommand:
+		data := i.ApplicationCommandData()
+		switch data.Name {
+		case "thread":
+			a.handleThreadCommand(s, i, data)
+		case "create-skill":
+			a.handleCreateSkillCommand(s, i, data)
+		case "change":
+			a.handleChangeCommand(s, i, data)
+		}
+	}
+}
+
+func (a *Adapter) handleAutocomplete(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	data := i.ApplicationCommandData()
+	if data.Name != "change" || a.onSuggest == nil {
+		_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionApplicationCommandAutocompleteResult,
+			Data: &discordgo.InteractionResponseData{Choices: []*discordgo.ApplicationCommandOptionChoice{}},
+		})
 		return
 	}
-	data := i.ApplicationCommandData()
-	switch data.Name {
-	case "thread":
-		a.handleThreadCommand(s, i, data)
-	case "create-skill":
-		a.handleCreateSkillCommand(s, i, data)
+
+	query := ""
+	for _, opt := range data.Options {
+		if opt.Name == "path" && opt.Focused {
+			query = opt.StringValue()
+			break
+		}
+	}
+
+	paths, err := a.onSuggest(context.Background(), query)
+	if err != nil {
+		log.Printf("discord: workspace autocomplete failed: %v", err)
+		paths = nil
+	}
+
+	choices := make([]*discordgo.ApplicationCommandOptionChoice, 0, len(paths))
+	for _, path := range paths {
+		if len(choices) >= 25 {
+			break
+		}
+		name := path
+		if len(name) > 100 {
+			name = "…" + name[len(name)-99:]
+		}
+		choices = append(choices, &discordgo.ApplicationCommandOptionChoice{
+			Name:  name,
+			Value: path,
+		})
+	}
+
+	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionApplicationCommandAutocompleteResult,
+		Data: &discordgo.InteractionResponseData{Choices: choices},
+	})
+}
+
+func (a *Adapter) handleChangeCommand(s *discordgo.Session, i *discordgo.InteractionCreate, data discordgo.ApplicationCommandInteractionData) {
+	path := ""
+	for _, opt := range data.Options {
+		if opt.Name == "path" && opt.Type == discordgo.ApplicationCommandOptionString {
+			path = strings.TrimSpace(opt.StringValue())
+		}
+	}
+	if path == "" {
+		_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "Workspace path is required.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		return
+	}
+
+	if a.onChange == nil {
+		_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "Workspace switching is not configured.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		return
+	}
+
+	msg := routingInboundMessage(s, i)
+	text, err := a.onChange(context.Background(), msg, path)
+	if err != nil {
+		_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: fmt.Sprintf("Failed to change workspace: %v", err),
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		return
+	}
+
+	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: text,
+			Flags:   discordgo.MessageFlagsEphemeral,
+		},
+	})
+}
+
+func routingInboundMessage(s *discordgo.Session, i *discordgo.InteractionCreate) gateway.InboundMessage {
+	parentChannelID := ""
+	if i.GuildID != "" {
+		if ch, err := s.Channel(i.ChannelID); err == nil && ch != nil && ch.ParentID != "" {
+			parentChannelID = ch.ParentID
+		}
+	}
+	routingChannelID, threadID := discordRoutingIDs(i.ChannelID, parentChannelID)
+	return gateway.InboundMessage{
+		Platform:        platformName,
+		GuildID:         i.GuildID,
+		ParentChannelID: parentChannelID,
+		UserID:          interactionUserID(i),
+		ChannelID:       routingChannelID,
+		ThreadID:        threadID,
+		Mentioned:       true,
 	}
 }
 

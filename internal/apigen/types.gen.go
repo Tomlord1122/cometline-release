@@ -110,6 +110,7 @@ func (e SessionStatus) Valid() bool {
 const (
 	Assistant TranscriptItemType = "assistant"
 	Reasoning TranscriptItemType = "reasoning"
+	System    TranscriptItemType = "system"
 	Tool      TranscriptItemType = "tool"
 	User      TranscriptItemType = "user"
 )
@@ -121,6 +122,8 @@ func (e TranscriptItemType) Valid() bool {
 		return true
 	case Reasoning:
 		return true
+	case System:
+		return true
 	case Tool:
 		return true
 	case User:
@@ -128,6 +131,12 @@ func (e TranscriptItemType) Valid() bool {
 	default:
 		return false
 	}
+}
+
+// ChangeSessionWorkspaceRequest defines model for ChangeSessionWorkspaceRequest.
+type ChangeSessionWorkspaceRequest struct {
+	// WorkspacePath Absolute filesystem path for the new workspace root.
+	WorkspacePath string `json:"workspace_path"`
 }
 
 // CompactMemoryPreviewResponse defines model for CompactMemoryPreviewResponse.
@@ -543,6 +552,11 @@ type Workspace struct {
 	Path string `json:"path"`
 }
 
+// WorkspaceListResponse defines model for WorkspaceListResponse.
+type WorkspaceListResponse struct {
+	Workspaces []Workspace `json:"workspaces"`
+}
+
 // SessionId defines model for SessionId.
 type SessionId = string
 
@@ -616,6 +630,9 @@ type PostSessionMessageJSONRequestBody = PostMessageRequest
 
 // RespondToChildSessionJSONRequestBody defines body for RespondToChildSession for application/json ContentType.
 type RespondToChildSessionJSONRequestBody = RespondToChildRequest
+
+// ChangeSessionWorkspaceJSONRequestBody defines body for ChangeSessionWorkspace for application/json ContentType.
+type ChangeSessionWorkspaceJSONRequestBody = ChangeSessionWorkspaceRequest
 
 // CreateWorkspaceJSONRequestBody defines body for CreateWorkspace for application/json ContentType.
 type CreateWorkspaceJSONRequestBody = CreateWorkspaceRequest

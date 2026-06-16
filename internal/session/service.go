@@ -84,6 +84,92 @@ func (s *Service) LookupWorkspaceByPath(ctx context.Context, absRoot string) (Wo
 	return workspaceFromDB(w), nil
 }
 
+// ListWorkspaces returns all registered workspace roots.
+func (s *Service) ListWorkspaces(ctx context.Context) ([]Workspace, error) {
+	rows, err := s.q.ListWorkspaces(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Workspace, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, workspaceFromDB(row))
+	}
+	return out, nil
+}
+
+func activeDelegationStatuses() map[string]bool {
+	return map[string]bool{
+		"pending":              true,
+		"running":              true,
+		"awaiting_user":        true,
+		"awaiting_permission":  true,
+	}
+}
+
+// ChangeSessionWorkspace reassigns a session to a different workspace root.
+func (s *Service) ChangeSessionWorkspace(ctx context.Context, sessionID, absPath string) (Session, error) {
+	sess, err := s.GetSession(ctx, sessionID)
+	if err != nil {
+		return Session{}, err
+	}
+	if activeDelegationStatuses()[sess.DelegationStatus] {
+		return Session{}, ErrActiveDelegation
+	}
+
+	ws, err := s.EnsureWorkspace(ctx, absPath)
+	if err != nil {
+		return Session{}, err
+	}
+	if ws.ID == sess.WorkspaceID {
+		return sess, nil
+	}
+
+	oldPath, err := s.WorkspacePath(ctx, sess.WorkspaceID)
+	if err != nil {
+		return Session{}, err
+	}
+
+	if err := s.q.UpdateSessionWorkspace(ctx, db.UpdateSessionWorkspaceParams{
+		WorkspaceID: ws.ID,
+		ID:          sessionID,
+	}); err != nil {
+		return Session{}, err
+	}
+	_ = s.q.UpdateGatewaySessionWorkspace(ctx, db.UpdateGatewaySessionWorkspaceParams{
+		WorkspaceID:        ws.ID,
+		CometmindSessionID: sessionID,
+	})
+
+	note := fmt.Sprintf(
+		"Workspace changed from %s to %s. File tools now operate under this directory.",
+		oldPath,
+		ws.Path,
+	)
+	if _, err := s.AppendSystemMessage(ctx, sessionID, note); err != nil {
+		return Session{}, err
+	}
+
+	return s.GetSession(ctx, sessionID)
+}
+
+// AppendSystemMessage persists a system notice in the transcript.
+func (s *Service) AppendSystemMessage(ctx context.Context, sessionID, text string) (Message, error) {
+	msg, err := s.q.CreateMessage(ctx, db.CreateMessageParams{
+		ID:         id.New(),
+		SessionID:  sessionID,
+		Role:       "system",
+		Content:    text,
+		TokenCount: 0,
+	})
+	if err != nil {
+		return Message{}, err
+	}
+	if err := s.q.TouchSession(ctx, sessionID); err != nil {
+		return Message{}, err
+	}
+	return messageFromDB(msg), nil
+}
+
 // NewSession creates a persisted session row scoped to a workspace.
 func (s *Service) NewSession(ctx context.Context, workspaceID string, modelID, providerID string) (Session, error) {
 	sess, err := s.q.CreateSession(ctx, db.CreateSessionParams{

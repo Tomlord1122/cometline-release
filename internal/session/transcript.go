@@ -16,6 +16,7 @@ const (
 	TranscriptKindAssistant TranscriptKind = "assistant"
 	TranscriptKindReasoning TranscriptKind = "reasoning"
 	TranscriptKindTool      TranscriptKind = "tool"
+	TranscriptKindSystem    TranscriptKind = "system"
 )
 
 // TranscriptEntry is a persisted message or tool row formatted for chat-style UIs.
@@ -111,7 +112,12 @@ func (s *Service) LoadTranscript(ctx context.Context, sessionID string) ([]Trans
 					ToolIsError: toolErr[tc.ID],
 				})
 			}
-		case "tool_result", "system":
+		case "system":
+			out = append(out, TranscriptEntry{
+				Kind: TranscriptKindSystem,
+				Text: strings.TrimSpace(m.Content),
+			})
+		case "tool_result":
 			continue
 		default:
 			continue

@@ -498,3 +498,21 @@ func (q *Queries) UpdateSessionTokenUsage(ctx context.Context, arg UpdateSession
 	_, err := q.db.ExecContext(ctx, updateSessionTokenUsage, arg.TokenUsage, arg.ID)
 	return err
 }
+
+const updateSessionWorkspace = `-- name: UpdateSessionWorkspace :exec
+UPDATE sessions
+SET
+    workspace_id = ?,
+    updated_at = unixepoch ('now', 'subsec') * 1000
+WHERE id = ?
+`
+
+type UpdateSessionWorkspaceParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	ID          string `json:"id"`
+}
+
+func (q *Queries) UpdateSessionWorkspace(ctx context.Context, arg UpdateSessionWorkspaceParams) error {
+	_, err := q.db.ExecContext(ctx, updateSessionWorkspace, arg.WorkspaceID, arg.ID)
+	return err
+}

@@ -120,6 +120,13 @@ SET
     updated_at = unixepoch ('now', 'subsec') * 1000
 WHERE id = ?;
 
+-- name: UpdateSessionWorkspace :exec
+UPDATE sessions
+SET
+    workspace_id = ?,
+    updated_at = unixepoch ('now', 'subsec') * 1000
+WHERE id = ?;
+
 -- name: TouchSession :exec
 UPDATE sessions
 SET updated_at = unixepoch ('now', 'subsec') * 1000
