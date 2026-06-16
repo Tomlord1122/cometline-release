@@ -18,7 +18,7 @@
 		</div>
 		<SettingsToggle
 			label="Open at login"
-			description="Launch Cometline automatically when you sign in to macOS."
+			description="Launch Cometline when you sign in. On macOS 13+, you may need to approve it in System Settings → Login Items."
 			bind:checked={openAtLogin}
 			disabled={!window.electronAPI?.setOpenAtLogin}
 			onchange={onOpenAtLoginChange}

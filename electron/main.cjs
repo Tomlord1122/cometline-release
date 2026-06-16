@@ -1,10 +1,18 @@
-const { app, BrowserWindow, dialog, ipcMain, protocol, net, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, protocol, net, shell, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
-const { autoUpdater } = require('electron-updater');
+
+app.setName('Cometline');
+
+const MACOS_LOGIN_ITEMS_SETTINGS_URL =
+	'x-apple.systempreferences:com.apple.LoginItems-Settings.extension';
+
+function getAutoUpdater() {
+	return require('electron-updater').autoUpdater;
+}
 
 const COMETMIND_PORT = 7700;
 // Custom scheme used to serve the packaged SvelteKit bundle. Loading the
@@ -119,7 +127,8 @@ function defaultCometMindSettings(workspacePath = '') {
 		acp: {
 			command: 'opencode',
 			args: ['acp'],
-			timeout: '30m'
+			timeout: '30m',
+			interactive: true
 		},
 		gateway: {
 			discord: {
@@ -168,7 +177,9 @@ function normalizeCometMindSettings(input, workspacePath = '') {
 		acp: {
 			command: String(acp.command ?? defaults.acp.command).trim() || defaults.acp.command,
 			args: args.length > 0 ? args : defaults.acp.args,
-			timeout: String(acp.timeout ?? defaults.acp.timeout).trim() || defaults.acp.timeout
+			timeout: String(acp.timeout ?? defaults.acp.timeout).trim() || defaults.acp.timeout,
+			interactive:
+				typeof acp.interactive === 'boolean' ? acp.interactive : defaults.acp.interactive
 		},
 		gateway: {
 			discord: {
@@ -232,6 +243,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 let mainWindow = null;
+let tray = null;
 let cometMindProcess = null;
 let cometMindGatewayProcess = null;
 let stoppingForQuit = false;
@@ -588,6 +600,94 @@ function sendToggleWebPanel() {
 	}
 }
 
+function resolveTrayIcon() {
+	const candidates = [
+		path.join(__dirname, '../static/project_avatar_96.png'),
+		path.join(__dirname, '../buildResources/icon.png'),
+		path.join(__dirname, '../buildResources/icon.icns'),
+		path.join(__dirname, '../static/project_icon.png'),
+		path.join(__dirname, '../static/app_icon.png')
+	];
+	for (const candidate of candidates) {
+		if (!fs.existsSync(candidate)) continue;
+		let image = nativeImage.createFromPath(candidate);
+		if (image.isEmpty()) continue;
+		if (process.platform === 'darwin') {
+			// macOS menu bar icons read best at 16pt (32px backing on Retina).
+			image = image.resize({ width: 22, height: 22, quality: 'best' });
+			if (image.isEmpty()) continue;
+			return image;
+		}
+		return image.resize({ width: 18, height: 18, quality: 'best' });
+	}
+	if (!app.isPackaged) {
+		console.warn('[tray] No tray icon found; checked:', candidates.join(', '));
+	}
+	return null;
+}
+
+function ensureTray() {
+	if (process.platform !== 'darwin') return false;
+	if (tray) return true;
+	const icon = resolveTrayIcon();
+	if (!icon || icon.isEmpty()) return false;
+	tray = new Tray(icon);
+	tray.setToolTip('Cometline');
+	const menu = Menu.buildFromTemplate([
+		{
+			label: 'Show Cometline',
+			click: () => showMainWindow()
+		},
+		{ type: 'separator' },
+		{
+			label: 'Quit Cometline',
+			click: () => app.quit()
+		}
+	]);
+	tray.setContextMenu(menu);
+	tray.on('click', () => showMainWindow());
+	if (!app.isPackaged) {
+		console.log('[tray] Menu bar icon ready');
+	}
+	return true;
+}
+
+function destroyTray() {
+	if (!tray) return;
+	tray.destroy();
+	tray = null;
+}
+
+function showMainWindow() {
+	if (!mainWindow || mainWindow.isDestroyed()) {
+		void createWindow();
+		return;
+	}
+	mainWindow.show();
+	mainWindow.focus();
+	if (tray) {
+		tray.setToolTip('Cometline');
+	}
+}
+
+function hideMainWindow() {
+	if (!mainWindow || mainWindow.isDestroyed()) return;
+	if (mainWindow.isFullScreen()) {
+		mainWindow.once('leave-full-screen', () => {
+			mainWindow?.hide();
+			ensureTray();
+		});
+		mainWindow.setFullScreen(false);
+		return;
+	}
+	mainWindow.hide();
+	if (!ensureTray()) {
+		console.warn('[tray] Failed to create menu bar icon after hide');
+	} else if (tray) {
+		tray.setToolTip('Cometline (hidden)');
+	}
+}
+
 function isDarwinCloseWindowShortcut(input) {
 	return (
 		process.platform === 'darwin' &&
@@ -605,6 +705,8 @@ function handleDarwinCloseWindowShortcut(event, input) {
 	event.preventDefault();
 	if (webPanelOpen) {
 		sendCloseWebPanel();
+	} else {
+		hideMainWindow();
 	}
 	return true;
 }
@@ -789,6 +891,7 @@ ${providerEntries}
 command = ${JSON.stringify(settings.cometmind?.acp?.command ?? 'opencode')}
 args = ${JSON.stringify(settings.cometmind?.acp?.args ?? ['acp'])}
 timeout = ${JSON.stringify(settings.cometmind?.acp?.timeout ?? '30m')}
+interactive = ${settings.cometmind?.acp?.interactive ?? true}
 
 [gateway.discord]
 enabled = ${settings.cometmind?.gateway?.discord?.enabled ?? false}
@@ -932,15 +1035,85 @@ function getGatewayLogPath() {
 	return getLogPath().replace(/\.log$/, '-gateway.log');
 }
 
+function isMacOS13OrLater() {
+	return process.platform === 'darwin' && Number(os.release().split('.')[0]) >= 22;
+}
+
+function openMacLoginItemsSettings() {
+	return shell.openExternal(MACOS_LOGIN_ITEMS_SETTINGS_URL);
+}
+
+function readLoginItemState() {
+	const query =
+		process.platform === 'darwin' && isMacOS13OrLater()
+			? { type: 'mainAppService' }
+			: undefined;
+	const login = app.getLoginItemSettings(query);
+	const status = login.status ?? (login.openAtLogin ? 'enabled' : 'not-registered');
+	return {
+		openAtLogin: Boolean(login.openAtLogin),
+		status
+	};
+}
+
 function applyOpenAtLoginSetting(openAtLogin) {
-	if (process.platform !== 'darwin' && process.platform !== 'win32') return;
+	const wantsLogin = Boolean(openAtLogin);
+	if (process.platform !== 'darwin' && process.platform !== 'win32') {
+		return { openAtLogin: false, status: 'unsupported' };
+	}
+
+	const settings = { openAtLogin: wantsLogin };
+	if (process.platform === 'darwin' && isMacOS13OrLater()) {
+		settings.type = 'mainAppService';
+	} else if (process.platform === 'darwin') {
+		settings.openAsHidden = false;
+	}
+
 	try {
-		app.setLoginItemSettings({
-			openAtLogin: Boolean(openAtLogin),
-			openAsHidden: false
-		});
+		app.setLoginItemSettings(settings);
 	} catch (err) {
 		console.error('setLoginItemSettings failed:', err);
+		return {
+			openAtLogin: false,
+			status: 'error',
+			message: err instanceof Error ? err.message : String(err)
+		};
+	}
+
+	try {
+		const current = readLoginItemState();
+		const needsApproval =
+			process.platform === 'darwin' &&
+			wantsLogin &&
+			(current.status === 'requires-approval' ||
+				current.status === 'not-registered' ||
+				current.status === 'not-found');
+
+		if (needsApproval) {
+			void openMacLoginItemsSettings();
+		}
+
+		const devHint = !app.isPackaged && process.platform === 'darwin' && wantsLogin;
+
+		return {
+			openAtLogin: current.openAtLogin,
+			status: current.status,
+			needsApproval: current.status === 'requires-approval',
+			openedSettings: needsApproval,
+			isDev: devHint
+		};
+	} catch (err) {
+		console.error('getLoginItemSettings failed:', err);
+		if (process.platform === 'darwin' && wantsLogin) {
+			void openMacLoginItemsSettings();
+		}
+		return {
+			openAtLogin: wantsLogin,
+			status: 'unknown',
+			needsApproval: wantsLogin && process.platform === 'darwin',
+			openedSettings: wantsLogin && process.platform === 'darwin',
+			isDev: !app.isPackaged && process.platform === 'darwin' && wantsLogin
+		};
 	}
 }
 
@@ -1096,45 +1269,45 @@ function configureAutoUpdater() {
 
 	// We surface a button in the UI and let the user choose when to restart, so
 	// download automatically but never install behind their back.
-	autoUpdater.autoDownload = true;
-	autoUpdater.autoInstallOnAppQuit = false;
-	autoUpdater.logger = {
+	getAutoUpdater().autoDownload = true;
+	getAutoUpdater().autoInstallOnAppQuit = false;
+	getAutoUpdater().logger = {
 		info: (message) => console.log(`[auto-updater] ${message}`),
 		warn: (message) => console.warn(`[auto-updater] ${message}`),
 		error: (message) => console.error(`[auto-updater] ${message}`),
 		debug: (message) => console.debug(`[auto-updater] ${message}`)
 	};
 
-	autoUpdater.on('checking-for-update', () => {
+	getAutoUpdater().on('checking-for-update', () => {
 		setUpdateState({ status: 'checking' });
 	});
 
-	autoUpdater.on('update-available', (info) => {
+	getAutoUpdater().on('update-available', (info) => {
 		setUpdateState({ status: 'downloading', version: info?.version, percent: 0 });
 	});
 
-	autoUpdater.on('update-not-available', (info) => {
+	getAutoUpdater().on('update-not-available', (info) => {
 		setUpdateState({ status: 'idle', version: info?.version });
 	});
 
-	autoUpdater.on('download-progress', (progress) => {
+	getAutoUpdater().on('download-progress', (progress) => {
 		setUpdateState({
 			status: 'downloading',
 			percent: Math.round(progress?.percent ?? 0)
 		});
 	});
 
-	autoUpdater.on('update-downloaded', (info) => {
+	getAutoUpdater().on('update-downloaded', (info) => {
 		setUpdateState({ status: 'ready', version: info?.version });
 	});
 
-	autoUpdater.on('error', (err) => {
+	getAutoUpdater().on('error', (err) => {
 		console.error('Auto-update error:', err);
 		setUpdateState({ status: 'error', message: String(err?.message ?? err) });
 	});
 
 	const check = () => {
-		autoUpdater.checkForUpdates().catch((err) => {
+		getAutoUpdater().checkForUpdates().catch((err) => {
 			console.error('Auto-update check failed:', err);
 		});
 	};
@@ -1259,13 +1432,7 @@ async function createWindow() {
 	mainWindow.on('close', (event) => {
 		if (process.platform === 'darwin' && !stoppingForQuit && !stoppedForQuit) {
 			event.preventDefault();
-			if (mainWindow.isFullScreen()) {
-				// Leaving fullscreen first avoids a black Space lingering after hide.
-				mainWindow.once('leave-full-screen', () => mainWindow?.hide());
-				mainWindow.setFullScreen(false);
-			} else {
-				mainWindow.hide();
-			}
+			hideMainWindow();
 		}
 	});
 
@@ -1380,13 +1547,15 @@ app.whenReady().then(async () => {
 	}
 	await createWindow();
 	configureAutoUpdater();
+	if (process.platform === 'darwin') {
+		ensureTray();
+	}
 
 	app.on('activate', () => {
 		// Reopening from the Dock: re-show the warm, hidden window if it still
 		// exists (instant); only build a fresh one if it was actually destroyed.
 		if (mainWindow && !mainWindow.isDestroyed()) {
-			mainWindow.show();
-			mainWindow.focus();
+			showMainWindow();
 		} else if (BrowserWindow.getAllWindows().length === 0) {
 			createWindow();
 		}
@@ -1414,6 +1583,7 @@ app.on('before-quit', async (event) => {
 
 	event.preventDefault();
 	stoppingForQuit = true;
+	destroyTray();
 	if (updateCheckTimer) {
 		clearInterval(updateCheckTimer);
 		updateCheckTimer = null;
@@ -1520,12 +1690,16 @@ ipcMain.handle('cometline:set-discord-gateway-enabled', async (_event, enabled) 
 ipcMain.handle('cometline:get-open-at-login', () => {
 	const settings = readProviderSettings();
 	try {
-		const login = app.getLoginItemSettings();
+		const login = readLoginItemState();
 		return {
-			openAtLogin: Boolean(login.openAtLogin ?? settings.app?.openAtLogin)
+			openAtLogin: login.openAtLogin,
+			status: login.status
 		};
 	} catch {
-		return { openAtLogin: Boolean(settings.app?.openAtLogin) };
+		return {
+			openAtLogin: Boolean(settings.app?.openAtLogin),
+			status: 'unknown'
+		};
 	}
 });
 
@@ -1536,8 +1710,15 @@ ipcMain.handle('cometline:set-open-at-login', (_event, openAtLogin) => {
 		openAtLogin: Boolean(openAtLogin)
 	});
 	const saved = writeProviderSettings(settings);
-	applyOpenAtLoginSetting(saved.app.openAtLogin);
-	return { openAtLogin: saved.app.openAtLogin };
+	const result = applyOpenAtLoginSetting(saved.app.openAtLogin);
+	return {
+		openAtLogin: result.openAtLogin ?? saved.app.openAtLogin,
+		status: result.status ?? 'unknown',
+		needsApproval: Boolean(result.needsApproval),
+		openedSettings: Boolean(result.openedSettings),
+		isDev: Boolean(result.isDev),
+		message: result.message
+	};
 });
 
 // Opens a markdown link in the user's default browser. Only http(s)/mailto are
@@ -1568,7 +1749,7 @@ ipcMain.handle('cometline:get-update-state', () => updateState);
 ipcMain.handle('cometline:check-for-updates', async () => {
 	if (!app.isPackaged) return { status: 'idle' };
 	try {
-		await autoUpdater.checkForUpdates();
+		await getAutoUpdater().checkForUpdates();
 	} catch (err) {
 		console.error('Manual update check failed:', err);
 		setUpdateState({ status: 'error', message: String(err?.message ?? err) });
@@ -1584,6 +1765,6 @@ ipcMain.handle('cometline:install-update', async () => {
 	await stopDiscordGateway();
 	await stopCometMind();
 	// isSilent=true, isForceRunAfter=true so the updater relaunches the app.
-	setImmediate(() => autoUpdater.quitAndInstall(true, true));
+	setImmediate(() => getAutoUpdater().quitAndInstall(true, true));
 	return true;
 });

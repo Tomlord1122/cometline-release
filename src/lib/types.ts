@@ -11,6 +11,7 @@ export interface Session {
 	purpose?: string;
 	delegation_status?: string;
 	output_summary?: string;
+	pending_question?: string;
 	created_at: number;
 	updated_at: number;
 }
@@ -158,6 +159,13 @@ export type StreamEvent =
 			delegation_status: string;
 			summary: string;
 	  }
+	| {
+			type: 'subagent_awaiting_input';
+			child_session_id: string;
+			kind: string;
+			question: string;
+			permission_options?: { id: string; kind: string; name: string }[];
+	  }
 	| { type: 'error'; message: string; code?: string }
 	| { type: 'done' };
 
@@ -190,8 +198,17 @@ export type ChatItem =
 			childSessionId: string;
 			purpose: string;
 			agentName: string;
-			status: 'running' | 'completed' | 'failed' | 'cancelled' | 'pending';
+			status:
+				| 'running'
+				| 'completed'
+				| 'failed'
+				| 'cancelled'
+				| 'pending'
+				| 'awaiting_user'
+				| 'awaiting_permission';
 			progress: SubagentProgressEntry[];
 			summary?: string;
 			pending?: boolean;
+			pendingQuestion?: string;
+			permissionOptions?: { id: string; kind: string; name: string }[];
 	  };

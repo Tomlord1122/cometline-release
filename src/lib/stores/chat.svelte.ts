@@ -1,4 +1,4 @@
-import { abortSession, getSessionMessages, listChildSessions, streamMessage } from '$lib/client/cometmind';
+import { abortSession, getSessionMessages, listChildSessions, respondToSubagent, streamMessage } from '$lib/client/cometmind';
 import type { ChatItem, ImageAttachment, Session, StreamEvent, TranscriptItem } from '$lib/types';
 import type { ChatTurnPayload } from '$lib/actions/start-chat';
 import { reduceChatState } from '$lib/reducers/chat';
@@ -25,6 +25,10 @@ function mapDelegationStatus(
 			return 'failed';
 		case 'running':
 			return 'running';
+		case 'awaiting_user':
+			return 'awaiting_user';
+		case 'awaiting_permission':
+			return 'awaiting_permission';
 		default:
 			return 'pending';
 	}
@@ -40,7 +44,8 @@ function subagentFromChild(child: Session, agentName = 'opencode'): Extract<Chat
 		status: mapDelegationStatus(child.delegation_status),
 		progress: [],
 		summary: child.output_summary,
-		pending: child.delegation_status === 'running'
+		pending: child.delegation_status === 'running' || child.delegation_status === 'awaiting_user' || child.delegation_status === 'awaiting_permission',
+		pendingQuestion: child.pending_question || undefined
 	};
 }
 
@@ -384,6 +389,53 @@ function createChatStore() {
 		}
 	}
 
+	function patchSubagentCard(
+		childSessionId: string,
+		patch: Partial<Extract<ChatItem, { type: 'subagent' }>>
+	) {
+		items = items.map((item) =>
+			item.type === 'subagent' && item.childSessionId === childSessionId ? { ...item, ...patch } : item
+		);
+	}
+
+	async function replyToSubagent(childSessionId: string, text: string, permissionOptionId?: string) {
+		patchSubagentCard(childSessionId, {
+			status: 'running',
+			pending: true,
+			pendingQuestion: undefined,
+			permissionOptions: undefined
+		});
+		try {
+			for await (const event of respondToSubagent(childSessionId, {
+				text: text || undefined,
+				permission_option_id: permissionOptionId
+			})) {
+				const ctx = {
+					assistant: { current: null as Extract<ChatItem, { type: 'assistant' }> | null },
+					reasoning: { current: null as { text: string; pending: boolean } | null }
+				};
+				applyEvent(event, ctx);
+				if (event.type === 'done') break;
+			}
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Failed to reply to subagent';
+		}
+	}
+
+	async function cancelSubagent(childSessionId: string) {
+		try {
+			await abortSession(childSessionId);
+			patchSubagentCard(childSessionId, {
+				status: 'cancelled',
+				pending: false,
+				pendingQuestion: undefined,
+				permissionOptions: undefined
+			});
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Failed to cancel subagent';
+		}
+	}
+
 	return {
 		get sessionID() {
 			return sessionID;
@@ -406,7 +458,9 @@ function createChatStore() {
 		stageUser,
 		revealStagedUser,
 		send,
-		cancel
+		cancel,
+		replyToSubagent,
+		cancelSubagent
 	};
 }
 

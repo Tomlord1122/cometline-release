@@ -52,8 +52,8 @@
 			const shortcuts = settingsStore.settings.shortcuts;
 
 			if (isCloseWebPanelShortcut(event)) {
-				event.preventDefault();
 				if (shellStore.webPanelOpen) {
+					event.preventDefault();
 					shellStore.closeWebPanel();
 				}
 				return;

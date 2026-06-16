@@ -77,6 +77,56 @@ export function abortSession(id: string): Promise<{ status: string }> {
 	return api<{ status: string }>(`/api/v1/sessions/${id}/abort`, { method: 'POST' });
 }
 
+export interface RespondToSubagentRequest {
+	text?: string;
+	permission_option_id?: string;
+}
+
+export async function* respondToSubagent(
+	childId: string,
+	req: RespondToSubagentRequest,
+	signal?: AbortSignal
+): AsyncGenerator<StreamEvent, void, unknown> {
+	const res = await fetch(`${BASE_URL}/api/v1/sessions/${childId}/respond`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(req),
+		signal
+	});
+
+	if (!res.ok || !res.body) {
+		const text = await res.text();
+		throw new Error(`${res.status}: ${text || res.statusText}`);
+	}
+
+	const reader = res.body.getReader();
+	const decoder = new TextDecoder();
+	const parser = createSSEParser();
+
+	try {
+		while (true) {
+			if (signal?.aborted) return;
+			const { done, value } = await reader.read();
+			if (done) break;
+			const chunk = decoder.decode(value, { stream: true });
+			for (const result of parser.feed(chunk)) {
+				if (result === 'done') return;
+				if (result) yield result;
+			}
+		}
+
+		for (const result of parser.flush()) {
+			if (result === 'done') return;
+			if (result) yield result;
+		}
+	} catch (err) {
+		if (signal?.aborted || (err instanceof DOMException && err.name === 'AbortError')) return;
+		throw err;
+	} finally {
+		reader.releaseLock();
+	}
+}
+
 export async function* streamMessage(
 	id: string,
 	req: PostMessageRequest,

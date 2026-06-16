@@ -2,6 +2,7 @@ export interface CometMindACPSettings {
 	command: string;
 	args: string[];
 	timeout: string;
+	interactive: boolean;
 }
 
 export interface CometMindDiscordGatewaySettings {
@@ -46,7 +47,8 @@ export function defaultCometMindSettings(workspacePath = ''): CometMindSettings 
 		acp: {
 			command: 'opencode',
 			args: ['acp'],
-			timeout: '30m'
+			timeout: '30m',
+			interactive: true
 		},
 		gateway: {
 			discord: {
@@ -85,7 +87,9 @@ export function normalizeCometMindSettings(
 		acp: {
 			command: String(acp.command ?? defaults.acp.command).trim() || defaults.acp.command,
 			args: args.length > 0 ? args : defaults.acp.args,
-			timeout: String(acp.timeout ?? defaults.acp.timeout).trim() || defaults.acp.timeout
+			timeout: String(acp.timeout ?? defaults.acp.timeout).trim() || defaults.acp.timeout,
+			interactive:
+				typeof acp.interactive === 'boolean' ? acp.interactive : defaults.acp.interactive
 		},
 		gateway: {
 			discord: {
@@ -114,7 +118,8 @@ export function cloneCometMindSettings(settings: CometMindSettings): CometMindSe
 		acp: {
 			command: settings.acp.command,
 			args: [...settings.acp.args],
-			timeout: settings.acp.timeout
+			timeout: settings.acp.timeout,
+			interactive: settings.acp.interactive
 		},
 		gateway: {
 			discord: {

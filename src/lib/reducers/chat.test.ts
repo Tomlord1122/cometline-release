@@ -233,4 +233,40 @@ describe('reduceChatState', () => {
 			{ kind: 'tool', title: 'bash', status: 'in_progress' }
 		]);
 	});
+
+	it('merges message progress after tool entries into the same stream', () => {
+		let state = initChatState();
+		state = reduceChatState(state, {
+			type: 'subagent_started',
+			child_session_id: 'child-1',
+			purpose: 'Run tests',
+			agent_name: 'opencode'
+		});
+		state = reduceChatState(state, {
+			type: 'subagent_progress',
+			child_session_id: 'child-1',
+			progress_kind: 'message',
+			progress_text: 'Which '
+		});
+		state = reduceChatState(state, {
+			type: 'subagent_progress',
+			child_session_id: 'child-1',
+			progress_kind: 'tool_call',
+			progress_text: 'bash (pending)'
+		});
+		state = reduceChatState(state, {
+			type: 'subagent_progress',
+			child_session_id: 'child-1',
+			progress_kind: 'message',
+			progress_text: 'branch?'
+		});
+
+		const card = state.items.find((item) => item.type === 'subagent');
+		expect(card?.type).toBe('subagent');
+		if (card?.type !== 'subagent') return;
+		expect(card.progress).toEqual([
+			{ kind: 'stream', channel: 'message', text: 'Which branch?' },
+			{ kind: 'tool', title: 'bash', status: 'pending' }
+		]);
+	});
 });

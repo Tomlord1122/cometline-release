@@ -286,7 +286,21 @@
 
 	async function setOpenAtLogin(enabled: boolean) {
 		draft = { ...draft, app: { ...draft.app, openAtLogin: enabled } };
-		await window.electronAPI?.setOpenAtLogin?.(enabled);
+		const result = await window.electronAPI?.setOpenAtLogin?.(enabled);
+		if (!result) return;
+
+		draft = { ...draft, app: { ...draft.app, openAtLogin: result.openAtLogin } };
+
+		if (result.openedSettings) {
+			const devNote = result.isDev ? ' In dev mode it may appear as Electron.' : '';
+			status = result.needsApproval
+				? `macOS needs your approval in System Settings → Login Items. Enable Cometline there.${devNote}`
+				: `Opened System Settings → Login Items. Confirm Cometline is allowed to open at login.${devNote}`;
+		} else if (!enabled) {
+			status = 'Cometline will no longer open at login.';
+		} else if (result.openAtLogin) {
+			status = 'Cometline will open at login.';
+		}
 	}
 
 	async function save() {

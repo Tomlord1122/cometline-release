@@ -137,12 +137,14 @@ function appendSubagentProgress(
 
 	const channel =
 		kind === 'thought' ? 'thought' : kind === 'plan' ? 'plan' : ('message' as const);
-	const last = next[next.length - 1];
-	if (last?.kind === 'stream' && last.channel === channel) {
-		last.text += progressText;
-	} else {
-		next.push({ kind: 'stream', channel, text: progressText });
+	for (let i = next.length - 1; i >= 0; i--) {
+		const entry = next[i];
+		if (entry.kind === 'stream' && entry.channel === channel) {
+			entry.text += progressText;
+			return next;
+		}
 	}
+	next.push({ kind: 'stream', channel, text: progressText });
 	return next;
 }
 
@@ -360,9 +362,29 @@ function applyEvent(
 				...card,
 				status,
 				summary: event.summary,
-				pending: false
+				pending: false,
+				pendingQuestion: undefined,
+				permissionOptions: undefined
 			};
 		}
+		return;
+	}
+
+	if (event.type === 'subagent_awaiting_input') {
+		if (event.kind === 'resumed') return;
+		const card = items.find(
+			(item) => item.type === 'subagent' && item.childSessionId === event.child_session_id
+		) as Extract<ChatItem, { type: 'subagent' }> | undefined;
+		if (!card) return;
+		const index = items.indexOf(card);
+		const status = event.kind === 'permission' ? 'awaiting_permission' : 'awaiting_user';
+		items[index] = {
+			...card,
+			status,
+			pending: true,
+			pendingQuestion: event.question,
+			permissionOptions: event.permission_options
+		};
 		return;
 	}
 

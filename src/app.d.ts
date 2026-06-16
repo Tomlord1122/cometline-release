@@ -51,6 +51,15 @@ declare global {
 		openAtLogin: boolean;
 	}
 
+	interface OpenAtLoginState {
+		openAtLogin: boolean;
+		status?: string;
+		needsApproval?: boolean;
+		openedSettings?: boolean;
+		isDev?: boolean;
+		message?: string;
+	}
+
 	interface ProviderSettings {
 		providers: ProviderConfig[];
 		activeProviderId: string;
@@ -64,6 +73,7 @@ declare global {
 		command: string;
 		args: string[];
 		timeout: string;
+		interactive: boolean;
 	}
 
 	interface CometMindDiscordGatewaySettings {
@@ -109,8 +119,8 @@ declare global {
 			setDiscordGatewayEnabled?: (
 				enabled: boolean
 			) => Promise<{ running: boolean; enabled: boolean }>;
-			getOpenAtLogin?: () => Promise<{ openAtLogin: boolean }>;
-			setOpenAtLogin?: (enabled: boolean) => Promise<{ openAtLogin: boolean }>;
+			getOpenAtLogin?: () => Promise<OpenAtLoginState>;
+			setOpenAtLogin?: (enabled: boolean) => Promise<OpenAtLoginState>;
 			fetchProviderModels?: (config: ProviderConfig) => Promise<string[]>;
 			saveProviderSettings?: (
 				settings: ProviderSettings,
