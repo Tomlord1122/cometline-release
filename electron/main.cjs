@@ -669,11 +669,13 @@ function sendToggleWebPanel() {
 function resolveTrayIconCandidates() {
 	if (app.isPackaged) {
 		return [
+			path.join(process.resourcesPath, 'trayIcon.png'),
 			path.join(process.resourcesPath, 'trayTemplate.png'),
 			path.join(process.resourcesPath, 'icon.png')
 		];
 	}
 	return [
+		path.join(__dirname, '../buildResources/trayIcon.png'),
 		path.join(__dirname, '../buildResources/trayTemplate.png'),
 		path.join(__dirname, '../static/project_avatar_96.png'),
 		path.join(__dirname, '../buildResources/icon.png'),
@@ -691,12 +693,12 @@ function resolveTrayIcon() {
 		if (image.isEmpty()) continue;
 		if (process.platform === 'darwin') {
 			const isTemplateAsset = candidate.endsWith('trayTemplate.png');
-			if (!isTemplateAsset) {
-				// macOS menu bar icons read best at 16pt (32px backing on Retina).
-				image = image.resize({ width: 22, height: 22, quality: 'best' });
-				if (image.isEmpty()) continue;
+			// macOS menu bar icons read best at 16pt (32px backing on Retina).
+			image = image.resize({ width: 32, height: 32, quality: 'best' });
+			if (image.isEmpty()) continue;
+			if (isTemplateAsset) {
+				image.setTemplateImage(true);
 			}
-			image.setTemplateImage(true);
 			return image;
 		}
 		return image.resize({ width: 18, height: 18, quality: 'best' });

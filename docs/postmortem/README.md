@@ -19,6 +19,7 @@ Short write-ups of non-obvious bugs in the Cometline UI layer (and cross-cutting
 | 2026-06-16 | Memory extract wrong provider after successful reply      | [memory-extract-wrong-provider.md](./memory-extract-wrong-provider.md)                               |
 | 2026-06-16 | Memory embedding model resets after save (CORS PUT)       | [memory-embedding-settings-not-persisting.md](./memory-embedding-settings-not-persisting.md)         |
 | 2026-06-16 | Shift+Enter in composer sends instead of newline          | [composer-shift-enter-sends-instead-of-newline.md](./composer-shift-enter-sends-instead-of-newline.md) |
+| 2026-06-16 | macOS tray icon oversized and gray                        | [macos-tray-icon-oversized-and-gray.md](./macos-tray-icon-oversized-and-gray.md)                       |
 
 ## When to add a postmortem
 
