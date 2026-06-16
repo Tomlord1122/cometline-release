@@ -236,14 +236,15 @@ function resolveCometMindBinary() {
 	return path.join(__dirname, '..', '..', 'cometmind', 'cometmind');
 }
 
-function resolveSystemPromptPath() {
+function resolveSystemPromptPath(variant = 'default') {
 	if (process.env.COMETMIND_SYSTEM_PROMPT_PATH) {
 		return path.resolve(process.env.COMETMIND_SYSTEM_PROMPT_PATH);
 	}
+	const filename = variant === 'man' ? 'SOUL_MAN.md' : 'SOUL.md';
 	if (app.isPackaged) {
-		return path.join(process.resourcesPath, 'SOUL.md');
+		return path.join(process.resourcesPath, filename);
 	}
-	return path.join(__dirname, '..', 'SOUL.md');
+	return path.join(__dirname, '..', filename);
 }
 
 function getLogPath() {
@@ -258,11 +259,22 @@ function getSettingsPath() {
 	return path.join(dir, 'cometline-settings.json');
 }
 
-function settingsNormalizeOptions() {
+function settingsNormalizeOptions(iconVariant = 'default') {
 	return {
 		fallbackWorkspacePath: readStoredWorkspacePath() || getDefaultWorkspacePath(),
-		systemPromptPath: resolveSystemPromptPath()
+		systemPromptPath: resolveSystemPromptPath(iconVariant)
 	};
+}
+
+function readSavedIconVariant(saved) {
+	return saved?.app?.iconVariant === 'man' ? 'man' : 'default';
+}
+
+function resolveNextIconVariant(settings, current) {
+	if (settings.app?.iconVariant === 'man' || settings.app?.iconVariant === 'default') {
+		return settings.app.iconVariant;
+	}
+	return current.app?.iconVariant === 'man' ? 'man' : 'default';
 }
 
 function shortcutKeyMatches(a, b) {
@@ -341,18 +353,22 @@ function loadMacOSTrayImage(baseFilename, { template = false } = {}) {
 	return image;
 }
 
-function resolveTrayIconCandidates() {
+function resolveTrayIconCandidates(variant = 'default') {
+	const trayIcon = variant === 'man' ? 'trayIcon_man.png' : 'trayIcon.png';
 	if (process.platform === 'darwin') {
-		return ['trayIcon.png', 'trayTemplate.png'];
+		const candidates = [trayIcon];
+		if (variant === 'man') candidates.push('trayIcon.png');
+		candidates.push('trayTemplate.png');
+		return candidates;
 	}
 	if (app.isPackaged) {
-		return ['trayIcon.png', 'icon.png'];
+		return [trayIcon, 'icon.png'];
 	}
-	return ['trayIcon.png', 'icon.png'];
+	return [trayIcon, 'icon.png'];
 }
 
-function resolveTrayIcon() {
-	const candidates = resolveTrayIconCandidates();
+function resolveTrayIcon(variant = 'default') {
+	const candidates = resolveTrayIconCandidates(variant);
 	for (const filename of candidates) {
 		const resourcePath = resolveTrayResourcePath(filename);
 		if (!fs.existsSync(resourcePath)) continue;
@@ -388,8 +404,11 @@ function ensureTray() {
 	if (process.platform !== 'darwin') return false;
 	if (tray) return true;
 
-	const trayIconPath = resolveTrayResourcePath('trayIcon.png');
-	const icon = resolveTrayIcon();
+	const variant = getIconVariant();
+	const trayIconPath = resolveTrayResourcePath(
+		variant === 'man' ? 'trayIcon_man.png' : 'trayIcon.png'
+	);
+	const icon = resolveTrayIcon(variant);
 	if (!icon || icon.isEmpty()) {
 		console.warn('[tray] Failed to create menu bar icon');
 		return false;
@@ -556,7 +575,8 @@ function readProviderSettings() {
 		}
 	}
 
-	const base = parseAndNormalizeSettings(saved, settingsNormalizeOptions());
+	const iconVariant = readSavedIconVariant(saved);
+	const base = parseAndNormalizeSettings(saved, settingsNormalizeOptions(iconVariant));
 
 	// Allow env overrides for the active provider only. Apply provider first so
 	// key/baseURL/model attach to the provider selected by COMETMIND_PROVIDER.
@@ -590,6 +610,11 @@ function writeProviderSettings(settings) {
 		nextProviders.find((p) => p.enabled)?.id ??
 		nextProviders[0]?.id ??
 		'';
+	const iconVariant = resolveNextIconVariant(settings, current);
+	const nextCometMind = {
+		...(settings.cometmind ?? current.cometmind),
+		systemPromptPath: resolveSystemPromptPath(iconVariant)
+	};
 	const next = validateSettings(
 		normalizeSettings(
 			{
@@ -597,10 +622,10 @@ function writeProviderSettings(settings) {
 				activeProviderId: nextActive,
 				appearance: settings.appearance ?? current.appearance,
 				shortcuts: settings.shortcuts ?? current.shortcuts,
-				cometmind: settings.cometmind ?? current.cometmind,
-				app: settings.app ?? current.app
+				cometmind: nextCometMind,
+				app: { ...(current.app ?? {}), ...(settings.app ?? {}), iconVariant }
 			},
-			settingsNormalizeOptions()
+			settingsNormalizeOptions(iconVariant)
 		)
 	);
 	const settingsPath = getSettingsPath();
@@ -626,8 +651,7 @@ function providerEnv() {
 		...process.env,
 		COMETMIND_PROVIDER: active.id,
 		COMETMIND_MODEL: active.enabledModels[0] || active.selectedModel || active.models[0] || '',
-		COMETMIND_SYSTEM_PROMPT_PATH:
-			settings.cometmind?.systemPromptPath || resolveSystemPromptPath()
+		COMETMIND_SYSTEM_PROMPT_PATH: resolveSystemPromptPath(getIconVariant())
 	};
 	if (active.baseURL) env.COMETMIND_BASE_URL = active.baseURL;
 	if (active.apiKey) env.COMETMIND_API_KEY = active.apiKey;
@@ -725,11 +749,65 @@ async function selectWorkspacePath() {
 	return writeStoredWorkspacePath(result.filePaths[0]);
 }
 
-function getAppIconPath() {
-	const candidates = app.isPackaged
-		? [path.join(process.resourcesPath, 'icon.png')]
-		: [path.join(__dirname, '..', 'buildResources', 'icon.png')];
-	return candidates.find((candidate) => fs.existsSync(candidate));
+function getIconVariant() {
+	const variant = readProviderSettings().app?.iconVariant;
+	return variant === 'man' ? 'man' : 'default';
+}
+
+function resolveAppIconPaths(variant = 'default') {
+	if (variant === 'man') {
+		if (app.isPackaged) {
+			return [path.join(process.resourcesPath, 'app_icon_man.png')];
+		}
+		return [
+			path.join(app.getAppPath(), 'static', 'app_icon_man.png'),
+			path.join(__dirname, '..', 'static', 'app_icon_man.png')
+		];
+	}
+	if (app.isPackaged) {
+		return [path.join(process.resourcesPath, 'icon.png')];
+	}
+	return [path.join(__dirname, '..', 'buildResources', 'icon.png')];
+}
+
+function getAppIconPath(variant = getIconVariant()) {
+	return resolveAppIconPaths(variant).find((candidate) => fs.existsSync(candidate));
+}
+
+function resolveTrayImageSource(variant = getIconVariant()) {
+	const trayIconPath = resolveTrayResourcePath(
+		variant === 'man' ? 'trayIcon_man.png' : 'trayIcon.png'
+	);
+	if (fs.existsSync(trayIconPath)) return trayIconPath;
+	const fallbackTrayPath = resolveTrayResourcePath('trayIcon.png');
+	if (fs.existsSync(fallbackTrayPath)) return fallbackTrayPath;
+	return resolveTrayIcon(variant);
+}
+
+function applyIconVariant(variant = getIconVariant()) {
+	const iconPath = getAppIconPath(variant);
+	if (!iconPath) {
+		console.warn('[icon] No app icon found for variant', variant);
+		return;
+	}
+	const image = nativeImage.createFromPath(iconPath);
+	if (image.isEmpty()) {
+		console.warn('[icon] Failed to load app icon for variant', variant, iconPath);
+		return;
+	}
+	if (process.platform === 'darwin') {
+		app.dock?.setIcon(image);
+	}
+	if (mainWindow && !mainWindow.isDestroyed()) {
+		mainWindow.setIcon(image);
+	}
+	if (!tray) return;
+	const trayImageSource = resolveTrayImageSource(variant);
+	if (typeof trayImageSource === 'string') {
+		tray.setImage(trayImageSource);
+		return;
+	}
+	if (trayImageSource) tray.setImage(trayImageSource);
 }
 
 function startCometMind() {
@@ -1090,7 +1168,7 @@ function registerAppProtocol() {
 }
 
 async function createWindow() {
-	const icon = getAppIconPath();
+	const iconPath = getAppIconPath(getIconVariant());
 	mainWindow = new BrowserWindow({
 		width: 1200,
 		height: 800,
@@ -1109,7 +1187,7 @@ async function createWindow() {
 					visualEffectState: 'active'
 				}
 			: {}),
-		...(icon ? { icon } : {}),
+		...(iconPath ? { icon: iconPath } : {}),
 		show: false,
 		webPreferences: {
 			preload: path.join(__dirname, 'preload.cjs'),
@@ -1120,7 +1198,10 @@ async function createWindow() {
 		}
 	});
 	setWindowButtonPosition(WINDOW_BUTTON_OPEN_POSITION);
-	if (process.platform === 'darwin' && icon) app.dock?.setIcon(icon);
+	if (process.platform === 'darwin' && iconPath) {
+		const dockIcon = nativeImage.createFromPath(iconPath);
+		if (!dockIcon.isEmpty()) app.dock?.setIcon(dockIcon);
+	}
 
 	// Defense in depth: untrusted markdown links must never navigate the app
 	// window or spawn Electron child windows. External links are routed through
@@ -1310,6 +1391,7 @@ app.whenReady().then(async () => {
 		startDiscordGateway();
 	}
 	await createWindow();
+	applyIconVariant(startupSettings.app?.iconVariant);
 	configureAutoUpdater();
 
 	app.on('activate', () => {
@@ -1420,14 +1502,19 @@ ipcMain.handle('cometline:fetch-provider-models', async (_event, config) => {
 });
 
 ipcMain.handle('cometline:save-provider-settings', async (_event, settings, options = {}) => {
+	const previous = readProviderSettings();
 	const saved = writeProviderSettings(settings);
-	if (options.restartCometMind !== false) {
+	const iconVariantChanged =
+		(previous.app?.iconVariant ?? 'default') !== (saved.app?.iconVariant ?? 'default');
+	const shouldRestartCometMind = options.restartCometMind !== false || iconVariantChanged;
+	if (shouldRestartCometMind) {
 		await stopCometMind();
 		startCometMind();
 		void waitForHealth();
 	}
 	await syncDiscordGatewayFromSettings(saved);
 	applyOpenAtLoginSetting(saved.app?.openAtLogin);
+	applyIconVariant(saved.app?.iconVariant);
 	return saved;
 });
 

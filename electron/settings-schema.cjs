@@ -4515,7 +4515,10 @@ function defaultAppearance() {
   };
 }
 function defaultAppSettings() {
-  return { openAtLogin: false, hasSeenIntro: false };
+  return { openAtLogin: false, hasSeenIntro: false, iconVariant: "default" };
+}
+function normalizeIconVariant(value) {
+  return value === "man" ? "man" : "default";
 }
 function cloneProvider(provider) {
   return {
@@ -4625,7 +4628,8 @@ function normalizeSettings(next, options = {}) {
     shortcuts: normalizeKeyboardShortcuts(next.shortcuts),
     app: {
       openAtLogin: typeof next.app?.openAtLogin === "boolean" ? next.app.openAtLogin : defaultAppSettings().openAtLogin,
-      hasSeenIntro: typeof next.app?.hasSeenIntro === "boolean" ? next.app.hasSeenIntro : defaultAppSettings().hasSeenIntro
+      hasSeenIntro: typeof next.app?.hasSeenIntro === "boolean" ? next.app.hasSeenIntro : defaultAppSettings().hasSeenIntro,
+      iconVariant: normalizeIconVariant(next.app?.iconVariant)
     },
     cometmind
   };
@@ -4689,7 +4693,8 @@ var providerSettingsSchema = external_exports.object({
   shortcuts: external_exports.record(external_exports.string(), external_exports.unknown()),
   app: external_exports.object({
     openAtLogin: external_exports.boolean(),
-    hasSeenIntro: external_exports.boolean()
+    hasSeenIntro: external_exports.boolean(),
+    iconVariant: external_exports.enum(["default", "man"])
   }),
   cometmind: external_exports.object({
     systemPromptPath: external_exports.string(),

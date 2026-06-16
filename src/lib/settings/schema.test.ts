@@ -12,6 +12,7 @@ describe('settings schema', () => {
 	it('normalizes default providers', () => {
 		const settings = defaultSettings();
 		expect(settings.providers).toHaveLength(4);
+		expect(settings.app.iconVariant).toBe('default');
 		expect(settings.cometmind.systemPromptPath).toBe('');
 		expect(settings.cometmind.storage.retentionDays).toBe(90);
 		expect(settings.cometmind.storage.maxSessionsPerWorkspace).toBe(0);

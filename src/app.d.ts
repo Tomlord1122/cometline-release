@@ -58,6 +58,7 @@ declare global {
 	interface AppSettings {
 		openAtLogin: boolean;
 		hasSeenIntro: boolean;
+		iconVariant: 'default' | 'man';
 	}
 
 	interface OpenAtLoginState {

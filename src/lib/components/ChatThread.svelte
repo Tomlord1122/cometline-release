@@ -13,6 +13,8 @@
 		TriangleAlert
 	} from '@lucide/svelte';
 	import { chatStore, type ChatItem } from '$lib/stores/chat.svelte';
+	import { settingsStore } from '$lib/stores/settings.svelte';
+	import { projectAvatarSrc, projectAvatarSrcset } from '$lib/project-icon';
 	import { chatDebug, chatDebugEnabled, summarizeChatItem } from '../debug/chat';
 	import AssistantMarkdown from '$lib/components/AssistantMarkdown.svelte';
 	import { imageDataURL } from '$lib/files/images';
@@ -37,6 +39,8 @@
 		awaitingFirstAssistant?: boolean;
 		firstTurnFlightDone?: boolean;
 	} = $props();
+
+	let iconVariant = $derived(settingsStore.settings.app.iconVariant);
 
 	let isInitialTranscriptPaint = $state(true);
 	let isSessionSynced = $derived(chatStore.sessionID === sessionId);
@@ -642,8 +646,8 @@
 					data-flight-target="avatar"
 				>
 					<img
-						src="/project_avatar_96.png"
-						srcset="/project_avatar_96.png 96w, /project_avatar_192.png 192w, /project_avatar_384.png 384w"
+						src={projectAvatarSrc(iconVariant, 96)}
+						srcset={projectAvatarSrcset(iconVariant)}
 						sizes="(min-width: 1280px) 48px, (min-width: 1024px) 44px, (min-width: 768px) 40px, 36px"
 						alt=""
 					/>
@@ -688,8 +692,8 @@
 							data-flight-target="avatar"
 						>
 							<img
-								src="/project_avatar_96.png"
-								srcset="/project_avatar_96.png 96w, /project_avatar_192.png 192w, /project_avatar_384.png 384w"
+								src={projectAvatarSrc(iconVariant, 96)}
+								srcset={projectAvatarSrcset(iconVariant)}
 								sizes="(min-width: 1280px) 48px, (min-width: 1024px) 44px, (min-width: 768px) 40px, 36px"
 								alt=""
 							/>
@@ -712,8 +716,8 @@
 							class="avatar-mini size-9 shrink-0 rounded-full border border-gray-400 md:size-10 lg:size-11 xl:size-12"
 						>
 							<img
-								src="/project_avatar_96.png"
-								srcset="/project_avatar_96.png 96w, /project_avatar_192.png 192w, /project_avatar_384.png 384w"
+								src={projectAvatarSrc(iconVariant, 96)}
+								srcset={projectAvatarSrcset(iconVariant)}
 								sizes="(min-width: 1280px) 48px, (min-width: 1024px) 44px, (min-width: 768px) 40px, 36px"
 								alt=""
 							/>

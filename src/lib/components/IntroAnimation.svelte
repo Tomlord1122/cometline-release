@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import { shellStore } from '$lib/stores/shell.svelte';
 	import { settingsStore } from '$lib/stores/settings.svelte';
+	import { projectAvatarSrc, projectAvatarSrcset } from '$lib/project-icon';
 	import { rectStyle } from '$lib/first-turn-flight';
 
 	// ──────────────────────────────────────────────────────────────────────────
@@ -41,6 +42,8 @@
 	let projectIconRef = $state<HTMLImageElement | null>(null);
 	let showFlyIcon = $state(false);
 	let flyIconStyle = $state('');
+
+	let iconVariant = $derived(settingsStore.settings.app.iconVariant);
 
 	const GLOW = () => settingsStore.settings.appearance.heroComposer.glowColor || '#72c0ff';
 
@@ -352,8 +355,8 @@
 {#if showFlyIcon}
 	<div class="fly-icon" style={flyIconStyle} aria-hidden="true">
 		<img
-			src="/project_avatar_192.png"
-			srcset="/project_avatar_96.png 96w, /project_avatar_192.png 192w, /project_avatar_384.png 384w"
+			src={projectAvatarSrc(iconVariant, 192)}
+			srcset={projectAvatarSrcset(iconVariant)}
 			sizes="82px"
 			alt=""
 		/>
@@ -381,8 +384,8 @@
 			class="project-icon"
 			class:in={showWordmark}
 			class:is-flying={showFlyIcon}
-			src="/project_avatar_192.png"
-			srcset="/project_avatar_96.png 96w, /project_avatar_192.png 192w, /project_avatar_384.png 384w"
+			src={projectAvatarSrc(iconVariant, 192)}
+			srcset={projectAvatarSrcset(iconVariant)}
 			sizes="82px"
 			alt=""
 		/>

@@ -1,11 +1,15 @@
 <script lang="ts">
+	import { settingsStore } from '$lib/stores/settings.svelte';
+	import { projectAvatarSrc, projectAvatarSrcset } from '$lib/project-icon';
+
+	let iconVariant = $derived(settingsStore.settings.app.iconVariant);
 </script>
 
 <div class="empty-state">
 	<div class="avatar rounded-full border border-gray-400" aria-hidden="true">
 		<img
-			src="/project_avatar_192.png"
-			srcset="/project_avatar_96.png 96w, /project_avatar_192.png 192w, /project_avatar_384.png 384w"
+			src={projectAvatarSrc(iconVariant, 192)}
+			srcset={projectAvatarSrcset(iconVariant)}
 			sizes="82px"
 			alt=""
 		/>

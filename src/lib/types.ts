@@ -77,9 +77,12 @@ export type KeyboardShortcuts = Partial<Record<ShortcutAction, ShortcutBinding>>
 
 import type { CometMindSettings } from '$lib/cometmind-settings';
 
+export type IconVariant = 'default' | 'man';
+
 export interface AppSettings {
 	openAtLogin: boolean;
 	hasSeenIntro: boolean;
+	iconVariant: IconVariant;
 }
 
 export interface ProviderSettings {

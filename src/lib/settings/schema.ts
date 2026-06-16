@@ -6,6 +6,7 @@ import {
 import { defaultKeyboardShortcuts, normalizeKeyboardShortcuts } from '../keyboard-shortcuts';
 import type {
 	AppSettings,
+	IconVariant,
 	AppearanceSettings,
 	CaretTrailSettings,
 	ProviderConfig,
@@ -389,7 +390,11 @@ function defaultAppearance(): AppearanceSettings {
 }
 
 function defaultAppSettings(): AppSettings {
-	return { openAtLogin: false, hasSeenIntro: false };
+	return { openAtLogin: false, hasSeenIntro: false, iconVariant: 'default' };
+}
+
+function normalizeIconVariant(value: unknown): IconVariant {
+	return value === 'man' ? 'man' : 'default';
 }
 
 export function cloneProvider(provider: ProviderConfig): ProviderConfig {
@@ -552,7 +557,8 @@ export function normalizeSettings(
 			hasSeenIntro:
 				typeof next.app?.hasSeenIntro === 'boolean'
 					? next.app.hasSeenIntro
-					: defaultAppSettings().hasSeenIntro
+					: defaultAppSettings().hasSeenIntro,
+			iconVariant: normalizeIconVariant(next.app?.iconVariant)
 		},
 		cometmind
 	};
@@ -623,7 +629,8 @@ const providerSettingsSchema = z.object({
 	shortcuts: z.record(z.string(), z.unknown()),
 	app: z.object({
 		openAtLogin: z.boolean(),
-		hasSeenIntro: z.boolean()
+		hasSeenIntro: z.boolean(),
+		iconVariant: z.enum(['default', 'man'])
 	}),
 	cometmind: z.object({
 		systemPromptPath: z.string(),

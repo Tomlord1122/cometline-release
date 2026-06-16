@@ -2,7 +2,9 @@
 	import { tick } from 'svelte';
 	import UserBubbleFlight from '$lib/components/UserBubbleFlight.svelte';
 	import { afterPaint, rectStyle, waitForSelector } from '$lib/first-turn-flight';
-import type { ImageAttachment } from '$lib/types';
+	import { settingsStore } from '$lib/stores/settings.svelte';
+	import { projectAvatarSrc, projectAvatarSrcset } from '$lib/project-icon';
+	import type { ImageAttachment } from '$lib/types';
 
 	interface Props {
 		root: HTMLElement | null;
@@ -28,6 +30,7 @@ import type { ImageAttachment } from '$lib/types';
 
 	let active = $state(false);
 	let avatarFlightStyle = $state('');
+	let iconVariant = $derived(settingsStore.settings.app.iconVariant);
 	let showAvatarFlight = $state(false);
 
 	export function run(text: string, images?: ImageAttachment[]): void {
@@ -115,8 +118,8 @@ import type { ImageAttachment } from '$lib/types';
 		style={avatarFlightStyle}
 	>
 		<img
-			src="/project_avatar_192.png"
-			srcset="/project_avatar_96.png 96w, /project_avatar_192.png 192w, /project_avatar_384.png 384w"
+			src={projectAvatarSrc(iconVariant, 192)}
+			srcset={projectAvatarSrcset(iconVariant)}
 			sizes="82px"
 			alt=""
 		/>

@@ -33,6 +33,8 @@
 	import SettingsMemoryPanel from '$lib/components/SettingsMemoryPanel.svelte';
 	import SettingsShortcutsPanel from '$lib/components/SettingsShortcutsPanel.svelte';
 	import { cloneCometMindSettings, normalizeCometMindSettings } from '$lib/cometmind-settings';
+	import { ICON_VARIANT_OPTIONS, projectAvatarSrc } from '$lib/project-icon';
+	import type { IconVariant } from '$lib/types';
 	import type { MemorySettings } from '$lib/client/cometmind';
 	import { onMount } from 'svelte';
 
@@ -95,7 +97,8 @@
 			shortcuts: cloneShortcuts(settings),
 			app: {
 				openAtLogin: settings.app?.openAtLogin ?? false,
-				hasSeenIntro: settings.app?.hasSeenIntro ?? false
+				hasSeenIntro: settings.app?.hasSeenIntro ?? false,
+				iconVariant: settings.app?.iconVariant ?? 'default'
 			},
 			cometmind: cloneCometMindSettings(normalizeCometMindSettings(settings.cometmind))
 		};
@@ -272,7 +275,11 @@
 		return JSON.stringify(settingsStore.settings.providers) !== JSON.stringify(next.providers);
 	}
 
-	function saveStatusMessage(section: SettingsSection, restartCometMind: boolean) {
+	function saveStatusMessage(
+		section: SettingsSection,
+		restartCometMind: boolean,
+		iconVariantChanged = false
+	) {
 		switch (section) {
 			case 'providers':
 				return restartCometMind
@@ -288,6 +295,10 @@
 					: 'CometMind runtime saved.';
 			case 'general':
 				return 'General settings saved.';
+			case 'about':
+				return iconVariantChanged || restartCometMind
+					? 'Project icon saved. CometMind is restarting with the matching SOUL persona.'
+					: 'Project icon settings saved.';
 			case 'memory':
 				return 'Memory settings saved.';
 			default:
@@ -361,8 +372,12 @@
 			draft.providers[0];
 		const payload: ProviderSettings = providerPayloadFromDraft();
 		payload.activeProviderId = activeProvider?.id ?? '';
+		const iconVariantChanged =
+			settingsStore.settings.app.iconVariant !== draft.app.iconVariant;
 		const restartCometMind =
-			providersNeedRestart(payload) || cometmindNeedsRestart(payload);
+			providersNeedRestart(payload) ||
+			cometmindNeedsRestart(payload) ||
+			iconVariantChanged;
 		const { settings: saved } = await settingsStore.save(payload, { restartCometMind });
 		draft = cloneSettings(saved);
 		cometmindPanelKey += 1;
@@ -371,7 +386,7 @@
 			? preservedProviderId
 			: saved.activeProviderId || draft.providers[0]?.id || '';
 		modelSearch = preservedModelSearch;
-		status = saveStatusMessage(preservedSection, restartCometMind);
+		status = saveStatusMessage(preservedSection, restartCometMind, iconVariantChanged);
 	}
 
 	function setSelectedMethod(method: ProviderMethod) {
@@ -530,6 +545,10 @@
 	async function persistMemoryEmbedding(embedding: MemorySettings['embedding']) {
 		applyMemoryEmbeddingToDraft(embedding);
 		await settingsStore.save(providerPayloadFromDraft(), { restartCometMind: false });
+	}
+
+	function setIconVariant(iconVariant: IconVariant) {
+		draft = { ...draft, app: { ...draft.app, iconVariant } };
 	}
 
 	function methodNeedsFetch(method: ProviderMethod) {
@@ -890,6 +909,34 @@
 				{:else}
 					<div class="about-pane">
 						<h3>About Cometline</h3>
+						<div class="about-row icon-variant-row">
+							<div class="icon-variant-copy">
+								<span class="about-label">Project icon</span>
+								<span class="about-value">
+									Chat avatar, intro animation, Dock, menu bar, and SOUL persona
+								</span>
+							</div>
+							<div class="icon-variant-options" role="radiogroup" aria-label="Project icon style">
+								{#each ICON_VARIANT_OPTIONS as option (option.id)}
+									<button
+										type="button"
+										class="icon-variant-chip"
+										class:selected={draft.app.iconVariant === option.id}
+										role="radio"
+										aria-checked={draft.app.iconVariant === option.id}
+										onclick={() => setIconVariant(option.id)}
+									>
+										<img
+											src={projectAvatarSrc(option.id, 96)}
+											alt=""
+											width="40"
+											height="40"
+										/>
+										<span>{option.label}</span>
+									</button>
+								{/each}
+							</div>
+						</div>
 						<div class="about-row">
 							<span class="about-label">Version</span>
 							<span class="about-value">{appVersion || '—'}</span>
@@ -1557,6 +1604,54 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 		max-width: 420px;
+	}
+
+	.icon-variant-row {
+		align-items: flex-start;
+		flex-direction: column;
+		gap: 14px;
+	}
+
+	.icon-variant-copy {
+		display: grid;
+		gap: 6px;
+	}
+
+	.icon-variant-options {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 10px;
+	}
+
+	.icon-variant-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 10px;
+		border: 1px solid var(--border-soft);
+		border-radius: 14px;
+		background: rgba(255, 255, 255, 0.76);
+		padding: 8px 12px 8px 8px;
+		font: inherit;
+		font-size: 13px;
+		font-weight: 650;
+		color: var(--text-main);
+	}
+
+	.icon-variant-chip img {
+		width: 40px;
+		height: 40px;
+		border-radius: 999px;
+		object-fit: cover;
+		border: 1px solid rgba(15, 23, 42, 0.08);
+	}
+
+	.icon-variant-chip.selected {
+		border-color: rgba(0, 102, 204, 0.4);
+		box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.08);
+	}
+
+	.icon-variant-chip:hover {
+		background: rgba(15, 23, 42, 0.04);
 	}
 
 	@media (max-width: 780px) {
