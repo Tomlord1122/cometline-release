@@ -459,8 +459,8 @@
 
 	.project-icon {
 		display: block;
-		width: 82px;
-		height: 82px;
+		width: 120px;
+		height: 120px;
 		margin: 0 auto 22px;
 		border-radius: 50%;
 		box-shadow: var(--shadow-card);
