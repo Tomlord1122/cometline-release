@@ -110,6 +110,10 @@
 				"to": "trayIcon.png"
 			},
 			{
+				"from": "buildResources/trayIcon@2x.png",
+				"to": "trayIcon@2x.png"
+			},
+			{
 				"from": "buildResources/trayTemplate.png",
 				"to": "trayTemplate.png"
 			}

@@ -669,55 +669,96 @@ function sendToggleWebPanel() {
 	}
 }
 
-// macOS menu bar status items use 22pt; supply @2x (44px) template artwork.
-const MACOS_TRAY_ICON_SIZE = 44;
+// macOS menu bar icons are 16pt. Ship trayIcon.png (16px) + trayIcon@2x.png (32px);
+// Electron picks @2x on Retina when both sit in the same folder.
+function resolveTrayResourcePath(filename) {
+	if (app.isPackaged) {
+		return path.join(process.resourcesPath, filename);
+	}
+	return path.join(app.getAppPath(), 'buildResources', filename);
+}
+
+function loadMacOSTrayImage(baseFilename, { template = false } = {}) {
+	const imagePath = resolveTrayResourcePath(baseFilename);
+	if (!fs.existsSync(imagePath)) return null;
+
+	const image = nativeImage.createFromPath(imagePath);
+	if (image.isEmpty()) return null;
+
+	const size = image.getSize();
+	const scaleFactors = image.getScaleFactors();
+	// Legacy single 32px asset without an @2x pair is interpreted as 32pt (huge).
+	if (scaleFactors.length === 1 && scaleFactors[0] === 1 && size.width > 18) {
+		const resized = image.resize({ width: 16, height: 16, quality: 'best' });
+		if (resized.isEmpty()) return null;
+		if (template) resized.setTemplateImage(true);
+		return resized;
+	}
+
+	if (template) image.setTemplateImage(true);
+	return image;
+}
 
 function resolveTrayIconCandidates() {
 	if (process.platform === 'darwin') {
-		if (app.isPackaged) {
-			return [path.join(process.resourcesPath, 'trayTemplate.png')];
-		}
-		return [path.join(__dirname, '../buildResources/trayTemplate.png')];
+		return ['trayIcon.png', 'trayTemplate.png'];
 	}
 	if (app.isPackaged) {
-		return [
-			path.join(process.resourcesPath, 'trayIcon.png'),
-			path.join(process.resourcesPath, 'icon.png')
-		];
+		return ['trayIcon.png', 'icon.png'];
 	}
-	return [
-		path.join(__dirname, '../buildResources/trayIcon.png'),
-		path.join(__dirname, '../buildResources/icon.png')
-	];
+	return ['trayIcon.png', 'icon.png'];
 }
 
 function resolveTrayIcon() {
 	const candidates = resolveTrayIconCandidates();
-	for (const candidate of candidates) {
-		if (!fs.existsSync(candidate)) continue;
-		let image = nativeImage.createFromPath(candidate);
-		if (image.isEmpty()) continue;
+	for (const filename of candidates) {
+		const resourcePath = resolveTrayResourcePath(filename);
+		if (!fs.existsSync(resourcePath)) continue;
+
 		if (process.platform === 'darwin') {
-			image = image.resize({ width: MACOS_TRAY_ICON_SIZE, height: MACOS_TRAY_ICON_SIZE, quality: 'best' });
-			if (image.isEmpty()) continue;
-			image.setTemplateImage(true);
-			return image;
+			const isTemplateAsset = filename === 'trayTemplate.png';
+			const image = loadMacOSTrayImage(filename, { template: isTemplateAsset });
+			if (image) {
+				if (!app.isPackaged) {
+					console.log(
+						'[tray] Using',
+						resourcePath,
+						image.getSize(),
+						image.getScaleFactors()
+					);
+				}
+				return image;
+			}
+			continue;
 		}
-		return image.resize({ width: 18, height: 18, quality: 'best' });
+
+		const source = nativeImage.createFromPath(resourcePath);
+		if (source.isEmpty()) continue;
+		return source.resize({ width: 18, height: 18, quality: 'best' });
 	}
-	console.warn('[tray] No tray icon found; checked:', candidates.join(', '));
+
+	const checked = candidates.map((name) => resolveTrayResourcePath(name));
+	console.warn('[tray] No tray icon found; checked:', checked.join(', '));
 	return null;
 }
 
 function ensureTray() {
 	if (process.platform !== 'darwin') return false;
 	if (tray) return true;
+
+	const trayIconPath = resolveTrayResourcePath('trayIcon.png');
 	const icon = resolveTrayIcon();
 	if (!icon || icon.isEmpty()) {
 		console.warn('[tray] Failed to create menu bar icon');
 		return false;
 	}
-	tray = new Tray(icon);
+
+	// Prefer the file path on macOS so Electron loads trayIcon@2x.png for Retina.
+	// Passing a NativeImage object can fail to show when dimensions look correct in logs.
+	const trayImageSource = fs.existsSync(trayIconPath) ? trayIconPath : icon;
+	tray = new Tray(trayImageSource);
+	// Keep a strong reference; a collected Tray can vanish from the menu bar in dev.
+	global.__cometlineTray = tray;
 	tray.setToolTip('Cometline');
 	const menu = Menu.buildFromTemplate([
 		{
@@ -732,8 +773,18 @@ function ensureTray() {
 	]);
 	tray.setContextMenu(menu);
 	tray.on('click', () => showMainWindow());
+
+	// macOS may hide new status items when the menu bar is crowded; re-assert once.
+	setTimeout(() => {
+		if (!tray) return;
+		tray.setImage(trayImageSource);
+	}, 500);
+
 	if (!app.isPackaged) {
-		console.log('[tray] Menu bar icon ready');
+		console.log('[tray] Menu bar icon ready', trayImageSource);
+		console.log(
+			'[tray] If the icon is missing, macOS may be hiding menu bar extras — quit other tray apps or check System Settings → Control Center → Menu Bar Only.'
+		);
 	}
 	return true;
 }
