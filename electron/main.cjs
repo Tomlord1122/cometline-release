@@ -137,6 +137,15 @@ function defaultCometMindSettings(workspacePath = '') {
 			includeClaude: true,
 			mirrorToCometMind: false
 		},
+		memory: {
+			embedding: {
+				providerId: '',
+				provider: '',
+				model: '',
+				baseURL: '',
+				apiKey: ''
+			}
+		},
 		gateway: {
 			discord: {
 				enabled: false,
@@ -174,6 +183,8 @@ function normalizeCometMindSettings(input, workspacePath = '') {
 	const defaults = defaultCometMindSettings(workspacePath);
 	const acp = input?.acp ?? {};
 	const skills = input?.skills ?? {};
+	const memory = input?.memory ?? {};
+	const embedding = memory?.embedding ?? {};
 	const discord = input?.gateway?.discord ?? {};
 	const args = Array.isArray(acp.args)
 		? acp.args.map((a) => String(a).trim()).filter(Boolean)
@@ -204,6 +215,15 @@ function normalizeCometMindSettings(input, workspacePath = '') {
 				typeof skills.mirrorToCometMind === 'boolean'
 					? skills.mirrorToCometMind
 					: defaults.skills.mirrorToCometMind
+		},
+		memory: {
+			embedding: {
+				providerId: String(embedding.providerId ?? defaults.memory.embedding.providerId).trim(),
+				provider: String(embedding.provider ?? defaults.memory.embedding.provider).trim(),
+				model: String(embedding.model ?? defaults.memory.embedding.model).trim(),
+				baseURL: String(embedding.baseURL ?? defaults.memory.embedding.baseURL).trim(),
+				apiKey: String(embedding.apiKey ?? defaults.memory.embedding.apiKey).trim()
+			}
 		},
 		gateway: {
 			discord: {
@@ -923,6 +943,13 @@ roots = ${JSON.stringify(settings.cometmind?.skills?.roots ?? [])}
 include_opencode = ${settings.cometmind?.skills?.includeOpenCode ?? true}
 include_claude = ${settings.cometmind?.skills?.includeClaude ?? true}
 mirror_to_cometmind = ${settings.cometmind?.skills?.mirrorToCometMind ?? false}
+
+[memory.embedding]
+provider_id = ${JSON.stringify(settings.cometmind?.memory?.embedding?.providerId ?? '')}
+provider = ${JSON.stringify(settings.cometmind?.memory?.embedding?.provider ?? '')}
+model = ${JSON.stringify(settings.cometmind?.memory?.embedding?.model ?? '')}
+base_url = ${JSON.stringify(settings.cometmind?.memory?.embedding?.baseURL ?? '')}
+api_key = ${JSON.stringify(settings.cometmind?.memory?.embedding?.apiKey ?? '')}
 
 [gateway.discord]
 enabled = ${settings.cometmind?.gateway?.discord?.enabled ?? false}

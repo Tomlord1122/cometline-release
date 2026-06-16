@@ -32,6 +32,7 @@
 	import SettingsMemoryPanel from '$lib/components/SettingsMemoryPanel.svelte';
 	import SettingsShortcutsPanel from '$lib/components/SettingsShortcutsPanel.svelte';
 	import { cloneCometMindSettings, normalizeCometMindSettings } from '$lib/cometmind-settings';
+	import type { MemorySettings } from '$lib/client/cometmind';
 	import { onMount } from 'svelte';
 
 	type SettingsSection = 'providers' | 'cometmind' | 'memory' | 'general' | 'appearance' | 'shortcuts' | 'about';
@@ -87,7 +88,8 @@
 			providers: settings.providers.map(cloneProvider),
 			activeProviderId: settings.activeProviderId,
 			appearance: {
-				heroComposer: { ...settings.appearance.heroComposer }
+				heroComposer: { ...settings.appearance.heroComposer },
+				caretTrail: { ...settings.appearance.caretTrail }
 			},
 			shortcuts: cloneShortcuts(settings),
 			app: { openAtLogin: settings.app?.openAtLogin ?? false },
@@ -323,7 +325,8 @@
 			providers: draft.providers.map(cloneProvider),
 			activeProviderId: activeProvider?.id ?? '',
 			appearance: {
-				heroComposer: { ...draft.appearance.heroComposer }
+				heroComposer: { ...draft.appearance.heroComposer },
+				caretTrail: { ...draft.appearance.caretTrail }
 			},
 			shortcuts: cloneShortcuts(draft),
 			app: { ...draft.app },
@@ -432,6 +435,40 @@
 				}
 			}
 		};
+	}
+
+	async function persistMemoryEmbedding(embedding: MemorySettings['embedding']) {
+		const nextDraft = {
+			...draft,
+			cometmind: {
+				...draft.cometmind,
+				memory: {
+					...draft.cometmind.memory,
+					embedding: {
+						providerId: embedding.provider_id,
+						provider: embedding.provider,
+						model: embedding.model,
+						baseURL: embedding.base_url,
+						apiKey: embedding.api_key ?? ''
+					}
+				}
+			}
+		};
+		draft = nextDraft;
+		await settingsStore.save(
+			{
+				providers: nextDraft.providers.map(cloneProvider),
+				activeProviderId: nextDraft.activeProviderId,
+				appearance: {
+					heroComposer: { ...nextDraft.appearance.heroComposer },
+					caretTrail: { ...nextDraft.appearance.caretTrail }
+				},
+				shortcuts: cloneShortcuts(nextDraft),
+				app: { ...nextDraft.app },
+				cometmind: cloneCometMindSettings(nextDraft.cometmind)
+			},
+			{ restartCometMind: false }
+		);
 	}
 
 	function methodNeedsFetch(method: ProviderMethod) {
@@ -759,7 +796,10 @@
 						{/if}
 					</div>
 				{:else if activeSection === 'appearance'}
-					<SettingsAppearancePanel bind:appearance={draft.appearance.heroComposer} />
+					<SettingsAppearancePanel
+						bind:appearance={draft.appearance.heroComposer}
+						bind:caretTrail={draft.appearance.caretTrail}
+					/>
 				{:else if activeSection === 'general'}
 					<SettingsGeneralPanel
 						bind:openAtLogin={draft.app.openAtLogin}
@@ -776,7 +816,11 @@
 					{/key}
 				{:else if activeSection === 'memory'}
 					{#key memoryPanelKey}
-						<SettingsMemoryPanel bind:this={memoryPanel} providers={draft.providers} />
+						<SettingsMemoryPanel
+							bind:this={memoryPanel}
+							providers={draft.providers}
+							onEmbeddingSaved={persistMemoryEmbedding}
+						/>
 					{/key}
 				{:else if activeSection === 'shortcuts'}
 					<SettingsShortcutsPanel shortcuts={draft.shortcuts} onChange={updateShortcut} />

@@ -25,9 +25,10 @@
 
 	interface Props {
 		providers?: ProviderConfig[];
+		onEmbeddingSaved?: (embedding: MemorySettings['embedding']) => void | Promise<void>;
 	}
 
-	let { providers = [] }: Props = $props();
+	let { providers = [], onEmbeddingSaved }: Props = $props();
 
 	let settings = $state<MemorySettings | null>(null);
 	let memories = $state<MemoryResource[]>([]);
@@ -37,50 +38,66 @@
 	let loading = $state(true);
 	let saving = $state(false);
 	let compacting = $state(false);
-	let userEmbeddingKey = $state<string | null>(null);
+	let selectedEmbeddingKey = $state('');
 
 	let loadError = $state('');
 
 	const embeddingOptions = $derived(listEmbeddingModelOptions(providers));
 
-	const savedEmbeddingKey = $derived.by(() => {
-		if (!settings) return '';
+	function embeddingKeyForSettings(next: MemorySettings | null) {
+		if (!next) return '';
 		const match = resolveEmbeddingSelection(
 			providers,
-			settings.embedding.provider_id,
-			settings.embedding.model
+			next.embedding.provider_id,
+			next.embedding.model
 		);
 		return match ? embeddingOptionKey(match) : '';
-	});
+	}
 
-	const selectedEmbeddingKey = $derived.by(() => {
-		if (
-			userEmbeddingKey &&
-			embeddingOptions.some((opt) => embeddingOptionKey(opt) === userEmbeddingKey)
-		) {
-			return userEmbeddingKey;
-		}
-		return savedEmbeddingKey;
-	});
-
-	function applyEmbeddingSelection() {
+	$effect(() => {
 		if (!settings) return;
+		if (
+			selectedEmbeddingKey &&
+			embeddingOptions.some((opt) => embeddingOptionKey(opt) === selectedEmbeddingKey)
+		) {
+			return;
+		}
+		selectedEmbeddingKey = embeddingKeyForSettings(settings);
+	});
+
+	function applyEmbeddingSelection(): MemorySettings | null {
+		if (!settings) return null;
 		const option = embeddingOptions.find(
 			(opt) => embeddingOptionKey(opt) === selectedEmbeddingKey
 		);
 		if (!option) {
-			settings.embedding.provider_id = '';
-			settings.embedding.provider = '';
-			settings.embedding.model = '';
-			settings.embedding.base_url = '';
-			settings.embedding.api_key = '';
-			return;
+			const next = {
+				...settings,
+				embedding: {
+					...settings.embedding,
+					provider_id: '',
+					provider: '',
+					model: '',
+					base_url: '',
+					api_key: ''
+				}
+			};
+			settings = next;
+			return next;
 		}
-		settings.embedding.provider_id = option.providerId;
-		settings.embedding.provider = embeddingProviderForMethod(option.method);
-		settings.embedding.model = option.model;
-		settings.embedding.base_url = option.baseURL;
-		settings.embedding.api_key = option.apiKey;
+		const next = {
+			...settings,
+			embedding: {
+				...settings.embedding,
+				provider_id: option.providerId,
+				provider: embeddingProviderForMethod(option.method),
+				model: option.model,
+				base_url: option.baseURL,
+				api_key: option.apiKey
+			}
+		};
+		settings = next;
+		return next;
 	}
 
 	onMount(() => {
@@ -94,13 +111,13 @@
 		try {
 			const [s, list] = await Promise.all([getMemorySettings(), listMemories()]);
 			settings = s;
-			userEmbeddingKey = null;
+			selectedEmbeddingKey = embeddingKeyForSettings(s);
 			memories = list.memories ?? [];
 		} catch (error) {
 			loadError =
 				error instanceof Error ? error.message : 'Failed to load memory settings';
 			settings = defaultMemorySettings();
-			userEmbeddingKey = null;
+			selectedEmbeddingKey = '';
 			memories = [];
 		} finally {
 			loading = false;
@@ -109,12 +126,14 @@
 
 	async function saveSettings() {
 		if (!settings) return;
-		applyEmbeddingSelection();
+		const payload = applyEmbeddingSelection();
+		if (!payload) return;
 		saving = true;
 		status = '';
 		try {
-			settings = await putMemorySettings(settings);
-			userEmbeddingKey = null;
+			settings = await putMemorySettings(payload);
+			selectedEmbeddingKey = embeddingKeyForSettings(settings) || selectedEmbeddingKey;
+			await onEmbeddingSaved?.(settings.embedding);
 			status = 'Memory settings saved.';
 		} catch (error) {
 			status = error instanceof Error ? error.message : 'Failed to save settings';
@@ -247,9 +266,9 @@
 						</p>
 					{:else}
 						<select
-							value={selectedEmbeddingKey}
+							bind:value={selectedEmbeddingKey}
 							onchange={(event) => {
-								userEmbeddingKey = event.currentTarget.value;
+								selectedEmbeddingKey = event.currentTarget.value;
 							}}
 						>
 							<option value="">Select embedding model…</option>

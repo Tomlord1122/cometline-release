@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { HeroComposerAppearance } from '$lib/types';
+	import type { CaretTrailSettings, HeroComposerAppearance } from '$lib/types';
 	import {
 		DEFAULT_HERO_COMPOSER_APPEARANCE,
 		HERO_COMPOSER_PRESETS,
@@ -8,8 +8,9 @@
 	} from '$lib/hero-composer-appearance';
 
 	let {
-		appearance = $bindable({ ...DEFAULT_HERO_COMPOSER_APPEARANCE })
-	}: { appearance: HeroComposerAppearance } = $props();
+		appearance = $bindable({ ...DEFAULT_HERO_COMPOSER_APPEARANCE }),
+		caretTrail = $bindable({ enabled: true, intensity: 0.72, speed: 0.68 })
+	}: { appearance: HeroComposerAppearance; caretTrail: CaretTrailSettings } = $props();
 
 	let previewStyle = $derived(heroComposerCssVarStyle(appearance));
 	let activePreset = $derived(matchHeroComposerPreset(appearance));
@@ -20,6 +21,7 @@
 
 	function resetDefaults() {
 		appearance = { ...DEFAULT_HERO_COMPOSER_APPEARANCE };
+		caretTrail = { enabled: true, intensity: 0.72, speed: 0.68 };
 	}
 </script>
 
@@ -92,6 +94,54 @@
 			<div class="preview-ring" aria-hidden="true"></div>
 		</div>
 	</div>
+
+	<div class="caret-panel">
+		<div class="caret-heading">
+			<div>
+				<h3>Input caret trail</h3>
+				<p>The custom caret color follows the Hero glow color above.</p>
+			</div>
+			<button
+				class="switch"
+				class:on={caretTrail.enabled}
+				role="switch"
+				aria-checked={caretTrail.enabled}
+				aria-label="Toggle input caret trail"
+				type="button"
+				onclick={() => (caretTrail = { ...caretTrail, enabled: !caretTrail.enabled })}
+			>
+				<span></span>
+			</button>
+		</div>
+
+		<div class="slider-grid">
+			<label>
+				<span>Trail intensity</span>
+				<input
+					type="range"
+					min="0"
+					max="1"
+					step="0.01"
+					value={caretTrail.intensity}
+					oninput={(e) =>
+						(caretTrail = { ...caretTrail, intensity: Number(e.currentTarget.value) })}
+				/>
+			</label>
+
+			<label>
+				<span>Animation speed</span>
+				<input
+					type="range"
+					min="0"
+					max="1"
+					step="0.01"
+					value={caretTrail.speed}
+					oninput={(e) =>
+						(caretTrail = { ...caretTrail, speed: Number(e.currentTarget.value) })}
+				/>
+			</label>
+		</div>
+	</div>
 </section>
 
 <style>
@@ -103,33 +153,51 @@
 	}
 
 	.appearance-heading,
+	.caret-heading,
 	.color-field,
 	.preset-row {
 		display: flex;
 		align-items: center;
 	}
 
-	.appearance-heading {
+	.appearance-heading,
+	.caret-heading {
 		justify-content: space-between;
 		gap: 12px;
 		margin-bottom: 16px;
 	}
 
 	.appearance-heading h3,
-	.appearance-heading p {
+	.appearance-heading p,
+	.caret-heading h3,
+	.caret-heading p {
 		margin: 0;
 	}
 
-	.appearance-heading h3 {
+	.appearance-heading h3,
+	.caret-heading h3 {
 		font-size: 15px;
 		font-weight: 700;
 	}
 
-	.appearance-heading p {
+	.appearance-heading p,
+	.caret-heading p {
 		margin-top: 4px;
 		font-size: 12px;
 		line-height: 1.45;
 		color: var(--text-muted);
+	}
+
+	.caret-panel {
+		margin-top: 14px;
+		padding-top: 14px;
+		border-top: 1px solid var(--border-soft);
+	}
+
+	.slider-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 14px;
 	}
 
 	.appearance-grid {
@@ -233,6 +301,10 @@
 		outline: none;
 	}
 
+	input[type='range'] {
+		accent-color: var(--hero-composer-glow-color);
+	}
+
 	input[type='text']:focus,
 	input[type='color']:focus {
 		border-color: rgba(0, 102, 204, 0.35);
@@ -296,8 +368,40 @@
 		background: rgba(15, 23, 42, 0.05);
 	}
 
+	.switch {
+		width: 42px;
+		height: 24px;
+		border: none;
+		border-radius: 999px;
+		padding: 3px;
+		background: rgba(15, 23, 42, 0.14);
+		transition: background 0.16s ease;
+	}
+
+	.switch span {
+		display: block;
+		width: 18px;
+		height: 18px;
+		border-radius: 999px;
+		background: #fff;
+		box-shadow: 0 2px 5px rgba(15, 23, 42, 0.18);
+		transition: transform 0.16s ease;
+	}
+
+	.switch.on {
+		background: var(--hero-composer-glow-color);
+	}
+
+	.switch.on span {
+		transform: translateX(18px);
+	}
+
 	@media (max-width: 780px) {
 		.appearance-grid {
+			grid-template-columns: 1fr;
+		}
+
+		.slider-grid {
 			grid-template-columns: 1fr;
 		}
 	}

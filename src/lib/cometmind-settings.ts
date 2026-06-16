@@ -25,9 +25,20 @@ export interface CometMindSkillsSettings {
 	mirrorToCometMind: boolean;
 }
 
+export interface CometMindMemorySettings {
+	embedding: {
+		providerId: string;
+		provider: string;
+		model: string;
+		baseURL: string;
+		apiKey: string;
+	};
+}
+
 export interface CometMindSettings {
 	acp: CometMindACPSettings;
 	skills: CometMindSkillsSettings;
+	memory: CometMindMemorySettings;
 	gateway: {
 		discord: CometMindDiscordGatewaySettings;
 	};
@@ -66,6 +77,15 @@ export function defaultCometMindSettings(workspacePath = ''): CometMindSettings 
 			includeClaude: true,
 			mirrorToCometMind: false
 		},
+		memory: {
+			embedding: {
+				providerId: '',
+				provider: '',
+				model: '',
+				baseURL: '',
+				apiKey: ''
+			}
+		},
 		gateway: {
 			discord: {
 				enabled: false,
@@ -94,6 +114,8 @@ export function normalizeCometMindSettings(
 	const defaults = defaultCometMindSettings(fallbackWorkspacePath);
 	const acp: Partial<CometMindACPSettings> = input?.acp ?? {};
 	const skills: Partial<CometMindSkillsSettings> = input?.skills ?? {};
+	const memory: Partial<CometMindMemorySettings> = input?.memory ?? {};
+	const embedding: Partial<CometMindMemorySettings['embedding']> = memory.embedding ?? {};
 	const discord: Partial<CometMindDiscordGatewaySettings> = input?.gateway?.discord ?? {};
 	const args = Array.isArray(acp.args)
 		? acp.args.map((a) => String(a).trim()).filter(Boolean)
@@ -123,6 +145,15 @@ export function normalizeCometMindSettings(
 				typeof skills.mirrorToCometMind === 'boolean'
 					? skills.mirrorToCometMind
 					: defaults.skills.mirrorToCometMind
+		},
+		memory: {
+			embedding: {
+				providerId: String(embedding.providerId ?? defaults.memory.embedding.providerId).trim(),
+				provider: String(embedding.provider ?? defaults.memory.embedding.provider).trim(),
+				model: String(embedding.model ?? defaults.memory.embedding.model).trim(),
+				baseURL: String(embedding.baseURL ?? defaults.memory.embedding.baseURL).trim(),
+				apiKey: String(embedding.apiKey ?? defaults.memory.embedding.apiKey).trim()
+			}
 		},
 		gateway: {
 			discord: {
@@ -157,6 +188,9 @@ export function cloneCometMindSettings(settings: CometMindSettings): CometMindSe
 		skills: {
 			...settings.skills,
 			roots: [...settings.skills.roots]
+		},
+		memory: {
+			embedding: { ...settings.memory.embedding }
 		},
 		gateway: {
 			discord: {

@@ -1,4 +1,4 @@
-import type { ProviderConfig, ProviderSettings } from '$lib/types';
+import type { CaretTrailSettings, ProviderConfig, ProviderSettings } from '$lib/types';
 import {
 	cloneCometMindSettings,
 	defaultCometMindSettings,
@@ -148,7 +148,28 @@ function newProvider(id: string): ProviderConfig {
 
 function defaultAppearance() {
 	return {
-		heroComposer: { ...DEFAULT_HERO_COMPOSER_APPEARANCE }
+		heroComposer: { ...DEFAULT_HERO_COMPOSER_APPEARANCE },
+		caretTrail: defaultCaretTrailSettings()
+	};
+}
+
+function defaultCaretTrailSettings(): CaretTrailSettings {
+	return { enabled: true, intensity: 0.72, speed: 0.68 };
+}
+
+function normalizeUnit(value: unknown, fallback: number): number {
+	if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+	return Math.min(1, Math.max(0, value));
+}
+
+function normalizeCaretTrailSettings(
+	settings: Partial<CaretTrailSettings> | undefined
+): CaretTrailSettings {
+	const defaults = defaultCaretTrailSettings();
+	return {
+		enabled: typeof settings?.enabled === 'boolean' ? settings.enabled : defaults.enabled,
+		intensity: normalizeUnit(settings?.intensity, defaults.intensity),
+		speed: normalizeUnit(settings?.speed, defaults.speed)
 	};
 }
 
@@ -206,7 +227,8 @@ function normalizeSettings(next: Partial<ProviderSettings>): ProviderSettings {
 	);
 	const activeProviderId = firstEnabled?.id ?? next.activeProviderId ?? providers[0]?.id ?? '';
 	const appearance = {
-		heroComposer: normalizeHeroComposerAppearance(next.appearance?.heroComposer)
+		heroComposer: normalizeHeroComposerAppearance(next.appearance?.heroComposer),
+		caretTrail: normalizeCaretTrailSettings(next.appearance?.caretTrail)
 	};
 	return {
 		providers,

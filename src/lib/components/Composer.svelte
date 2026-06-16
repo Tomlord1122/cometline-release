@@ -46,6 +46,7 @@
 	let input = $state<RichComposerInput | null>(null);
 	let modelOpen = $state(false);
 	let modelSearch = $state('');
+	let modelSearchInput = $state<HTMLInputElement | null>(null);
 	let queuePreviewOpen = $state(false);
 	let queuePicker = $state<HTMLDivElement | null>(null);
 	let skillMenu = $state<HTMLDivElement | null>(null);
@@ -266,6 +267,24 @@
 		void onModelChange?.(option);
 		modelOpen = false;
 		modelSearch = '';
+	}
+
+	async function openModelMenu() {
+		if (modelStore.options.length === 0) return;
+		modelOpen = true;
+		modelSearch = '';
+		await tick();
+		modelSearchInput?.focus();
+		modelSearchInput?.select();
+	}
+
+	function toggleModelMenu() {
+		if (modelOpen) {
+			modelOpen = false;
+			modelSearch = '';
+			return;
+		}
+		void openModelMenu();
 	}
 
 	function closeModelMenu(e: FocusEvent) {
@@ -493,6 +512,8 @@
 		bind:this={input}
 		bind:value
 		{skillNames}
+		caretTrail={settingsStore.settings.appearance.caretTrail}
+		caretColor={settingsStore.settings.appearance.heroComposer.glowColor}
 		onkeydown={onKeydown}
 		placeholder={waitingForReply
 			? 'Waiting for reply…'
@@ -531,7 +552,7 @@
 						? 'Select model for new chats'
 						: 'Enable a model in Settings first'}
 					disabled={modelStore.options.length === 0}
-					onclick={() => (modelOpen = !modelOpen)}
+					onclick={toggleModelMenu}
 				>
 					<Sparkles size={14} stroke-width={1.8} />
 					<span>{modelStore.selected?.label ?? 'No enabled models'}</span>
@@ -550,6 +571,7 @@
 					<div class="model-menu" transition:fly={{ y: 6, duration: 120 }}>
 						<input
 							class="model-search"
+							bind:this={modelSearchInput}
 							bind:value={modelSearch}
 							placeholder="Search models..."
 							spellcheck="false"

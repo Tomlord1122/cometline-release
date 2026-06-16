@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { tick } from 'svelte';
+	import { onDestroy, tick } from 'svelte';
+	import type { CaretTrailSettings } from '$lib/types';
 	import { faviconUrl, domainFromUrl, isHttpUrl } from '$lib/markdown/embed';
 	import { openLink } from '$lib/open-link';
 
@@ -8,6 +9,8 @@
 		placeholder = '',
 		ariaLabel = 'Message input',
 		skillNames = [],
+		caretTrail = { enabled: true, intensity: 0.72, speed: 0.68 },
+		caretColor = '#72c0ff',
 		onkeydown,
 		onfiles
 	}: {
@@ -15,15 +18,38 @@
 		placeholder?: string;
 		ariaLabel?: string;
 		skillNames?: string[];
+		caretTrail?: CaretTrailSettings;
+		caretColor?: string;
 		onkeydown?: (e: KeyboardEvent) => void;
 		onfiles?: (files: File[]) => void;
 	} = $props();
 
+	type TrailPoint = { x: number; y: number; t: number };
+
+	let wrap = $state<HTMLDivElement | null>(null);
 	let editor = $state<HTMLDivElement | null>(null);
+	let customCaret = $state<HTMLSpanElement | null>(null);
+	let trailPath = $state<SVGPathElement | null>(null);
+	let focused = $state(false);
 	// Guard so our own DOM writes don't recursively re-trigger input handling.
 	let syncing = false;
 	// IME composition guard — Enter during candidate selection must not trigger send.
 	let composing = false;
+	let raf = 0;
+	let caretReady = $state(false);
+	let currentX = 0;
+	let currentY = 0;
+	let targetX = 0;
+	let targetY = 0;
+	let lastMeasuredX = 0;
+	let lastMeasuredY = 0;
+	let lastMeasuredAt = 0;
+	let trailPoints: TrailPoint[] = [];
+
+	let caretTrailEnabled = $derived(caretTrail.enabled);
+	let caretStyle = $derived(
+		`--rce-caret-color: ${caretColor}; --rce-trail-opacity: ${0.28 + caretTrail.intensity * 0.42}`
+	);
 
 	/**
 	 * Serializes the contenteditable DOM back to plain text. URL chips serialize
@@ -57,6 +83,106 @@
 	function readValue() {
 		if (!editor) return;
 		value = serialize(editor);
+	}
+
+	function clampUnit(value: number): number {
+		if (!Number.isFinite(value)) return 0;
+		return Math.min(1, Math.max(0, value));
+	}
+
+	function setCaretVisual(x: number, y: number) {
+		if (!customCaret) return;
+		customCaret.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+	}
+
+	function setTrailVisual(now: number) {
+		if (!trailPath) return;
+		const lifetime = 120 + clampUnit(caretTrail.intensity) * 420;
+		trailPoints = trailPoints.filter((point) => now - point.t <= lifetime);
+		if (trailPoints.length < 2) {
+			trailPath.setAttribute('d', '');
+			return;
+		}
+		trailPath.setAttribute(
+			'd',
+			trailPoints
+				.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
+				.join(' ')
+		);
+	}
+
+	function measureCaret() {
+		if (!wrap || !editor || !caretTrailEnabled || !focused) return;
+		const selection = window.getSelection();
+		if (!selection || selection.rangeCount === 0 || !selection.isCollapsed) {
+			resetCaretTrail();
+			return;
+		}
+		const range = selection.getRangeAt(0);
+		const container = range.commonAncestorContainer;
+		if (container !== editor && !editor.contains(container)) {
+			resetCaretTrail();
+			return;
+		}
+
+		const rect = range.getClientRects()[0] ?? range.getBoundingClientRect();
+		const wrapRect = wrap.getBoundingClientRect();
+		const editorRect = editor.getBoundingClientRect();
+		const lineHeight = Number.parseFloat(getComputedStyle(editor).lineHeight) || 22.5;
+		const measuredX = rect && rect.left ? rect.left - wrapRect.left : editorRect.left - wrapRect.left;
+		const measuredY = rect && rect.top ? rect.top - wrapRect.top : editorRect.top - wrapRect.top;
+		const now = performance.now();
+		const dt = lastMeasuredAt > 0 ? Math.max(8, now - lastMeasuredAt) : 16;
+		const vx = (measuredX - lastMeasuredX) / dt;
+		const vy = (measuredY - lastMeasuredY) / dt;
+		const predictionMs = 14 + clampUnit(caretTrail.speed) * 30;
+		targetX = measuredX + vx * predictionMs;
+		targetY = measuredY + vy * predictionMs;
+		lastMeasuredX = measuredX;
+		lastMeasuredY = measuredY;
+		lastMeasuredAt = now;
+		if (customCaret) customCaret.style.height = `${lineHeight}px`;
+		startCaretAnimation();
+	}
+
+	function animateCaret(now: number) {
+		const follow = 0.2 + clampUnit(caretTrail.speed) * 0.52;
+		currentX += (targetX - currentX) * follow;
+		currentY += (targetY - currentY) * follow;
+		setCaretVisual(currentX, currentY);
+		trailPoints.push({ x: currentX + 1, y: currentY + 11, t: now });
+		if (trailPoints.length > 42) trailPoints = trailPoints.slice(-42);
+		setTrailVisual(now);
+
+		if (Math.abs(targetX - currentX) > 0.35 || Math.abs(targetY - currentY) > 0.35) {
+			raf = requestAnimationFrame(animateCaret);
+		} else {
+			raf = 0;
+		}
+	}
+
+	function startCaretAnimation() {
+		if (!caretTrailEnabled || !focused) return;
+		if (!caretReady) {
+			currentX = targetX;
+			currentY = targetY;
+			caretReady = true;
+			setCaretVisual(currentX, currentY);
+		}
+		if (!raf) raf = requestAnimationFrame(animateCaret);
+	}
+
+	function resetCaretTrail() {
+		if (raf) cancelAnimationFrame(raf);
+		raf = 0;
+		caretReady = false;
+		trailPoints = [];
+		trailPath?.setAttribute('d', '');
+	}
+
+	function scheduleCaretMeasure() {
+		if (!caretTrailEnabled) return;
+		requestAnimationFrame(measureCaret);
 	}
 
 	/** Build a non-editable inline chip element for a URL. */
@@ -260,6 +386,7 @@
 		decorateEditor();
 		syncing = false;
 		readValue();
+		scheduleCaretMeasure();
 	}
 
 	function onPaste(e: ClipboardEvent) {
@@ -284,6 +411,7 @@
 		decorateEditor({ allowCaretEnd: true });
 		syncing = false;
 		readValue();
+		scheduleCaretMeasure();
 	}
 
 	function onCompositionStart() {
@@ -294,6 +422,7 @@
 		// Defer reset: some browsers fire the confirming keydown after compositionend.
 		setTimeout(() => {
 			composing = false;
+			scheduleCaretMeasure();
 		}, 0);
 	}
 
@@ -312,11 +441,22 @@
 		openLink(chip.dataset.url);
 	}
 
+	function onFocus() {
+		focused = true;
+		scheduleCaretMeasure();
+	}
+
+	function onBlur() {
+		focused = false;
+		resetCaretTrail();
+	}
+
 	function insertPlainText(text: string) {
 		if (!editor) return;
 		focus();
 		document.execCommand('insertText', false, text);
 		readValue();
+		scheduleCaretMeasure();
 	}
 
 	export function focus() {
@@ -330,6 +470,7 @@
 			sel?.removeAllRanges();
 			sel?.addRange(range);
 		}
+		scheduleCaretMeasure();
 	}
 
 	export async function focusAsync() {
@@ -353,12 +494,14 @@
 		decorateEditor({ allowCaretEnd: true });
 		syncing = false;
 		readValue();
+		scheduleCaretMeasure();
 	}
 
 	/** Clears the editor (used after send). */
 	export function clear() {
 		if (editor) editor.innerHTML = '';
 		value = '';
+		resetCaretTrail();
 	}
 
 	// Keep the DOM in sync when `value` is set externally to empty (e.g. cleared
@@ -376,18 +519,47 @@
 		decorateEditor();
 		syncing = false;
 		readValue();
+		scheduleCaretMeasure();
 	});
+
+	$effect(() => {
+		if (!caretTrailEnabled) {
+			resetCaretTrail();
+			return;
+		}
+		const onSelectionChange = () => scheduleCaretMeasure();
+		const onResize = () => scheduleCaretMeasure();
+		document.addEventListener('selectionchange', onSelectionChange);
+		window.addEventListener('resize', onResize);
+		scheduleCaretMeasure();
+		return () => {
+			document.removeEventListener('selectionchange', onSelectionChange);
+			window.removeEventListener('resize', onResize);
+			resetCaretTrail();
+		};
+	});
+
+	onDestroy(resetCaretTrail);
 
 	let isEmpty = $derived(value.trim() === '');
 </script>
 
-<div class="rce-wrap">
+<div bind:this={wrap} class="rce-wrap" style={caretStyle}>
 	{#if isEmpty}
 		<div class="rce-placeholder" aria-hidden="true">{placeholder}</div>
+	{/if}
+	{#if caretTrailEnabled}
+		<div class="rce-caret-layer" class:visible={focused && caretReady} aria-hidden="true">
+			<svg class="rce-trail" focusable="false">
+				<path bind:this={trailPath}></path>
+			</svg>
+			<span bind:this={customCaret} class="rce-caret"></span>
+		</div>
 	{/if}
 	<div
 		bind:this={editor}
 		class="rce-editor"
+		class:trail-enabled={caretTrailEnabled}
 		contenteditable="true"
 		role="textbox"
 		tabindex="0"
@@ -399,6 +571,8 @@
 		oncompositionstart={onCompositionStart}
 		oncompositionend={onCompositionEnd}
 		onclick={onEditorClick}
+		onfocus={onFocus}
+		onblur={onBlur}
 	></div>
 </div>
 
@@ -430,6 +604,64 @@
 		white-space: pre-wrap;
 		word-break: break-word;
 		font-family: inherit;
+	}
+
+	.rce-editor.trail-enabled {
+		caret-color: transparent;
+	}
+
+	.rce-caret-layer {
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+		z-index: 2;
+		overflow: hidden;
+		opacity: 0;
+		transition: opacity 0.08s ease;
+	}
+
+	.rce-caret-layer.visible {
+		opacity: 1;
+	}
+
+	.rce-trail {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		overflow: visible;
+	}
+
+	.rce-trail path {
+		fill: none;
+		stroke: var(--rce-caret-color);
+		stroke-width: 2.5;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+		opacity: var(--rce-trail-opacity);
+		filter: drop-shadow(0 0 7px var(--rce-caret-color));
+	}
+
+	.rce-caret {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 2px;
+		height: 1.5em;
+		border-radius: 999px;
+		background: var(--rce-caret-color);
+		box-shadow: 0 0 9px var(--rce-caret-color);
+		will-change: transform;
+	}
+
+	.rce-caret::after {
+		content: '';
+		position: absolute;
+		inset: -5px -4px;
+		border-radius: 999px;
+		background: var(--rce-caret-color);
+		opacity: 0.14;
+		filter: blur(5px);
 	}
 
 	.rce-editor :global(.rce-chip) {

@@ -1,4 +1,5 @@
 import type { ProviderConfig, ProviderMethod, Session } from '$lib/types';
+import { isEmbeddingModelName } from '$lib/embedding-models';
 
 export interface ModelOption {
 	id: string;
@@ -19,14 +20,16 @@ function labelForModel(modelID: string) {
 
 function optionsFromProvider(provider: ProviderConfig): ModelOption[] {
 	if (!provider.enabled) return [];
-	return provider.enabledModels.map((modelId) => ({
-		id: `${provider.id}:${modelId}`,
-		label: labelForModel(modelId),
-		providerId: provider.id,
-		providerName: provider.name || provider.id,
-		providerMethod: provider.method,
-		modelId
-	}));
+	return provider.enabledModels
+		.filter((modelId) => !isEmbeddingModelName(modelId))
+		.map((modelId) => ({
+			id: `${provider.id}:${modelId}`,
+			label: labelForModel(modelId),
+			providerId: provider.id,
+			providerName: provider.name || provider.id,
+			providerMethod: provider.method,
+			modelId
+		}));
 }
 
 function createModelStore() {

@@ -12,6 +12,12 @@
 	// token. A render version guards against stale async results overwriting newer
 	// output when the highlighter resolves out of order.
 	const STREAM_THROTTLE_MS = 40;
+	const REVEAL_CATCHUP_FRAMES = 24;
+	const REVEAL_MAX_CHARS_PER_FRAME = 4;
+
+	const reducedMotion =
+		typeof window !== 'undefined' &&
+		window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 	// User messages render synchronously (no Shiki/async), so we compute their
 	// HTML eagerly and show the embed chips on the very first paint — no flash of
@@ -20,8 +26,10 @@
 
 	let html = $state('');
 	let rendered = $state(false);
+	let displaySource = $state('');
 	let renderVersion = 0;
 	let throttleTimer: ReturnType<typeof setTimeout> | null = null;
+	let revealFrame = 0;
 	let lastRenderAt = 0;
 
 	async function render(text: string) {
@@ -62,10 +70,57 @@
 		}
 	}
 
+	function cancelReveal() {
+		if (revealFrame) {
+			cancelAnimationFrame(revealFrame);
+			revealFrame = 0;
+		}
+	}
+
+	function revealNextFrame(target: string) {
+		cancelReveal();
+		const step = () => {
+			revealFrame = 0;
+			if (!streaming || reducedMotion) {
+				displaySource = target;
+				return;
+			}
+			const remaining = target.length - displaySource.length;
+			if (remaining <= 0) return;
+			const chars = Math.min(
+				REVEAL_MAX_CHARS_PER_FRAME,
+				Math.max(1, Math.ceil(remaining / REVEAL_CATCHUP_FRAMES))
+			);
+			displaySource = target.slice(0, displaySource.length + chars);
+			if (displaySource.length < target.length) {
+				revealFrame = requestAnimationFrame(step);
+			}
+		};
+		revealFrame = requestAnimationFrame(step);
+	}
+
 	$effect(() => {
 		// User mode renders synchronously via the derived above; nothing to schedule.
 		if (mode === 'user') return;
-		const text = source;
+		const target = source;
+		if (!streaming || reducedMotion) {
+			cancelReveal();
+			displaySource = target;
+			return;
+		}
+		if (target.length < displaySource.length) {
+			displaySource = target;
+		}
+		if (target.length > displaySource.length) {
+			revealNextFrame(target);
+		}
+		return cancelReveal;
+	});
+
+	$effect(() => {
+		// User mode renders synchronously via the derived above; nothing to schedule.
+		if (mode === 'user') return;
+		const text = displaySource;
 		// Re-evaluate when streaming flips so the final non-throttled render lands.
 		void streaming;
 		scheduleRender(text);
@@ -91,7 +146,12 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="markdown" class:user-text={mode === 'user'} onclick={onClick}>
+<div
+	class="markdown"
+	class:user-text={mode === 'user'}
+	class:streaming-reveal={mode === 'assistant' && streaming && !reducedMotion}
+	onclick={onClick}
+>
 	{#if mode === 'user'}
 		<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 		{@html userHtml}
@@ -99,7 +159,7 @@
 		<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 		{@html html}
 	{:else}
-		<span class="markdown-plain">{source}</span>
+		<span class="markdown-plain">{displaySource}</span>
 	{/if}
 </div>
 
@@ -110,6 +170,23 @@
 		white-space: normal;
 		word-break: break-word;
 		overflow-wrap: anywhere;
+	}
+
+	.markdown.streaming-reveal {
+		-webkit-mask-image: linear-gradient(
+			to bottom,
+			#000 0,
+			#000 calc(100% - 2.4em),
+			rgba(0, 0, 0, 0.84) calc(100% - 1.1em),
+			rgba(0, 0, 0, 0.32) 100%
+		);
+		mask-image: linear-gradient(
+			to bottom,
+			#000 0,
+			#000 calc(100% - 2.4em),
+			rgba(0, 0, 0, 0.84) calc(100% - 1.1em),
+			rgba(0, 0, 0, 0.32) 100%
+		);
 	}
 
 	.markdown-plain {
@@ -320,4 +397,5 @@
 		max-width: 100%;
 		border-radius: 8px;
 	}
+
 </style>

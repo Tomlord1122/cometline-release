@@ -18,8 +18,15 @@ declare global {
 		ringColor: string;
 	}
 
+	interface CaretTrailSettings {
+		enabled: boolean;
+		intensity: number;
+		speed: number;
+	}
+
 	interface AppearanceSettings {
 		heroComposer: HeroComposerAppearance;
+		caretTrail: CaretTrailSettings;
 	}
 
 	type ShortcutAction =
@@ -96,9 +103,20 @@ declare global {
 		mirrorToCometMind: boolean;
 	}
 
+	interface CometMindMemorySettings {
+		embedding: {
+			providerId: string;
+			provider: string;
+			model: string;
+			baseURL: string;
+			apiKey: string;
+		};
+	}
+
 	interface CometMindSettings {
 		acp: CometMindACPSettings;
 		skills: CometMindSkillsSettings;
+		memory: CometMindMemorySettings;
 		gateway: {
 			discord: CometMindDiscordGatewaySettings;
 		};

@@ -91,8 +91,15 @@ export interface HeroComposerAppearance {
 	ringColor: string;
 }
 
+export interface CaretTrailSettings {
+	enabled: boolean;
+	intensity: number;
+	speed: number;
+}
+
 export interface AppearanceSettings {
 	heroComposer: HeroComposerAppearance;
+	caretTrail: CaretTrailSettings;
 }
 
 export type ShortcutAction =
