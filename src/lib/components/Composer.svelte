@@ -9,6 +9,11 @@
 	import { matchesShortcut } from '$lib/keyboard-shortcuts';
 	import RichComposerInput from '$lib/components/RichComposerInput.svelte';
 	import { listSkills } from '$lib/client/cometmind';
+	import {
+		expandBuiltinSlashCommand,
+		filterSlashMenuOptions,
+		type SlashMenuOption
+	} from '$lib/skills/slash-commands';
 	import { formatDroppedFiles, readDroppedTextFiles } from '$lib/files/dropped-files';
 	import { imageDataURL, isSupportedImageFile, readImageAttachments } from '$lib/files/images';
 	import type { ImageAttachment, SkillResource } from '$lib/types';
@@ -67,14 +72,9 @@
 	let skillMenuOpen = $derived(
 		Boolean(skillCommandMatch && skillCommandMatch[0] !== dismissedSkillCommand)
 	);
-	let filteredSkills = $derived.by(() => {
+	let filteredSlashOptions = $derived.by(() => {
 		if (!skillCommandMatch) return [];
-		if (!skillCommandQuery) return skills;
-		return skills.filter(
-			(skill) =>
-				skill.name.toLowerCase().includes(skillCommandQuery) ||
-				skill.description.toLowerCase().includes(skillCommandQuery)
-		);
+		return filterSlashMenuOptions(skillCommandQuery, skills);
 	});
 	let skillNames = $derived(skills.map((skill) => skill.name));
 	let filteredModelOptions = $derived.by(() => {
@@ -129,8 +129,8 @@
 
 	$effect(() => {
 		if (!skillMenuOpen) return;
-		if (skillHighlight >= filteredSkills.length) {
-			skillHighlight = Math.max(0, filteredSkills.length - 1);
+		if (skillHighlight >= filteredSlashOptions.length) {
+			skillHighlight = Math.max(0, filteredSlashOptions.length - 1);
 		}
 	});
 
@@ -149,9 +149,10 @@
 	});
 
 	function submit() {
-		const text = expandSkillCommand(value.trim());
+		const trimmed = value.trim();
+		const expanded = expandBuiltinSlashCommand(trimmed) ?? expandSkillCommand(trimmed);
 		if (!canSubmit || disabled || sendLocked || !modelStore.selected) return;
-		onSend(text, images.length > 0 ? images : undefined);
+		onSend(expanded, images.length > 0 ? images : undefined);
 		input?.clear();
 		value = '';
 		images = [];
@@ -209,23 +210,23 @@
 		}
 		if (e.key === 'ArrowDown') {
 			e.preventDefault();
-			if (filteredSkills.length > 0) {
-				skillHighlight = (skillHighlight + 1) % filteredSkills.length;
+			if (filteredSlashOptions.length > 0) {
+				skillHighlight = (skillHighlight + 1) % filteredSlashOptions.length;
 				void scrollHighlightedSkillIntoView();
 			}
 			return true;
 		}
 		if (e.key === 'ArrowUp') {
 			e.preventDefault();
-			if (filteredSkills.length > 0) {
-				skillHighlight = (skillHighlight - 1 + filteredSkills.length) % filteredSkills.length;
+			if (filteredSlashOptions.length > 0) {
+				skillHighlight = (skillHighlight - 1 + filteredSlashOptions.length) % filteredSlashOptions.length;
 				void scrollHighlightedSkillIntoView();
 			}
 			return true;
 		}
 		if (e.key === 'Tab' || e.key === 'Enter') {
-			const skill = filteredSkills[skillHighlight];
-			if (!skill) {
+			const option = filteredSlashOptions[skillHighlight];
+			if (!option) {
 				if (e.key === 'Tab') {
 					e.preventDefault();
 					return true;
@@ -233,7 +234,7 @@
 				return false;
 			}
 			e.preventDefault();
-			selectSkillCommand(skill);
+			selectSlashOption(option);
 			return true;
 		}
 		return false;
@@ -247,8 +248,8 @@
 		}
 	}
 
-	function selectSkillCommand(skill: SkillResource) {
-		const next = `/${skill.name} `;
+	function selectSlashOption(option: SlashMenuOption) {
+		const next = `/${option.name} `;
 		input?.setText(next);
 		value = next;
 		dismissedSkillCommand = next;
@@ -438,10 +439,10 @@
 		>
 			{#if skillsLoading && !skillsLoaded}
 				<p class="skill-command-empty">Loading skills...</p>
-			{:else if filteredSkills.length === 0}
+			{:else if filteredSlashOptions.length === 0}
 				<p class="skill-command-empty">No matching skills.</p>
 			{:else}
-				{#each filteredSkills as skill, index (skill.name)}
+				{#each filteredSlashOptions as option, index (option.kind + ':' + option.name)}
 					<button
 						type="button"
 						class="skill-command-option"
@@ -452,11 +453,11 @@
 						onpointerenter={() => (skillHighlight = index)}
 						onpointerdown={(e) => {
 							e.preventDefault();
-							selectSkillCommand(skill);
+							selectSlashOption(option);
 						}}
 					>
-						<span class="skill-command-name">/{skill.name}</span>
-						<span class="skill-command-description">{skill.description}</span>
+						<span class="skill-command-name">/{option.name}</span>
+						<span class="skill-command-description">{option.description}</span>
 					</button>
 				{/each}
 			{/if}

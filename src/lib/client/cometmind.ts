@@ -46,6 +46,29 @@ export function syncSkills(workspacePath = ''): Promise<SkillSyncResponse> {
 	return api<SkillSyncResponse>(`/api/v1/skills/sync${params}`, { method: 'POST' });
 }
 
+export async function deleteSkill(name: string, workspacePath = ''): Promise<void> {
+	const params = workspacePath ? `?${new URLSearchParams({ workspace_path: workspacePath })}` : '';
+	const res = await fetch(`${BASE_URL}/api/v1/skills/${encodeURIComponent(name)}${params}`, {
+		method: 'DELETE'
+	});
+	if (!res.ok) {
+		const body = await res.text();
+		throw new Error(`${res.status}: ${body || res.statusText}`);
+	}
+}
+
+export async function exportSkill(name: string, workspacePath = ''): Promise<Blob> {
+	const params = workspacePath ? `?${new URLSearchParams({ workspace_path: workspacePath })}` : '';
+	const res = await fetch(
+		`${BASE_URL}/api/v1/skills/${encodeURIComponent(name)}/export${params}`
+	);
+	if (!res.ok) {
+		const body = await res.text();
+		throw new Error(`${res.status}: ${body || res.statusText}`);
+	}
+	return res.blob();
+}
+
 export function createSession(req: CreateSessionRequest): Promise<Session> {
 	return api<Session>('/api/v1/sessions', {
 		method: 'POST',

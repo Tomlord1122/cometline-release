@@ -46,6 +46,9 @@ export interface SkillResource {
 	path: string;
 	source: string;
 	internal: boolean;
+	is_symlink: boolean;
+	can_delete: boolean;
+	can_export: boolean;
 }
 
 export interface SkillListResponse {

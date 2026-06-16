@@ -8,7 +8,7 @@
 	} from '$lib/cometmind-settings';
 	import type { ProviderConfig } from '$lib/types';
 	import { shellStore } from '$lib/stores/shell.svelte';
-	import { listSkills, syncSkills } from '$lib/client/cometmind';
+	import { listSkills, syncSkills, deleteSkill, exportSkill } from '$lib/client/cometmind';
 	import type { SkillResource } from '$lib/types';
 	import { onMount } from 'svelte';
 
@@ -75,6 +75,7 @@
 	let skillErrors = $state<string[]>([]);
 	let skillsBusy = $state(false);
 	let skillsStatus = $state('');
+	let deletePending = $state<string | null>(null);
 	let gatewayRunning = $state(false);
 	let gatewayBusy = $state(false);
 
@@ -106,6 +107,48 @@
 			await refreshSkills();
 		} catch (err) {
 			skillsStatus = err instanceof Error ? err.message : 'Failed to sync skills';
+		} finally {
+			skillsBusy = false;
+		}
+	}
+
+	async function onExportSkill(name: string) {
+		skillsBusy = true;
+		skillsStatus = '';
+		try {
+			const blob = await exportSkill(name, shellStore.workspacePath);
+			const url = URL.createObjectURL(blob);
+			const link = document.createElement('a');
+			link.href = url;
+			link.download = `${name}.zip`;
+			link.click();
+			URL.revokeObjectURL(url);
+			skillsStatus = `Exported ${name}.zip`;
+		} catch (err) {
+			skillsStatus = err instanceof Error ? err.message : 'Failed to export skill';
+		} finally {
+			skillsBusy = false;
+		}
+	}
+
+	function requestDeleteSkill(name: string) {
+		deletePending = name;
+	}
+
+	function cancelDeleteSkill() {
+		deletePending = null;
+	}
+
+	async function confirmDeleteSkill(name: string) {
+		skillsBusy = true;
+		skillsStatus = '';
+		try {
+			await deleteSkill(name, shellStore.workspacePath);
+			deletePending = null;
+			skillsStatus = `Deleted skill ${name}.`;
+			await refreshSkills();
+		} catch (err) {
+			skillsStatus = err instanceof Error ? err.message : 'Failed to delete skill';
 		} finally {
 			skillsBusy = false;
 		}
@@ -288,8 +331,51 @@
 			{:else}
 				{#each skills as skill (skill.name)}
 					<div class="skill-row" title={skill.path}>
-						<strong>{skill.name}</strong>
-						<p>{skill.description}</p>
+						<div class="skill-row-main">
+							<strong>{skill.name}</strong>
+							{#if skill.is_symlink}
+								<span class="skill-badge">symlink</span>
+							{/if}
+							<p>{skill.description}</p>
+						</div>
+						<div class="skill-row-actions">
+							{#if deletePending === skill.name}
+								<span class="skill-delete-prompt">Delete {skill.name}?</span>
+								<button
+									class="secondary danger"
+									type="button"
+									disabled={skillsBusy}
+									onclick={() => confirmDeleteSkill(skill.name)}
+								>
+									Confirm
+								</button>
+								<button class="secondary" type="button" disabled={skillsBusy} onclick={cancelDeleteSkill}>
+									Cancel
+								</button>
+							{:else}
+								{#if skill.can_export}
+									<button
+										class="secondary"
+										type="button"
+										disabled={skillsBusy}
+										onclick={() => onExportSkill(skill.name)}
+									>
+										Export
+									</button>
+								{/if}
+								<button
+									class="secondary danger"
+									type="button"
+									disabled={skillsBusy || !skill.can_delete}
+									title={skill.can_delete
+										? 'Delete from ~/.cometmind/skills'
+										: 'External or symlink skills cannot be deleted'}
+									onclick={() => requestDeleteSkill(skill.name)}
+								>
+									Delete
+								</button>
+							{/if}
+						</div>
 					</div>
 				{/each}
 			{/if}
@@ -479,8 +565,45 @@
 	}
 
 	.skill-row {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 12px;
 		padding: 10px 11px;
 		border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+	}
+
+	.skill-row-main {
+		min-width: 0;
+		flex: 1;
+	}
+
+	.skill-row-actions {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		flex-shrink: 0;
+	}
+
+	.skill-badge {
+		display: inline-block;
+		margin-left: 6px;
+		padding: 1px 6px;
+		border-radius: 999px;
+		font-size: 10px;
+		font-weight: 600;
+		color: var(--text-muted);
+		background: rgba(15, 23, 42, 0.06);
+		vertical-align: middle;
+	}
+
+	.skill-delete-prompt {
+		font-size: 12px;
+		color: var(--text-muted);
+	}
+
+	.skill-row .secondary.danger {
+		color: #b42318;
 	}
 
 	.skill-row:last-child {

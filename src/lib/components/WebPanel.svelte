@@ -141,11 +141,19 @@
 	});
 
 	$effect(() => {
+		const el = webviewEl;
 		if (!shellStore.hasWebPanelForSession) {
 			loading = false;
 			canGoBack = false;
 			canGoForward = false;
 			pageTitle = '';
+			// Actually unload the webview when the panel is closed so media
+			// and other background activity stops instead of continuing hidden.
+			if (el && webviewLoadedUrl !== null) {
+				el.src = 'about:blank';
+				webviewLoadedUrl = null;
+				webviewSessionId = null;
+			}
 		}
 	});
 </script>
