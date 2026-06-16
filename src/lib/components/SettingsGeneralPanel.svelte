@@ -164,11 +164,19 @@
 
 	.field input {
 		max-width: 160px;
-		padding: 8px 10px;
-		border-radius: 8px;
-		border: 1px solid var(--border-subtle);
-		background: var(--surface-elevated);
+		padding: 10px 11px;
+		border-radius: 11px;
+		border: 1px solid var(--border-soft);
+		background: rgba(255, 255, 255, 0.76);
 		color: var(--text-main);
+		font: inherit;
+		font-size: 13px;
+		outline: none;
+	}
+
+	.field input:focus {
+		border-color: rgba(0, 102, 204, 0.35);
+		box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
 	}
 
 	.field small {

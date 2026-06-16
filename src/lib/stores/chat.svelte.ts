@@ -86,8 +86,8 @@ function itemsFromTranscript(transcriptItems: TranscriptItem[]): ChatItem[] {
 				out.push({
 					id: `history-${i}`,
 					type: 'assistant',
-					text: next.text,
-					reasoning: { text: item.text, pending: false }
+					text: next.text ?? '',
+					reasoning: { text: item.text ?? '', pending: false }
 				});
 				i++;
 				continue;
@@ -99,8 +99,8 @@ function itemsFromTranscript(transcriptItems: TranscriptItem[]): ChatItem[] {
 				out.push({
 					id: `history-${i}`,
 					type: 'assistant',
-					text: item.text,
-					reasoning: { text: next.text, pending: false }
+					text: item.text ?? '',
+					reasoning: { text: next.text ?? '', pending: false }
 				});
 				i++;
 				continue;
@@ -115,20 +115,20 @@ function itemsFromTranscript(transcriptItems: TranscriptItem[]): ChatItem[] {
 
 function itemFromTranscript(item: TranscriptItem, index: number): ChatItem {
 	if (item.type === 'user')
-		return { id: `history-${index}`, type: 'user', text: item.text, images: item.images };
+		return { id: `history-${index}`, type: 'user', text: item.text ?? '', images: item.images };
 	if (item.type === 'assistant')
-		return { id: `history-${index}`, type: 'assistant', text: item.text };
+		return { id: `history-${index}`, type: 'assistant', text: item.text ?? '' };
 	if (item.type === 'reasoning')
 		return {
 			id: `history-${index}`,
 			type: 'assistant',
 			text: '',
-			reasoning: { text: item.text, pending: false }
+			reasoning: { text: item.text ?? '', pending: false }
 		};
 	return {
 		id: `history-${index}`,
 		type: 'tool',
-		toolName: item.tool_name,
+		toolName: item.tool_name ?? '',
 		input: item.tool_input,
 		output: item.tool_output,
 		error: item.tool_error ? item.tool_output : undefined,

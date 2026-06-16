@@ -53,7 +53,7 @@ export async function readImageAttachments(
 
 		accepted.push({
 			id: crypto.randomUUID(),
-			media_type: file.type.toLowerCase(),
+			media_type: file.type.toLowerCase() as ImageAttachment['media_type'],
 			data: dataURL.slice(comma + 1),
 			name: file.name,
 			size: file.size

@@ -21,76 +21,130 @@ export interface ShortcutBinding {
 	shift?: boolean;
 }
 
+export type ShortcutCategory = 'chats' | 'composer' | 'panels' | 'settings';
+
+export interface ShortcutCategoryDefinition {
+	id: ShortcutCategory;
+	title: string;
+	description: string;
+}
+
 export interface KeyboardShortcutDefinition {
 	id: ShortcutAction;
 	label: string;
+	category: ShortcutCategory;
 	defaultBinding: ShortcutBinding;
 }
 
 export type KeyboardShortcuts = Partial<Record<ShortcutAction, ShortcutBinding>>;
 
+export const SHORTCUT_CATEGORIES: ShortcutCategoryDefinition[] = [
+	{
+		id: 'chats',
+		title: 'Chats',
+		description: 'Start and move between conversations.'
+	},
+	{
+		id: 'composer',
+		title: 'Composer',
+		description: 'Send messages and control the active response.'
+	},
+	{
+		id: 'panels',
+		title: 'Panels',
+		description: 'Show, hide, and open side panels.'
+	},
+	{
+		id: 'settings',
+		title: 'Settings',
+		description: 'Open and dismiss the settings window.'
+	}
+];
+
 export const SHORTCUT_DEFINITIONS: KeyboardShortcutDefinition[] = [
-	{
-		id: 'toggleSidebar',
-		label: 'Toggle sidebar',
-		defaultBinding: { command: true, key: 'b' }
-	},
-	{
-		id: 'openSettings',
-		label: 'Open settings',
-		defaultBinding: { command: true, key: ',' }
-	},
 	{
 		id: 'newChat',
 		label: 'New chat',
+		category: 'chats',
 		defaultBinding: { command: true, key: 't' }
-	},
-	{
-		id: 'stopResponse',
-		label: 'Stop response',
-		defaultBinding: { command: true, key: 'c' }
-	},
-	{
-		id: 'sendMessage',
-		label: 'Send message',
-		defaultBinding: { key: 'Enter', shift: false }
-	},
-	{
-		id: 'insertNewline',
-		label: 'Insert newline in composer',
-		defaultBinding: { key: 'Enter', shift: true }
-	},
-	{
-		id: 'closeSettings',
-		label: 'Close settings',
-		defaultBinding: { key: 'Escape' }
-	},
-	{
-		id: 'focusSearch',
-		label: 'Focus search chats',
-		defaultBinding: { command: true, key: 'f' }
 	},
 	{
 		id: 'previousSession',
 		label: 'Previous chat',
+		category: 'chats',
 		defaultBinding: { ctrl: true, meta: true, key: 'ArrowUp' }
 	},
 	{
 		id: 'nextSession',
 		label: 'Next chat',
+		category: 'chats',
 		defaultBinding: { ctrl: true, meta: true, key: 'ArrowDown' }
+	},
+	{
+		id: 'focusSearch',
+		label: 'Focus search chats',
+		category: 'chats',
+		defaultBinding: { command: true, key: 'f' }
+	},
+	{
+		id: 'sendMessage',
+		label: 'Send message',
+		category: 'composer',
+		defaultBinding: { key: 'Enter', shift: false }
+	},
+	{
+		id: 'insertNewline',
+		label: 'Insert newline in composer',
+		category: 'composer',
+		defaultBinding: { key: 'Enter', shift: true }
+	},
+	{
+		id: 'stopResponse',
+		label: 'Stop response',
+		category: 'composer',
+		defaultBinding: { command: true, key: 'c' }
+	},
+	{
+		id: 'toggleSidebar',
+		label: 'Toggle sidebar',
+		category: 'panels',
+		defaultBinding: { command: true, key: 'b' }
 	},
 	{
 		id: 'toggleWebPanel',
 		label: 'Toggle web panel',
+		category: 'panels',
 		defaultBinding: { command: true, alt: true, key: 'b' }
 	},
 	{
 		id: 'openWebPanel',
 		label: 'Open web panel',
+		category: 'panels',
 		defaultBinding: { command: true, key: 'o' }
+	},
+	{
+		id: 'openSettings',
+		label: 'Open settings',
+		category: 'settings',
+		defaultBinding: { command: true, key: ',' }
+	},
+	{
+		id: 'closeSettings',
+		label: 'Close settings',
+		category: 'settings',
+		defaultBinding: { key: 'Escape' }
 	}
 ];
+
+export function shortcutsByCategory(): Array<{
+	category: ShortcutCategoryDefinition;
+	shortcuts: KeyboardShortcutDefinition[];
+}> {
+	return SHORTCUT_CATEGORIES.map((category) => ({
+		category,
+		shortcuts: SHORTCUT_DEFINITIONS.filter((def) => def.category === category.id)
+	}));
+}
 
 const MODIFIER_KEYS = new Set(['Control', 'Shift', 'Alt', 'Meta']);
 

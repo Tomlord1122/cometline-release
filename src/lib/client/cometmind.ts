@@ -1,60 +1,117 @@
+import {
+	abortSession as abortSessionApi,
+	compactMemory as compactMemoryApi,
+	compactMemoryPreview as compactMemoryPreviewApi,
+	createMemory as createMemoryApi,
+	createSession as createSessionApi,
+	createWorkspace as createWorkspaceApi,
+	deleteMemory as deleteMemoryApi,
+	deleteSession as deleteSessionApi,
+	deleteSkill as deleteSkillApi,
+	getMemorySettings as getMemorySettingsApi,
+	getSession as getSessionApi,
+	getSessionMessages as getSessionMessagesApi,
+	listChildSessions as listChildSessionsApi,
+	listMemories as listMemoriesApi,
+	listSessions as listSessionsApi,
+	listSkills as listSkillsApi,
+	patchSession as patchSessionApi,
+	putMemorySettings as putMemorySettingsApi,
+	searchMemories as searchMemoriesApi,
+	syncSkills as syncSkillsApi
+} from '$lib/generated/cometmind-api';
 import type {
+	CompactMemoryPreviewResponse,
+	CreateMemoryRequest,
 	CreateSessionRequest,
+	ListMemoriesResponse,
+	ListSkillsResponse,
+	MemoryResource,
+	MemorySettings as MemorySettingsWire,
 	PostMessageRequest,
+	RespondToChildRequest,
 	Session,
-	SkillListResponse,
-	SkillSyncResponse,
 	SessionListResponse,
 	StreamEvent,
+	SyncSkillsResponse,
 	TranscriptResponse,
 	UpdateSessionRequest,
 	Workspace
-} from '$lib/types';
+} from '$lib/generated/cometmind-api';
+import { client } from '$lib/generated/cometmind-api/client.gen';
 import { createSSEParser } from '$lib/sse/parser';
+
+export type {
+	CompactMemoryPreviewResponse,
+	CreateMemoryRequest,
+	MemoryResource,
+	RespondToChildRequest as RespondToSubagentRequest
+} from '$lib/generated/cometmind-api';
+
+export type MemoryLifecycleSettings = {
+	decay_half_life_days: number;
+	forget_threshold: number;
+	usage_boost_factor: number;
+	max_usage_boost: number;
+	max_memories: number;
+	compaction_target_ratio: number;
+	compaction_on_extract: boolean;
+};
+
+export type MemoryEmbeddingSettings = {
+	provider_id: string;
+	provider: string;
+	model: string;
+	base_url: string;
+	api_key?: string;
+};
+
+export type MemorySettings = {
+	enabled: boolean;
+	auto_extract: boolean;
+	auto_retrieve: boolean;
+	max_retrieved: number;
+	similarity_threshold: number;
+	extraction_model: string;
+	lifecycle: MemoryLifecycleSettings;
+	embedding: MemoryEmbeddingSettings;
+};
 
 const BASE_URL = 'http://127.0.0.1:7700';
 
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
-	const res = await fetch(`${BASE_URL}${path}`, {
-		...init,
-		headers: {
-			'Content-Type': 'application/json',
-			...init?.headers
-		}
-	});
-	if (!res.ok) {
-		const body = await res.text();
-		throw new Error(`${res.status}: ${body || res.statusText}`);
-	}
-	return res.json() as Promise<T>;
+client.setConfig({ baseUrl: BASE_URL });
+
+function skillQuery(workspacePath: string) {
+	return workspacePath ? { workspace_path: workspacePath } : undefined;
 }
 
 export function ensureWorkspace(workspacePath: string): Promise<Workspace> {
-	return api<Workspace>('/api/v1/workspaces', {
-		method: 'POST',
-		body: JSON.stringify({ workspace_path: workspacePath })
-	});
+	return createWorkspaceApi({
+		body: { workspace_path: workspacePath },
+		throwOnError: true
+	}).then(({ data }) => data);
 }
 
-export function listSkills(workspacePath = ''): Promise<SkillListResponse> {
-	const params = workspacePath ? `?${new URLSearchParams({ workspace_path: workspacePath })}` : '';
-	return api<SkillListResponse>(`/api/v1/skills${params}`);
+export function listSkills(workspacePath = ''): Promise<ListSkillsResponse> {
+	return listSkillsApi({
+		query: skillQuery(workspacePath),
+		throwOnError: true
+	}).then(({ data }) => data);
 }
 
-export function syncSkills(workspacePath = ''): Promise<SkillSyncResponse> {
-	const params = workspacePath ? `?${new URLSearchParams({ workspace_path: workspacePath })}` : '';
-	return api<SkillSyncResponse>(`/api/v1/skills/sync${params}`, { method: 'POST' });
+export function syncSkills(workspacePath = ''): Promise<SyncSkillsResponse> {
+	return syncSkillsApi({
+		query: skillQuery(workspacePath),
+		throwOnError: true
+	}).then(({ data }) => data);
 }
 
 export async function deleteSkill(name: string, workspacePath = ''): Promise<void> {
-	const params = workspacePath ? `?${new URLSearchParams({ workspace_path: workspacePath })}` : '';
-	const res = await fetch(`${BASE_URL}/api/v1/skills/${encodeURIComponent(name)}${params}`, {
-		method: 'DELETE'
+	await deleteSkillApi({
+		path: { name },
+		query: skillQuery(workspacePath),
+		throwOnError: true
 	});
-	if (!res.ok) {
-		const body = await res.text();
-		throw new Error(`${res.status}: ${body || res.statusText}`);
-	}
 }
 
 export async function exportSkill(name: string, workspacePath = ''): Promise<Blob> {
@@ -70,96 +127,68 @@ export async function exportSkill(name: string, workspacePath = ''): Promise<Blo
 }
 
 export function createSession(req: CreateSessionRequest): Promise<Session> {
-	return api<Session>('/api/v1/sessions', {
-		method: 'POST',
-		body: JSON.stringify(req)
-	});
+	return createSessionApi({
+		body: req,
+		throwOnError: true
+	}).then(({ data }) => data);
 }
 
 export function listSessions(workspacePath: string): Promise<SessionListResponse> {
-	const params = new URLSearchParams({ workspace_path: workspacePath });
-	return api<SessionListResponse>(`/api/v1/sessions?${params.toString()}`);
+	return listSessionsApi({
+		query: { workspace_path: workspacePath },
+		throwOnError: true
+	}).then(({ data }) => data);
 }
 
 export function getSession(id: string): Promise<Session> {
-	return api<Session>(`/api/v1/sessions/${id}`);
+	return getSessionApi({
+		path: { id },
+		throwOnError: true
+	}).then(({ data }) => data);
 }
 
 export function updateSession(id: string, req: UpdateSessionRequest): Promise<Session> {
-	return api<Session>(`/api/v1/sessions/${id}`, {
-		method: 'PATCH',
-		body: JSON.stringify(req)
-	});
+	return patchSessionApi({
+		path: { id },
+		body: req,
+		throwOnError: true
+	}).then(({ data }) => data);
 }
 
 export function listChildSessions(id: string): Promise<SessionListResponse> {
-	return api<SessionListResponse>(`/api/v1/sessions/${id}/children`);
+	return listChildSessionsApi({
+		path: { id },
+		throwOnError: true
+	}).then(({ data }) => data);
 }
 
 export function getSessionMessages(id: string): Promise<TranscriptResponse> {
-	return api<TranscriptResponse>(`/api/v1/sessions/${id}/messages`);
+	return getSessionMessagesApi({
+		path: { id },
+		throwOnError: true
+	}).then(({ data }) => data);
 }
 
 export async function deleteSession(id: string): Promise<void> {
-	const res = await fetch(`${BASE_URL}/api/v1/sessions/${id}`, { method: 'DELETE' });
-	if (!res.ok) {
-		const body = await res.text();
-		throw new Error(`${res.status}: ${body || res.statusText}`);
-	}
+	await deleteSessionApi({
+		path: { id },
+		throwOnError: true
+	});
 }
 
 export function abortSession(id: string): Promise<{ status: string }> {
-	return api<{ status: string }>(`/api/v1/sessions/${id}/abort`, { method: 'POST' });
-}
-
-export interface RespondToSubagentRequest {
-	text?: string;
-	permission_option_id?: string;
+	return abortSessionApi({
+		path: { id },
+		throwOnError: true
+	}).then(({ data }) => data);
 }
 
 export async function* respondToSubagent(
 	childId: string,
-	req: RespondToSubagentRequest,
+	req: RespondToChildRequest,
 	signal?: AbortSignal
 ): AsyncGenerator<StreamEvent, void, unknown> {
-	const res = await fetch(`${BASE_URL}/api/v1/sessions/${childId}/respond`, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify(req),
-		signal
-	});
-
-	if (!res.ok || !res.body) {
-		const text = await res.text();
-		throw new Error(`${res.status}: ${text || res.statusText}`);
-	}
-
-	const reader = res.body.getReader();
-	const decoder = new TextDecoder();
-	const parser = createSSEParser();
-
-	try {
-		while (true) {
-			if (signal?.aborted) return;
-			const { done, value } = await reader.read();
-			if (done) break;
-			const chunk = decoder.decode(value, { stream: true });
-			for (const result of parser.feed(chunk)) {
-				if (result === 'done') return;
-				if (result) yield result;
-			}
-		}
-
-		for (const result of parser.flush()) {
-			if (result === 'done') return;
-			if (result) yield result;
-		}
-	} catch (err) {
-		if (signal?.aborted || (err instanceof DOMException && err.name === 'AbortError')) return;
-		throw err;
-	} finally {
-		reader.releaseLock();
-	}
+	yield* streamSse(`/api/v1/sessions/${childId}/respond`, req, signal);
 }
 
 export async function* streamMessage(
@@ -167,10 +196,18 @@ export async function* streamMessage(
 	req: PostMessageRequest,
 	signal?: AbortSignal
 ): AsyncGenerator<StreamEvent, void, unknown> {
-	const res = await fetch(`${BASE_URL}/api/v1/sessions/${id}/message`, {
+	yield* streamSse(`/api/v1/sessions/${id}/message`, req, signal);
+}
+
+async function* streamSse(
+	path: string,
+	body: unknown,
+	signal?: AbortSignal
+): AsyncGenerator<StreamEvent, void, unknown> {
+	const res = await fetch(`${BASE_URL}${path}`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify(req),
+		body: JSON.stringify(body),
 		signal
 	});
 
@@ -216,78 +253,29 @@ export async function sendMessage(id: string, req: PostMessageRequest | string):
 	}
 }
 
-export interface MemoryResource {
-	id: string;
-	scope: string;
-	kind: string;
-	content: string;
-	source: string;
-	base_weight: number;
-	effective_weight: number;
-	access_count: number;
-	pinned: boolean;
-	last_accessed_at?: number;
-	created_at: number;
-	updated_at: number;
-	similarity?: number;
+export function listMemories(): Promise<ListMemoriesResponse> {
+	return listMemoriesApi({ throwOnError: true }).then(({ data }) => data);
 }
 
-export interface MemorySettings {
-	enabled: boolean;
-	auto_extract: boolean;
-	auto_retrieve: boolean;
-	max_retrieved: number;
-	similarity_threshold: number;
-	extraction_model: string;
-	lifecycle: {
-		decay_half_life_days: number;
-		forget_threshold: number;
-		usage_boost_factor: number;
-		max_usage_boost: number;
-		max_memories: number;
-		compaction_target_ratio: number;
-		compaction_on_extract: boolean;
-	};
-	embedding: {
-		provider_id: string;
-		provider: string;
-		model: string;
-		base_url: string;
-		api_key?: string;
-	};
-}
-
-export function listMemories(): Promise<{ memories: MemoryResource[] }> {
-	return api('/api/v1/memories');
-}
-
-export function createMemory(body: {
-	content: string;
-	kind?: string;
-	pinned?: boolean;
-	base_weight?: number;
-}): Promise<MemoryResource> {
-	return api<MemoryResource>('/api/v1/memories', {
-		method: 'POST',
-		body: JSON.stringify(body)
-	});
+export function createMemory(body: CreateMemoryRequest): Promise<MemoryResource> {
+	return createMemoryApi({
+		body,
+		throwOnError: true
+	}).then(({ data }) => data);
 }
 
 export function deleteMemory(id: string): Promise<void> {
-	return fetch(`${BASE_URL}/api/v1/memories/${id}`, { method: 'DELETE' }).then((res) => {
-		if (!res.ok) {
-			return res.text().then((body) => {
-				throw new Error(`${res.status}: ${body || res.statusText}`);
-			});
-		}
-	});
+	return deleteMemoryApi({
+		path: { id },
+		throwOnError: true
+	}).then(() => undefined);
 }
 
-export function searchMemories(query: string, limit = 10): Promise<{ memories: MemoryResource[] }> {
-	return api('/api/v1/memories/search', {
-		method: 'POST',
-		body: JSON.stringify({ query, limit })
-	});
+export function searchMemories(query: string, limit = 10): Promise<ListMemoriesResponse> {
+	return searchMemoriesApi({
+		body: { query, limit },
+		throwOnError: true
+	}).then(({ data }) => data);
 }
 
 export function defaultMemorySettings(): MemorySettings {
@@ -317,82 +305,53 @@ export function defaultMemorySettings(): MemorySettings {
 	};
 }
 
-function normalizeMemorySettings(raw: Record<string, unknown>): MemorySettings {
+function resolveMemorySettings(raw: MemorySettingsWire): MemorySettings {
 	const def = defaultMemorySettings();
-	const lifecycle = (raw.lifecycle ?? raw.Lifecycle ?? {}) as Record<string, unknown>;
-	const embedding = (raw.embedding ?? raw.Embedding ?? {}) as Record<string, unknown>;
+	const lifecycle = raw.lifecycle ?? {};
+	const embedding = raw.embedding ?? {};
 	return {
-		enabled: Boolean(raw.enabled ?? raw.Enabled ?? def.enabled),
-		auto_extract: Boolean(raw.auto_extract ?? raw.AutoExtract ?? def.auto_extract),
-		auto_retrieve: Boolean(raw.auto_retrieve ?? raw.AutoRetrieve ?? def.auto_retrieve),
-		max_retrieved: Number(raw.max_retrieved ?? raw.MaxRetrieved ?? def.max_retrieved),
-		similarity_threshold: Number(
-			raw.similarity_threshold ?? raw.SimilarityThreshold ?? def.similarity_threshold
-		),
-		extraction_model: String(raw.extraction_model ?? raw.ExtractionModel ?? def.extraction_model),
+		enabled: raw.enabled ?? def.enabled,
+		auto_extract: raw.auto_extract ?? def.auto_extract,
+		auto_retrieve: raw.auto_retrieve ?? def.auto_retrieve,
+		max_retrieved: raw.max_retrieved ?? def.max_retrieved,
+		similarity_threshold: raw.similarity_threshold ?? def.similarity_threshold,
+		extraction_model: raw.extraction_model ?? def.extraction_model,
 		lifecycle: {
-			decay_half_life_days: Number(
-				lifecycle.decay_half_life_days ??
-					lifecycle.DecayHalfLifeDays ??
-					def.lifecycle.decay_half_life_days
-			),
-			forget_threshold: Number(
-				lifecycle.forget_threshold ?? lifecycle.ForgetThreshold ?? def.lifecycle.forget_threshold
-			),
-			usage_boost_factor: Number(
-				lifecycle.usage_boost_factor ??
-					lifecycle.UsageBoostFactor ??
-					def.lifecycle.usage_boost_factor
-			),
-			max_usage_boost: Number(
-				lifecycle.max_usage_boost ?? lifecycle.MaxUsageBoost ?? def.lifecycle.max_usage_boost
-			),
-			max_memories: Number(
-				lifecycle.max_memories ?? lifecycle.MaxMemories ?? def.lifecycle.max_memories
-			),
-			compaction_target_ratio: Number(
-				lifecycle.compaction_target_ratio ??
-					lifecycle.CompactionTargetRatio ??
-					def.lifecycle.compaction_target_ratio
-			),
-			compaction_on_extract: Boolean(
-				lifecycle.compaction_on_extract ??
-					lifecycle.CompactionOnExtract ??
-					def.lifecycle.compaction_on_extract
-			)
+			decay_half_life_days: lifecycle.decay_half_life_days ?? def.lifecycle.decay_half_life_days,
+			forget_threshold: lifecycle.forget_threshold ?? def.lifecycle.forget_threshold,
+			usage_boost_factor: lifecycle.usage_boost_factor ?? def.lifecycle.usage_boost_factor,
+			max_usage_boost: lifecycle.max_usage_boost ?? def.lifecycle.max_usage_boost,
+			max_memories: lifecycle.max_memories ?? def.lifecycle.max_memories,
+			compaction_target_ratio:
+				lifecycle.compaction_target_ratio ?? def.lifecycle.compaction_target_ratio,
+			compaction_on_extract:
+				lifecycle.compaction_on_extract ?? def.lifecycle.compaction_on_extract
 		},
 		embedding: {
-			provider_id: String(
-				embedding.provider_id ?? embedding.ProviderID ?? def.embedding.provider_id
-			),
-			provider: String(embedding.provider ?? embedding.Provider ?? def.embedding.provider),
-			model: String(embedding.model ?? embedding.Model ?? def.embedding.model),
-			base_url: String(embedding.base_url ?? embedding.BaseURL ?? def.embedding.base_url),
-			api_key: String(embedding.api_key ?? embedding.APIKey ?? def.embedding.api_key ?? '')
+			provider_id: embedding.provider_id ?? def.embedding.provider_id,
+			provider: embedding.provider ?? def.embedding.provider,
+			model: embedding.model ?? def.embedding.model,
+			base_url: embedding.base_url ?? def.embedding.base_url,
+			api_key: embedding.api_key ?? def.embedding.api_key
 		}
 	};
 }
 
 export function getMemorySettings(): Promise<MemorySettings> {
-	return api<Record<string, unknown>>('/api/v1/memory/settings').then(normalizeMemorySettings);
+	return getMemorySettingsApi({ throwOnError: true }).then(({ data }) => resolveMemorySettings(data));
 }
 
 export function putMemorySettings(settings: MemorySettings): Promise<MemorySettings> {
-	return api<Record<string, unknown>>('/api/v1/memory/settings', {
-		method: 'PUT',
-		body: JSON.stringify(settings)
-	}).then(normalizeMemorySettings);
+	return putMemorySettingsApi({
+		body: settings,
+		throwOnError: true
+	}).then(({ data }) => resolveMemorySettings(data));
 }
 
 export function compactMemory(): Promise<{ status: string }> {
-	return api('/api/v1/memory/compact', { method: 'POST' });
+	return compactMemoryApi({ throwOnError: true }).then(({ data }) => data);
 }
 
-export function compactMemoryPreview(): Promise<{
-	to_forget: MemoryResource[];
-	to_merge: MemoryResource[][];
-	active: number;
-	max_memories: number;
-}> {
-	return api('/api/v1/memory/compact/preview');
+export function compactMemoryPreview(): Promise<CompactMemoryPreviewResponse> {
+	return compactMemoryPreviewApi({ throwOnError: true }).then(({ data }) => data);
 }

@@ -3,6 +3,7 @@
 	import type { ShortcutAction, ShortcutBinding, KeyboardShortcuts } from '$lib/types';
 	import {
 		SHORTCUT_DEFINITIONS,
+		shortcutsByCategory,
 		formatShortcut,
 		captureShortcut,
 		isDefaultBinding
@@ -17,6 +18,8 @@
 	} = $props();
 
 	let editingAction = $state<ShortcutAction | null>(null);
+
+	const groupedShortcuts = shortcutsByCategory();
 
 	$effect(() => {
 		window.electronAPI?.setShortcutCaptureActive?.(Boolean(editingAction));
@@ -44,7 +47,7 @@
 	});
 
 	function reset(action: ShortcutAction) {
-		const def = SHORTCUT_DEFINITIONS.find((d) => d.id === action);
+		const def = SHORTCUT_DEFINITIONS.find((entry) => entry.id === action);
 		if (!def) return;
 		onChange(action, { ...def.defaultBinding });
 	}
@@ -59,47 +62,58 @@
 		</div>
 	</div>
 
-	<div class="shortcuts-list">
-		{#each SHORTCUT_DEFINITIONS as def (def.id)}
-			{@const binding = shortcuts[def.id]}
-			{@const isEditing = editingAction === def.id}
-			<div class="shortcut-row" class:editing={isEditing}>
-				<span class="shortcut-label">{def.label}</span>
+	<div class="shortcuts-sections">
+		{#each groupedShortcuts as group (group.category.id)}
+			<section class="section-block">
+				<div class="section-heading">
+					<h4>{group.category.title}</h4>
+					<p>{group.category.description}</p>
+				</div>
 
-				{#if isEditing}
-					<div class="shortcut-capture">
-						<span class="capture-hint">Press a key combination…</span>
-						<button
-							class="secondary"
-							onclick={() => (editingAction = null)}
-							type="button"
-						>
-							Cancel
-						</button>
-					</div>
-				{:else}
-					<div class="shortcut-display">
-						<kbd>{formatShortcut(binding)}</kbd>
-						<button
-							class="secondary"
-							onclick={() => (editingAction = def.id)}
-							type="button"
-						>
-							Change
-						</button>
-						<button
-							class="secondary icon-only"
-							onclick={() => reset(def.id)}
-							disabled={isDefaultBinding(def.id, binding)}
-							aria-label={`Reset ${def.label} shortcut`}
-							title="Reset to default"
-							type="button"
-						>
-							<RotateCcw size={14} />
-						</button>
-					</div>
-				{/if}
-			</div>
+				<div class="shortcuts-list">
+					{#each group.shortcuts as def (def.id)}
+						{@const binding = shortcuts[def.id]}
+						{@const isEditing = editingAction === def.id}
+						<div class="shortcut-row" class:editing={isEditing}>
+							<span class="shortcut-label">{def.label}</span>
+
+							{#if isEditing}
+								<div class="shortcut-capture">
+									<span class="capture-hint">Press a key combination…</span>
+									<button
+										class="secondary"
+										onclick={() => (editingAction = null)}
+										type="button"
+									>
+										Cancel
+									</button>
+								</div>
+							{:else}
+								<div class="shortcut-display">
+									<kbd>{formatShortcut(binding)}</kbd>
+									<button
+										class="secondary"
+										onclick={() => (editingAction = def.id)}
+										type="button"
+									>
+										Change
+									</button>
+									<button
+										class="secondary icon-only"
+										onclick={() => reset(def.id)}
+										disabled={isDefaultBinding(def.id, binding)}
+										aria-label={`Reset ${def.label} shortcut`}
+										title="Reset to default"
+										type="button"
+									>
+										<RotateCcw size={14} />
+									</button>
+								</div>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			</section>
 		{/each}
 	</div>
 </div>
@@ -113,7 +127,7 @@
 		display: flex;
 		align-items: flex-start;
 		gap: 12px;
-		margin-bottom: 18px;
+		margin-bottom: 22px;
 		color: var(--text-main);
 	}
 
@@ -131,6 +145,36 @@
 		font-size: 12px;
 		color: var(--text-muted);
 		margin-top: 2px;
+	}
+
+	.shortcuts-sections {
+		display: flex;
+		flex-direction: column;
+		gap: 28px;
+	}
+
+	.section-block {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+
+	.section-heading h4,
+	.section-heading p {
+		margin: 0;
+	}
+
+	.section-heading h4 {
+		font-size: 14px;
+		font-weight: 650;
+		color: var(--text-main);
+	}
+
+	.section-heading p {
+		margin-top: 2px;
+		font-size: 12px;
+		line-height: 1.45;
+		color: var(--text-muted);
 	}
 
 	.shortcuts-list {

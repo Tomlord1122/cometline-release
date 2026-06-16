@@ -1,6 +1,6 @@
 # Postmortems
 
-Short write-ups of non-obvious bugs in the Cometline UI layer (and cross-cutting CometMind runtime issues that surface in chat): symptoms, root cause, fix, and how to avoid regressions. Read these before changing `chat.svelte.ts`, `reducers/chat.ts`, `ChatView.svelte`, `ChatThread.svelte`, `chat-turn-queue.ts`, `Composer.svelte`, `src/lib/skills/slash-commands.ts`, `keyboard-shortcuts.ts`, `HeroComposerFrame.svelte`, `hero-composer-appearance.ts`, `settings.svelte.ts`, `SettingsCometMindPanel.svelte`, `cometmind/internal/gateway/discord/adapter.go`, or Electron IPC in `preload.cjs` / `main.cjs`.
+Short write-ups of non-obvious bugs in the Cometline UI layer (and cross-cutting CometMind runtime issues that surface in chat): symptoms, root cause, fix, and how to avoid regressions. Read these before changing `chat.svelte.ts`, `reducers/chat.ts`, `ChatView.svelte`, `ChatThread.svelte`, `chat-turn-queue.ts`, `Composer.svelte`, `src/lib/skills/slash-commands.ts`, `keyboard-shortcuts.ts`, `HeroComposerFrame.svelte`, `hero-composer-appearance.ts`, `settings.svelte.ts`, `SettingsCometMindPanel.svelte`, `src/lib/client/cometmind.ts`, `src/lib/generated/cometmind-api/`, `cometmind/openapi.yaml`, `cometmind/internal/event/event.go`, `cometmind/internal/contract/`, `cometmind/internal/gateway/discord/adapter.go`, or Electron IPC in `preload.cjs` / `main.cjs`.
 
 | Date       | Topic                                                   | File                                                                                                 |
 | ---------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
@@ -21,6 +21,7 @@ Short write-ups of non-obvious bugs in the Cometline UI layer (and cross-cutting
 | 2026-06-16 | Shift+Enter in composer sends instead of newline          | [composer-shift-enter-sends-instead-of-newline.md](./composer-shift-enter-sends-instead-of-newline.md) |
 | 2026-06-16 | macOS tray icon oversized and gray                        | [macos-tray-icon-oversized-and-gray.md](./macos-tray-icon-oversized-and-gray.md)                       |
 | 2026-06-16 | Slash commands (Cometline + Discord gateway)              | [slash-commands-cometline-and-discord.md](./slash-commands-cometline-and-discord.md)                 |
+| 2026-06-16 | OpenAPI contract codegen (ISSUE-5)                        | [openapi-contract-codegen.md](./openapi-contract-codegen.md)                                         |
 
 ## When to add a postmortem
 
@@ -30,3 +31,4 @@ Add one when:
 - The fix is non-obvious without reading the component tree
 - A future refactor could easily reintroduce the same failure mode
 - You add or change slash commands, Discord Application Commands, or skill write/export/delete APIs
+- You change the HTTP/SSE wire contract, OpenAPI spec, or generated API clients (`make generate`)
