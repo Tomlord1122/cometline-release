@@ -666,29 +666,42 @@ function sendToggleWebPanel() {
 	}
 }
 
-function resolveTrayIcon() {
-	const candidates = [
+function resolveTrayIconCandidates() {
+	if (app.isPackaged) {
+		return [
+			path.join(process.resourcesPath, 'trayTemplate.png'),
+			path.join(process.resourcesPath, 'icon.png')
+		];
+	}
+	return [
+		path.join(__dirname, '../buildResources/trayTemplate.png'),
 		path.join(__dirname, '../static/project_avatar_96.png'),
 		path.join(__dirname, '../buildResources/icon.png'),
 		path.join(__dirname, '../buildResources/icon.icns'),
 		path.join(__dirname, '../static/project_icon.png'),
 		path.join(__dirname, '../static/app_icon.png')
 	];
+}
+
+function resolveTrayIcon() {
+	const candidates = resolveTrayIconCandidates();
 	for (const candidate of candidates) {
 		if (!fs.existsSync(candidate)) continue;
 		let image = nativeImage.createFromPath(candidate);
 		if (image.isEmpty()) continue;
 		if (process.platform === 'darwin') {
-			// macOS menu bar icons read best at 16pt (32px backing on Retina).
-			image = image.resize({ width: 22, height: 22, quality: 'best' });
-			if (image.isEmpty()) continue;
+			const isTemplateAsset = candidate.endsWith('trayTemplate.png');
+			if (!isTemplateAsset) {
+				// macOS menu bar icons read best at 16pt (32px backing on Retina).
+				image = image.resize({ width: 22, height: 22, quality: 'best' });
+				if (image.isEmpty()) continue;
+			}
+			image.setTemplateImage(true);
 			return image;
 		}
 		return image.resize({ width: 18, height: 18, quality: 'best' });
 	}
-	if (!app.isPackaged) {
-		console.warn('[tray] No tray icon found; checked:', candidates.join(', '));
-	}
+	console.warn('[tray] No tray icon found; checked:', candidates.join(', '));
 	return null;
 }
 
@@ -696,7 +709,10 @@ function ensureTray() {
 	if (process.platform !== 'darwin') return false;
 	if (tray) return true;
 	const icon = resolveTrayIcon();
-	if (!icon || icon.isEmpty()) return false;
+	if (!icon || icon.isEmpty()) {
+		console.warn('[tray] Failed to create menu bar icon');
+		return false;
+	}
 	tray = new Tray(icon);
 	tray.setToolTip('Cometline');
 	const menu = Menu.buildFromTemplate([

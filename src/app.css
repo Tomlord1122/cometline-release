@@ -66,11 +66,17 @@
 	--hero-composer-impact-scale: 1.01;
 	--duration-hero-exit-ring: 0.24s;
 
-	/* Intro sequence (first-run cinematic) */
-	--intro-bg: #07090e;
-	--intro-ink: #f3f0e7;
-	--intro-ink-soft: rgba(243, 240, 231, 0.62);
-	--intro-gold: #d8c08a;
+	/* Intro sequence (first-run cinematic)
+	   Palette echoes tomlord.io (One Light paper) + the project icon
+	   (cream/parchment, cross-hatched blue sky, blue armor) and the
+	   hero glow blue. Light, editorial, vintage-print — not deep space. */
+	--intro-bg: #fafafa;
+	--intro-bg-deep: #eef1f6;
+	--intro-ink: #383a42; /* One Light ink */
+	--intro-ink-soft: rgba(56, 58, 66, 0.55);
+	--intro-blue: #4078f2; /* tomlord.io accent blue */
+	--intro-blue-deep: #0184bc; /* tomlord.io cyan-blue */
+	--intro-paper-line: rgba(64, 120, 242, 0.16); /* hatching ink */
 	--ease-intro: cubic-bezier(0.16, 1, 0.3, 1);
 	--duration-intro-enter: 1.1s;
 	--duration-intro-exit: 0.9s;

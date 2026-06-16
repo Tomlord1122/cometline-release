@@ -104,6 +104,10 @@
 			{
 				"from": "buildResources/icon.png",
 				"to": "icon.png"
+			},
+			{
+				"from": "buildResources/trayTemplate.png",
+				"to": "trayTemplate.png"
 			}
 		]
 	}

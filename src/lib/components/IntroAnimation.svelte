@@ -56,16 +56,12 @@
 		return { r, g, b };
 	}
 
-	// easeOutCubic / easeInOutCubic for cinematic deceleration.
+	// easeOutCubic for cinematic deceleration.
 	const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
-	const easeInOut = (t: number) =>
-		t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 	const clamp01 = (t: number) => Math.max(0, Math.min(1, t));
 	// Normalize an absolute elapsed time into a 0..1 progress across [start,end].
 	const seg = (now: number, start: number, end: number) =>
 		clamp01((now - start) / (end - start));
-
-	type Star = { x: number; y: number; z: number; px: number; py: number };
 
 	function complete() {
 		if (finished) return;
@@ -131,28 +127,39 @@
 		resize();
 		window.addEventListener('resize', resize);
 
-		const glow = toRgb(GLOW());
-		const gold = toRgb(readCssVar('--intro-gold', '#d8c08a'));
-		const bg = readCssVar('--intro-bg', '#07090e');
+		// Palette: hero glow blue + tomlord.io ink, on warm paper.
+		const glow = toRgb(GLOW()); // hero glow blue (#72c0ff)
+		const ink = toRgb(readCssVar('--intro-blue', '#4078f2')); // tomlord accent
+		const inkDeep = toRgb(readCssVar('--intro-blue-deep', '#0184bc'));
+		const bg = readCssVar('--intro-bg', '#fafafa');
+		const bgDeep = readCssVar('--intro-bg-deep', '#eef1f6');
 
-		// Warp starfield seed.
-		const STAR_COUNT = Math.min(420, Math.floor((W * H) / 2600));
-		const stars: Star[] = Array.from({ length: STAR_COUNT }, () => ({
-			x: (Math.random() - 0.5) * W,
-			y: (Math.random() - 0.5) * H,
-			z: Math.random() * W,
-			px: 0,
-			py: 0
-		}));
+		// Cross-hatched "blue sky" strokes — the signature texture from the
+		// project icon's background. Each is a short diagonal pen mark; they
+		// fade in as a field, then settle behind the title card.
+		type Hatch = { x: number; y: number; len: number; ang: number; w: number; a: number };
+		const HATCH_COUNT = Math.min(260, Math.floor((W * H) / 5200));
+		const hatches: Hatch[] = Array.from({ length: HATCH_COUNT }, () => {
+			const diagonal = Math.random() < 0.5 ? -0.86 : -0.62; // two hatch angles
+			return {
+				x: Math.random() * W,
+				y: Math.random() * H,
+				len: 16 + Math.random() * 34,
+				ang: diagonal + (Math.random() - 0.5) * 0.18,
+				w: 0.6 + Math.random() * 0.9,
+				a: 0.05 + Math.random() * 0.12
+			};
+		});
 
-		// Precompute a film-grain tile for cheap reuse.
+		// Precompute a paper-fiber grain tile (used with 'multiply' so it
+		// reads as paper texture darkening the sheet, not film highlight).
 		const grain = document.createElement('canvas');
-		grain.width = grain.height = 140;
+		grain.width = grain.height = 160;
 		const gctx = grain.getContext('2d');
 		if (gctx) {
-			const img = gctx.createImageData(140, 140);
+			const img = gctx.createImageData(160, 160);
 			for (let i = 0; i < img.data.length; i += 4) {
-				const v = 120 + Math.random() * 135;
+				const v = 205 + Math.random() * 50;
 				img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
 				img.data[i + 3] = 255;
 			}
@@ -167,86 +174,84 @@
 			const cx = W / 2;
 			const cy = H / 2;
 
-			// 1. Deep space base + radial nebula in the configured glow color.
-			ctx.fillStyle = bg;
-			ctx.fillRect(0, 0, W, H);
-
-			const spaceFade = seg(now, 0, T.spaceIn);
-			const neb = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W, H) * 0.62);
+			const sheetFade = seg(now, 0, T.spaceIn);
 			const ringForm = seg(now, T.comet, T.ring);
-			const nebA = 0.06 + 0.16 * easeOut(ringForm);
-			neb.addColorStop(0, `rgba(${glow.r},${glow.g},${glow.b},${nebA * spaceFade})`);
-			neb.addColorStop(0.5, `rgba(${glow.r},${glow.g},${glow.b},${nebA * 0.25 * spaceFade})`);
-			neb.addColorStop(1, 'rgba(0,0,0,0)');
-			ctx.fillStyle = neb;
+
+			// 1. Warm paper sheet — soft top-down gradient like the icon ground.
+			const sheet = ctx.createLinearGradient(0, 0, 0, H);
+			sheet.addColorStop(0, bg);
+			sheet.addColorStop(1, bgDeep);
+			ctx.fillStyle = sheet;
 			ctx.fillRect(0, 0, W, H);
 
-			// 2. Warp starfield — speed ramps up during the comet beat, then settles.
-			const warp =
-				0.4 + 7.5 * easeInOut(seg(now, 200, T.comet)) * (1 - 0.7 * easeOut(seg(now, T.comet, T.ring)));
-			ctx.globalAlpha = spaceFade;
-			for (const s of stars) {
-				s.px = cx + (s.x / s.z) * W;
-				s.py = cy + (s.y / s.z) * H;
-				s.z -= warp * 6;
-				if (s.z < 1) {
-					s.z = W;
-					s.x = (Math.random() - 0.5) * W;
-					s.y = (Math.random() - 0.5) * H;
-					s.px = cx + (s.x / s.z) * W;
-					s.py = cy + (s.y / s.z) * H;
-				}
-				const nx = cx + (s.x / s.z) * W;
-				const ny = cy + (s.y / s.z) * H;
-				const k = (1 - s.z / W) * 2.1;
-				ctx.strokeStyle = `rgba(243,240,231,${0.18 + 0.5 * (1 - s.z / W)})`;
-				ctx.lineWidth = Math.max(0.4, k);
+			// Gentle blue ink wash that breathes in behind the mark.
+			const washA = (0.05 + 0.1 * easeOut(ringForm)) * sheetFade;
+			const wash = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W, H) * 0.6);
+			wash.addColorStop(0, `rgba(${glow.r},${glow.g},${glow.b},${washA})`);
+			wash.addColorStop(0.55, `rgba(${glow.r},${glow.g},${glow.b},${washA * 0.3})`);
+			wash.addColorStop(1, 'rgba(255,255,255,0)');
+			ctx.fillStyle = wash;
+			ctx.fillRect(0, 0, W, H);
+
+			// 2. Cross-hatched blue ink sky (the icon's signature texture).
+			//    Strokes "ink in" progressively, then ease back so they sit
+			//    quietly behind the title card.
+			const hatchIn = easeOut(seg(now, 150, T.comet));
+			const hatchSettle = 1 - 0.55 * easeOut(seg(now, T.ring, T.hold));
+			ctx.lineCap = 'round';
+			for (let i = 0; i < hatches.length; i++) {
+				const h = hatches[i];
+				// Stagger reveal across the field for a hand-drawn, inked-in feel.
+				if (hatchIn <= i / hatches.length) continue;
+				const a = h.a * sheetFade * hatchSettle;
+				ctx.strokeStyle = `rgba(${ink.r},${ink.g},${ink.b},${a})`;
+				ctx.lineWidth = h.w;
 				ctx.beginPath();
-				ctx.moveTo(s.px, s.py);
-				ctx.lineTo(nx, ny);
+				ctx.moveTo(h.x, h.y);
+				ctx.lineTo(h.x + Math.cos(h.ang) * h.len, h.y + Math.sin(h.ang) * h.len);
 				ctx.stroke();
 			}
-			ctx.globalAlpha = 1;
 
-			// 3. Comet — streaks from upper-left toward center, then ignites the core.
+			// 3. Comet — a hero-glow-blue ink stroke drawn toward the center.
 			const cometP = seg(now, 400, T.comet);
 			if (cometP > 0 && cometP < 1) {
 				const e = easeOut(cometP);
-				const sx = -W * 0.15 + (cx - -W * 0.15) * e;
-				const sy = -H * 0.12 + (cy - -H * 0.12) * e;
-				const tailLen = 260 * (0.4 + 0.6 * (1 - cometP));
-				const ang = Math.atan2(cy - -H * 0.12, cx - -W * 0.15);
+				const ox = -W * 0.15;
+				const oy = -H * 0.12;
+				const sx = ox + (cx - ox) * e;
+				const sy = oy + (cy - oy) * e;
+				const tailLen = 280 * (0.4 + 0.6 * (1 - cometP));
+				const ang = Math.atan2(cy - oy, cx - ox);
 				const tx = sx - Math.cos(ang) * tailLen;
 				const ty = sy - Math.sin(ang) * tailLen;
 				const grad = ctx.createLinearGradient(tx, ty, sx, sy);
-				grad.addColorStop(0, 'rgba(0,0,0,0)');
-				grad.addColorStop(1, `rgba(${gold.r},${gold.g},${gold.b},0.9)`);
+				grad.addColorStop(0, 'rgba(255,255,255,0)');
+				grad.addColorStop(1, `rgba(${glow.r},${glow.g},${glow.b},0.95)`);
 				ctx.strokeStyle = grad;
-				ctx.lineWidth = 2.4;
-				ctx.lineCap = 'round';
+				ctx.lineWidth = 2.6;
 				ctx.beginPath();
 				ctx.moveTo(tx, ty);
 				ctx.lineTo(sx, sy);
 				ctx.stroke();
-				ctx.fillStyle = `rgba(${gold.r},${gold.g},${gold.b},0.95)`;
+				ctx.fillStyle = `rgba(${inkDeep.r},${inkDeep.g},${inkDeep.b},0.95)`;
 				ctx.beginPath();
 				ctx.arc(sx, sy, 3.4, 0, Math.PI * 2);
 				ctx.fill();
 			}
 
-			// 4. Ignition flash + core bloom when the comet reaches center.
+			// 4. Ink bloom — a soft blue wash blooms outward on arrival (light).
 			const ignite = seg(now, T.comet - 120, T.comet + 380);
 			if (ignite > 0) {
-				const flash = Math.sin(ignite * Math.PI) * (1 - seg(now, T.ring, T.hold));
-				const bloom = ctx.createRadialGradient(cx, cy, 0, cx, cy, 220);
-				bloom.addColorStop(0, `rgba(${glow.r},${glow.g},${glow.b},${0.55 * flash})`);
-				bloom.addColorStop(0.4, `rgba(${gold.r},${gold.g},${gold.b},${0.22 * flash})`);
-				bloom.addColorStop(1, 'rgba(0,0,0,0)');
+				const pulse = Math.sin(ignite * Math.PI) * (1 - seg(now, T.ring, T.hold));
+				const bloom = ctx.createRadialGradient(cx, cy, 0, cx, cy, 240);
+				bloom.addColorStop(0, `rgba(${glow.r},${glow.g},${glow.b},${0.4 * pulse})`);
+				bloom.addColorStop(0.45, `rgba(${ink.r},${ink.g},${ink.b},${0.14 * pulse})`);
+				bloom.addColorStop(1, 'rgba(255,255,255,0)');
 				ctx.fillStyle = bloom;
 				ctx.fillRect(0, 0, W, H);
 			}
 
-			// 5. Orbital ring — forms around the mark and slowly rotates (heavy tech).
+			// 5. Orbital ring — blue ink ring + deep-blue hairline rule.
 			const ringP = seg(now, T.comet, T.ring);
 			if (ringP > 0) {
 				const er = easeOut(ringP);
@@ -256,47 +261,47 @@
 				ctx.save();
 				ctx.translate(cx, cy);
 				ctx.rotate(rot);
-				ctx.lineWidth = 1.4;
-				ctx.strokeStyle = `rgba(${glow.r},${glow.g},${glow.b},${0.5 * er})`;
-				ctx.shadowBlur = 18;
-				ctx.shadowColor = `rgba(${glow.r},${glow.g},${glow.b},0.6)`;
+				ctx.lineWidth = 1.6;
+				ctx.strokeStyle = `rgba(${glow.r},${glow.g},${glow.b},${0.62 * er})`;
+				ctx.shadowBlur = 14;
+				ctx.shadowColor = `rgba(${glow.r},${glow.g},${glow.b},0.45)`;
 				ctx.beginPath();
 				ctx.arc(0, 0, radius, -Math.PI / 2, -Math.PI / 2 + sweep);
 				ctx.stroke();
-				// Inner hairline gold ring — the vintage rule.
+				// Inner deep-blue hairline — the vintage engraving rule.
 				ctx.shadowBlur = 0;
 				ctx.lineWidth = 1;
-				ctx.strokeStyle = `rgba(${gold.r},${gold.g},${gold.b},${0.4 * er})`;
+				ctx.strokeStyle = `rgba(${inkDeep.r},${inkDeep.g},${inkDeep.b},${0.4 * er})`;
 				ctx.beginPath();
 				ctx.arc(0, 0, radius - 10, -Math.PI / 2, -Math.PI / 2 + sweep);
 				ctx.stroke();
 				// Orbiting node at the sweep head.
 				const hx = Math.cos(-Math.PI / 2 + sweep) * radius;
 				const hy = Math.sin(-Math.PI / 2 + sweep) * radius;
-				ctx.fillStyle = `rgba(${glow.r},${glow.g},${glow.b},${0.9 * er})`;
-				ctx.shadowBlur = 14;
-				ctx.shadowColor = `rgba(${glow.r},${glow.g},${glow.b},0.9)`;
+				ctx.fillStyle = `rgba(${glow.r},${glow.g},${glow.b},${0.95 * er})`;
+				ctx.shadowBlur = 12;
+				ctx.shadowColor = `rgba(${glow.r},${glow.g},${glow.b},0.85)`;
 				ctx.beginPath();
 				ctx.arc(hx, hy, 3, 0, Math.PI * 2);
 				ctx.fill();
 				ctx.restore();
 			}
 
-			// 6. Vignette — pulls focus to the title card.
-			const vig = ctx.createRadialGradient(cx, cy, H * 0.2, cx, cy, Math.max(W, H) * 0.75);
-			vig.addColorStop(0, 'rgba(0,0,0,0)');
-			vig.addColorStop(1, 'rgba(0,0,0,0.62)');
+			// 6. Paper vignette — soft warm edges darkening toward the corners.
+			const vig = ctx.createRadialGradient(cx, cy, H * 0.25, cx, cy, Math.max(W, H) * 0.78);
+			vig.addColorStop(0, 'rgba(40,46,70,0)');
+			vig.addColorStop(1, 'rgba(40,46,70,0.14)');
 			ctx.fillStyle = vig;
 			ctx.fillRect(0, 0, W, H);
 
-			// 7. Film grain — subtle, animated, the vintage texture.
+			// 7. Paper-fiber grain — multiplied so it darkens like real stock.
 			if (grain) {
-				ctx.globalAlpha = 0.045;
-				ctx.globalCompositeOperation = 'overlay';
-				const ox = (Math.random() * 140) | 0;
-				const oy = (Math.random() * 140) | 0;
-				for (let x = -ox; x < W; x += 140) {
-					for (let y = -oy; y < H; y += 140) {
+				ctx.globalAlpha = 0.05;
+				ctx.globalCompositeOperation = 'multiply';
+				const ox = (Math.random() * 160) | 0;
+				const oy = (Math.random() * 160) | 0;
+				for (let x = -ox; x < W; x += 160) {
+					for (let y = -oy; y < H; y += 160) {
 						ctx.drawImage(grain, x, y);
 					}
 				}
@@ -356,7 +361,7 @@
 		position: fixed;
 		inset: 0;
 		z-index: 90;
-		background: var(--intro-bg, #07090e);
+		background: var(--intro-bg, #fafafa);
 		overflow: hidden;
 		cursor: pointer;
 		display: grid;
@@ -369,11 +374,11 @@
 		display: block;
 	}
 
-	/* Vintage double-rule border, inset from the edges. */
+	/* Vintage double-rule border in blue ink, inset from the edges. */
 	.frame {
 		position: absolute;
 		inset: 26px;
-		border: 1px solid color-mix(in srgb, var(--intro-gold, #d8c08a) 45%, transparent);
+		border: 1px solid color-mix(in srgb, var(--intro-blue, #4078f2) 38%, transparent);
 		border-radius: 4px;
 		pointer-events: none;
 		opacity: 0;
@@ -384,7 +389,7 @@
 		content: '';
 		position: absolute;
 		inset: 5px;
-		border: 1px solid color-mix(in srgb, var(--intro-gold, #d8c08a) 22%, transparent);
+		border: 1px solid color-mix(in srgb, var(--intro-blue, #4078f2) 18%, transparent);
 		border-radius: 2px;
 	}
 
@@ -414,7 +419,7 @@
 		font-weight: 600;
 		letter-spacing: 0.12em;
 		font-size: clamp(38px, 6.4vw, 76px);
-		color: var(--intro-ink, #f3f0e7);
+		color: var(--intro-ink, #383a42);
 		opacity: 0;
 		filter: blur(8px);
 		transform: translateY(10px);
@@ -422,7 +427,7 @@
 			opacity 0.9s var(--ease-intro, ease),
 			filter 0.9s var(--ease-intro, ease),
 			transform 0.9s var(--ease-intro, ease);
-		text-shadow: 0 0 24px rgba(216, 192, 138, 0.18);
+		text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
 	}
 
 	.wordmark.in {
@@ -432,11 +437,11 @@
 	}
 
 	.wordmark .lead {
-		color: var(--intro-ink, #f3f0e7);
+		color: var(--intro-ink, #383a42);
 	}
 
 	.wordmark .trail {
-		color: var(--intro-gold, #d8c08a);
+		color: var(--intro-ink, #383a42);
 	}
 
 	.tagline {
@@ -445,7 +450,7 @@
 		font-style: italic;
 		font-size: clamp(13px, 1.7vw, 17px);
 		letter-spacing: 0.04em;
-		color: var(--intro-ink-soft, rgba(243, 240, 231, 0.62));
+		color: var(--intro-ink-soft, rgba(56, 58, 66, 0.55));
 		opacity: 0;
 		transform: translateY(8px);
 		transition:
@@ -466,7 +471,7 @@
 		z-index: 3;
 		border: 0;
 		background: transparent;
-		color: var(--intro-ink-soft, rgba(243, 240, 231, 0.55));
+		color: var(--intro-ink-soft, rgba(56, 58, 66, 0.55));
 		font-size: 11px;
 		letter-spacing: 0.16em;
 		text-transform: uppercase;
@@ -480,7 +485,7 @@
 
 	.skip:hover {
 		opacity: 1;
-		color: var(--intro-ink, #f3f0e7);
+		color: var(--intro-blue, #4078f2);
 	}
 
 	.is-exit .card {
