@@ -82,22 +82,25 @@ async function runTurn(
 export function createConversationController(
 	deps: ConversationControllerDeps
 ): ConversationController {
-	let turnQueue: ChatTurnQueue;
+	let turnQueue: ChatTurnQueue | undefined;
+	let queueSessionId: string | null = null;
 
 	function ensureQueue(): ChatTurnQueue {
-		if (!turnQueue) {
-		turnQueue = createChatTurnQueue(
-			async (text, images, filePaths) => {
-				if (images === undefined && filePaths === undefined) {
-					await runTurn(deps, text, deps.getHasVisibleConversation);
-				} else if (filePaths === undefined) {
-					await runTurn(deps, { text, images }, deps.getHasVisibleConversation);
-				} else {
-					await runTurn(deps, { text, images, filePaths }, deps.getHasVisibleConversation);
-				}
-			},
-			deps.onQueueChange
-		);
+		const sessionId = deps.getSessionId();
+		if (!turnQueue || queueSessionId !== sessionId) {
+			queueSessionId = sessionId;
+			turnQueue = createChatTurnQueue(
+				async (text, images, filePaths) => {
+					if (images === undefined && filePaths === undefined) {
+						await runTurn(deps, text, deps.getHasVisibleConversation);
+					} else if (filePaths === undefined) {
+						await runTurn(deps, { text, images }, deps.getHasVisibleConversation);
+					} else {
+						await runTurn(deps, { text, images, filePaths }, deps.getHasVisibleConversation);
+					}
+				},
+				deps.onQueueChange
+			);
 		}
 		return turnQueue;
 	}
@@ -127,7 +130,7 @@ export function createConversationController(
 		shouldSkipTranscriptLoad() {
 			const sessionId = deps.getSessionId();
 			if (sessionStore.hasPendingMessage(sessionId)) return true;
-			if (chatStore.isStreaming && chatStore.sessionID === sessionId) return true;
+			if (chatStore.isStreamingFor(sessionId) && chatStore.items.length > 0) return true;
 			if (chatStore.sessionID === sessionId && chatStore.items.length > 0) return true;
 			return false;
 		},

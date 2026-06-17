@@ -138,57 +138,159 @@ function itemFromTranscript(item: TranscriptItem, index: number): ChatItem {
 	};
 }
 
+type StreamCtx = {
+	assistant: { current: Extract<ChatItem, { type: 'assistant' }> | null };
+	reasoning: { current: { text: string; pending: boolean } | null };
+};
+
+interface SessionStream {
+	run: number;
+	abort: AbortController;
+	pendingBatchEvents: StreamEvent[];
+	batchFrame: number;
+	ctx: StreamCtx;
+}
+
+type AssistantItem = Extract<ChatItem, { type: 'assistant' }>;
+
 function createChatStore() {
 	let sessionID = $state<string | null>(null);
 	let items = $state.raw<ChatItem[]>([]);
 	let isLoading = $state(false);
-	let isStreaming = $state(false);
 	let error = $state('');
 	let nextId = 0;
-	let streamRun = 0;
+	let globalStreamRun = 0;
 	let loadRun = 0;
-	let streamAbort: AbortController | null = null;
 	let loadPromise: Promise<void> | null = null;
 	let loadPromiseSession: string | null = null;
+
+	const sessionCache = new Map<string, ChatItem[]>();
+	const sessionErrors = new Map<string, string>();
+	const streamHandles = new Map<string, SessionStream>();
+	let streamingSessionIds = $state.raw<Set<string>>(new Set());
+
+	const BATCHABLE_EVENTS = new Set(['text_delta', 'reasoning_delta', 'reasoning_start']);
 
 	function isAbortError(err: unknown) {
 		return err instanceof DOMException && err.name === 'AbortError';
 	}
 
+	function cachedItemCount(targetSessionID: string) {
+		return sessionCache.get(targetSessionID)?.length ?? 0;
+	}
+
+	function getCachedItems(targetSessionID: string) {
+		return sessionCache.get(targetSessionID) ?? [];
+	}
+
+	function writeSessionItems(targetSessionID: string, nextItems: ChatItem[]) {
+		sessionCache.set(targetSessionID, nextItems);
+		if (sessionID === targetSessionID) {
+			items = nextItems;
+		}
+	}
+
+	function markStreaming(targetSessionID: string, handle: SessionStream) {
+		streamHandles.set(targetSessionID, handle);
+		streamingSessionIds.add(targetSessionID);
+		streamingSessionIds = new Set(streamingSessionIds);
+	}
+
+	function unmarkStreaming(targetSessionID: string) {
+		streamHandles.delete(targetSessionID);
+		if (streamingSessionIds.delete(targetSessionID)) {
+			streamingSessionIds = new Set(streamingSessionIds);
+		}
+	}
+
+	function isStreamingFor(targetSessionID: string) {
+		return streamingSessionIds.has(targetSessionID);
+	}
+
+	function abortAllStreams() {
+		for (const [, handle] of streamHandles) {
+			handle.abort.abort();
+		}
+		streamHandles.clear();
+		streamingSessionIds = new Set();
+		globalStreamRun += 1;
+	}
+
 	function clear() {
+		abortAllStreams();
+		sessionCache.clear();
+		sessionErrors.clear();
 		sessionID = null;
 		items = [];
 		isLoading = false;
-		isStreaming = false;
 		error = '';
-		streamRun += 1;
 		loadRun += 1;
 		loadPromise = null;
 		loadPromiseSession = null;
-		streamAbort?.abort();
-		streamAbort = null;
+	}
+
+	function reconcileStreamCtx(targetSessionID: string, ctx: StreamCtx) {
+		const cached = getCachedItems(targetSessionID);
+		if (ctx.assistant.current) {
+			const synced = cached.find(
+				(item): item is AssistantItem =>
+					item.type === 'assistant' && item.id === ctx.assistant.current!.id
+			);
+			if (synced) {
+				ctx.assistant.current = synced;
+				return;
+			}
+			ctx.assistant.current = null;
+		}
+		const last = cached.at(-1);
+		if (
+			last?.type === 'assistant' &&
+			(last.pending === true || last.reasoning?.pending === true)
+		) {
+			ctx.assistant.current = last;
+		}
 	}
 
 	function bindSession(nextSessionID: string) {
 		if (sessionID === nextSessionID) return;
+
+		if (sessionID) {
+			const handle = streamHandles.get(sessionID);
+			if (handle) {
+				flushBatchForSession(sessionID, handle.ctx, handle);
+			}
+			sessionCache.set(sessionID, items);
+		}
+
 		loadRun += 1;
 		loadPromise = null;
 		loadPromiseSession = null;
 		sessionID = nextSessionID;
-		items = [];
+		items = sessionCache.get(nextSessionID) ?? [];
+		error = sessionErrors.get(nextSessionID) ?? '';
 		isLoading = false;
-		error = '';
 	}
 
 	async function loadTranscript(nextSessionID: string) {
 		if (sessionID === nextSessionID && items.length > 0) return;
-		if (isStreaming && sessionID === nextSessionID) return;
+		if (isStreamingFor(nextSessionID) && cachedItemCount(nextSessionID) > 0) return;
 		if (sessionID === nextSessionID && isLoading && loadPromise) return loadPromise;
 
 		const run = ++loadRun;
 		const switchingSession = sessionID !== nextSessionID;
-		sessionID = nextSessionID;
-		if (switchingSession) items = [];
+		if (switchingSession) {
+			if (sessionID) {
+				const handle = streamHandles.get(sessionID);
+				if (handle) {
+					flushBatchForSession(sessionID, handle.ctx, handle);
+				}
+				sessionCache.set(sessionID, items);
+			}
+			sessionID = nextSessionID;
+			items = sessionCache.get(nextSessionID) ?? [];
+		} else {
+			sessionID = nextSessionID;
+		}
 		isLoading = true;
 		error = '';
 		loadPromiseSession = nextSessionID;
@@ -198,29 +300,32 @@ function createChatStore() {
 					getSessionMessages(nextSessionID),
 					listChildSessions(nextSessionID).catch(() => ({ sessions: [] as Session[] }))
 				]);
-				// A newer load for a DIFFERENT session superseded this one.
 				if (run !== loadRun && sessionID !== nextSessionID) return;
-				if (isStreaming && sessionID === nextSessionID) return;
-				// First-turn flight may stage a user message while this fetch was in flight.
+				if (isStreamingFor(nextSessionID) && cachedItemCount(nextSessionID) > 0) return;
 				if (sessionID === nextSessionID && items.length > 0) return;
-				items = mergeSubagents(itemsFromTranscript(transcript.items), children.sessions);
+				const loaded = mergeSubagents(
+					itemsFromTranscript(transcript.items),
+					children.sessions
+				);
+				writeSessionItems(nextSessionID, loaded);
+				sessionErrors.delete(nextSessionID);
+				if (sessionID === nextSessionID) error = '';
 				chatDebug('store:load-transcript', {
 					sessionID: nextSessionID,
 					rawItems: transcript.items,
-					items: summarizeChatItems(items)
+					items: summarizeChatItems(getCachedItems(nextSessionID))
 				});
 			} catch (err) {
 				if (run !== loadRun && sessionID !== nextSessionID) return;
-				if (isStreaming && sessionID === nextSessionID) return;
+				if (isStreamingFor(nextSessionID) && cachedItemCount(nextSessionID) > 0) return;
 				if (sessionID === nextSessionID && items.length > 0) return;
-				error = err instanceof Error ? err.message : 'Failed to load transcript';
-				items = [{ id: localID('error'), type: 'error', text: error }];
+				const message = err instanceof Error ? err.message : 'Failed to load transcript';
+				sessionErrors.set(nextSessionID, message);
+				writeSessionItems(nextSessionID, [
+					{ id: localID('error'), type: 'error', text: message }
+				]);
+				if (sessionID === nextSessionID) error = message;
 			} finally {
-				// Always finish the loading state for the session this fetch
-				// owns, so a superseded run never leaves isLoading stuck on or
-				// an unresolved loadPromise lingering. We key the cleanup on
-				// loadPromiseSession (the latest request for this session id)
-				// rather than loadRun, which advances on every switch.
 				if (loadPromiseSession === nextSessionID) {
 					if (sessionID === nextSessionID) {
 						isLoading = false;
@@ -233,9 +338,20 @@ function createChatStore() {
 		return loadPromise;
 	}
 
+	function addUserToSession(
+		targetSessionID: string,
+		text: string,
+		images?: ImageAttachment[],
+		reveal = true
+	) {
+		const next = getCachedItems(targetSessionID).slice();
+		next.push({ id: localID('user'), type: 'user', text, images, reveal });
+		writeSessionItems(targetSessionID, next);
+	}
+
 	function addUser(text: string, images?: ImageAttachment[], reveal = true) {
-		items.push({ id: localID('user'), type: 'user', text, images, reveal });
-		notifyItems();
+		if (!sessionID) return;
+		addUserToSession(sessionID, text, images, reveal);
 	}
 
 	function stageUser(text: string, images?: ImageAttachment[]) {
@@ -243,98 +359,95 @@ function createChatStore() {
 	}
 
 	function revealStagedUser() {
+		if (!sessionID) return;
+		const current = getCachedItems(sessionID);
 		let revealIndex = -1;
-		for (let i = items.length - 1; i >= 0; i--) {
-			const item = items[i];
+		for (let i = current.length - 1; i >= 0; i--) {
+			const item = current[i];
 			if (item.type === 'user' && item.reveal === false) {
 				revealIndex = i;
 				break;
 			}
 		}
 		if (revealIndex < 0) return;
-		items = items.map((item, i) =>
-			i === revealIndex && item.type === 'user' ? { ...item, reveal: true } : item
+		writeSessionItems(
+			sessionID,
+			current.map((item, i) =>
+				i === revealIndex && item.type === 'user' ? { ...item, reveal: true } : item
+			)
 		);
 	}
 
-	/** Publish items array reference for Svelte reactivity (caller may already have a new array). */
-	function notifyItems(alreadyNew = false) {
-		if (!alreadyNew) items = items.slice();
-	}
-
-	function applyEvent(
-		event: StreamEvent,
-		ctx: {
-			assistant: { current: Extract<ChatItem, { type: 'assistant' }> | null };
-			reasoning: { current: { text: string; pending: boolean } | null };
+	function applyEventToSession(targetSessionID: string, event: StreamEvent, ctx: StreamCtx) {
+		if (isStreamingFor(targetSessionID)) {
+			reconcileStreamCtx(targetSessionID, ctx);
 		}
-	) {
+		const sessionItems = getCachedItems(targetSessionID);
+		const sessionError =
+			sessionErrors.get(targetSessionID) ?? (sessionID === targetSessionID ? error : '');
 		const reduced = reduceChatState(
 			{
-				items,
-				error,
+				items: sessionItems,
+				error: sessionError,
 				assistant: ctx.assistant.current,
 				reasoning: ctx.reasoning.current,
 				nextId
 			},
 			event
 		);
-		items = reduced.items;
-		error = reduced.error;
+		nextId = reduced.nextId;
 		ctx.assistant.current = reduced.assistant;
 		ctx.reasoning.current = reduced.reasoning;
-		nextId = reduced.nextId;
-		notifyItems(true);
+		if (reduced.error) {
+			sessionErrors.set(targetSessionID, reduced.error);
+		} else {
+			sessionErrors.delete(targetSessionID);
+		}
+		if (sessionID === targetSessionID) {
+			error = reduced.error;
+		}
+		writeSessionItems(targetSessionID, reduced.items);
 	}
 
-	const BATCHABLE_EVENTS = new Set(['text_delta', 'reasoning_delta', 'reasoning_start']);
-	let pendingBatchEvents: StreamEvent[] = [];
-	let batchFrame = 0;
-
-	function flushBatch(
-		ctx: {
-			assistant: { current: Extract<ChatItem, { type: 'assistant' }> | null };
-			reasoning: { current: { text: string; pending: boolean } | null };
-		}
-	) {
-		if (pendingBatchEvents.length === 0) return;
-		const batch = pendingBatchEvents;
-		pendingBatchEvents = [];
+	function flushBatchForSession(targetSessionID: string, ctx: StreamCtx, handle: SessionStream) {
+		if (handle.pendingBatchEvents.length === 0) return;
+		const batch = handle.pendingBatchEvents;
+		handle.pendingBatchEvents = [];
 		for (const event of batch) {
-			applyEvent(event, ctx);
+			applyEventToSession(targetSessionID, event, ctx);
 		}
 	}
 
-	function scheduleBatch(
+	function scheduleBatchForSession(
+		targetSessionID: string,
 		event: StreamEvent,
-		ctx: {
-			assistant: { current: Extract<ChatItem, { type: 'assistant' }> | null };
-			reasoning: { current: { text: string; pending: boolean } | null };
-		}
+		ctx: StreamCtx,
+		handle: SessionStream
 	) {
-		pendingBatchEvents.push(event);
-		if (batchFrame) return;
-		batchFrame = requestAnimationFrame(() => {
-			batchFrame = 0;
-			flushBatch(ctx);
+		handle.pendingBatchEvents.push(event);
+		if (handle.batchFrame) return;
+		handle.batchFrame = requestAnimationFrame(() => {
+			handle.batchFrame = 0;
+			const current = streamHandles.get(targetSessionID);
+			if (!current || current.run !== handle.run) return;
+			flushBatchForSession(targetSessionID, ctx, handle);
 		});
 	}
 
-	function applyStreamEvent(
+	function applyStreamEventForSession(
+		targetSessionID: string,
 		event: StreamEvent,
-		ctx: {
-			assistant: { current: Extract<ChatItem, { type: 'assistant' }> | null };
-			reasoning: { current: { text: string; pending: boolean } | null };
-		}
+		ctx: StreamCtx,
+		handle: SessionStream
 	) {
 		if (BATCHABLE_EVENTS.has(event.type)) {
-			scheduleBatch(event, ctx);
+			scheduleBatchForSession(targetSessionID, event, ctx, handle);
 			return;
 		}
-		if (pendingBatchEvents.length > 0) {
-			flushBatch(ctx);
+		if (handle.pendingBatchEvents.length > 0) {
+			flushBatchForSession(targetSessionID, ctx, handle);
 		}
-		applyEvent(event, ctx);
+		applyEventToSession(targetSessionID, event, ctx);
 	}
 
 	async function send(
@@ -345,34 +458,46 @@ function createChatStore() {
 		const payload = typeof payloadOrText === 'string' ? { text: payloadOrText } : payloadOrText;
 		const text = payload.text;
 		const images = payload.images;
-		if (isStreaming) {
+		if (isStreamingFor(nextSessionID)) {
 			chatDebug('store:send-blocked', {
 				sessionID: nextSessionID,
-				reason: 'already-streaming',
+				reason: 'session-already-streaming',
 				textLength: text.length
 			});
 			return;
 		}
 
-		const run = ++streamRun;
-		sessionID = nextSessionID;
-		error = '';
-		isStreaming = true;
-		streamAbort?.abort();
-		streamAbort = new AbortController();
-		const signal = streamAbort.signal;
-		if (!opts?.skipUser) addUser(text, images);
-		chatDebug('store:send-start', {
-			sessionID: nextSessionID,
-			run,
-			skipUser: opts?.skipUser ?? false,
-			textLength: text.length,
-			items: summarizeChatItems(items)
-		});
-		const ctx = {
-			assistant: { current: null as Extract<ChatItem, { type: 'assistant' }> | null },
-			reasoning: { current: null as { text: string; pending: boolean } | null }
+		const handle: SessionStream = {
+			run: ++globalStreamRun,
+			abort: new AbortController(),
+			pendingBatchEvents: [],
+			batchFrame: 0,
+			ctx: {
+				assistant: { current: null },
+				reasoning: { current: null }
+			}
 		};
+
+		if (sessionID === nextSessionID) {
+			error = '';
+			sessionErrors.delete(nextSessionID);
+		}
+
+		if (!opts?.skipUser) addUserToSession(nextSessionID, text, images);
+		markStreaming(nextSessionID, handle);
+
+		const ctx = handle.ctx;
+		const preId = localID('assistant');
+		const preAssistant: Extract<ChatItem, { type: 'assistant' }> = {
+			id: preId,
+			type: 'assistant',
+			text: '',
+			pending: true
+		};
+		const preItems = getCachedItems(nextSessionID).slice();
+		preItems.push(preAssistant);
+		writeSessionItems(nextSessionID, preItems);
+		ctx.assistant.current = preAssistant;
 		let eventIndex = 0;
 		try {
 			for await (const event of streamMessage(
@@ -382,65 +507,69 @@ function createChatStore() {
 					images: images?.map((image) => ({ media_type: image.media_type, data: image.data })),
 					file_paths: payload.filePaths
 				},
-				signal
+				handle.abort.signal
 			)) {
-				if (run !== streamRun) return;
+				const current = streamHandles.get(nextSessionID);
+				if (!current || current.run !== handle.run) return;
 				eventIndex += 1;
-				const before = summarizeChatItems(items);
-				applyStreamEvent(event, ctx);
+				const before = summarizeChatItems(getCachedItems(nextSessionID));
+				applyStreamEventForSession(nextSessionID, event, ctx, handle);
 				chatDebug('store:stream-event', {
 					sessionID: nextSessionID,
-					run,
+					run: handle.run,
 					eventIndex,
 					event: summarizeStreamEvent(event),
 					before,
-					after: summarizeChatItems(items),
+					after: summarizeChatItems(getCachedItems(nextSessionID)),
 					assistantID: ctx.assistant.current?.id ?? null,
 					reasoning: ctx.reasoning.current
 				});
 				if (event.type === 'done') break;
 			}
 		} catch (err) {
-			if (run !== streamRun) return;
+			const current = streamHandles.get(nextSessionID);
+			if (!current || current.run !== handle.run) return;
 			if (isAbortError(err)) {
-				chatDebug('store:send-aborted', { sessionID: nextSessionID, run });
+				chatDebug('store:send-aborted', { sessionID: nextSessionID, run: handle.run });
 				return;
 			}
-			applyStreamEvent(
+			applyStreamEventForSession(
+				nextSessionID,
 				{
 					type: 'error',
 					message: err instanceof Error ? err.message : 'Failed to send message'
 				},
-				ctx
+				ctx,
+				handle
 			);
 		} finally {
-			if (run === streamRun) {
-				if (pendingBatchEvents.length > 0) {
-					flushBatch(ctx);
-				}
-				const beforeDone = summarizeChatItems(items);
-				applyEvent({ type: 'done' }, ctx);
-				isStreaming = false;
-				streamAbort = null;
+			const current = streamHandles.get(nextSessionID);
+			if (current?.run === handle.run) {
+				flushBatchForSession(nextSessionID, ctx, handle);
+				const beforeDone = summarizeChatItems(getCachedItems(nextSessionID));
+				applyEventToSession(nextSessionID, { type: 'done' }, ctx);
+				unmarkStreaming(nextSessionID);
 				chatDebug('store:send-finish', {
 					sessionID: nextSessionID,
-					run,
+					run: handle.run,
 					beforeDone,
-					afterDone: summarizeChatItems(items),
+					afterDone: summarizeChatItems(getCachedItems(nextSessionID)),
 					assistantID: ctx.assistant.current?.id ?? null,
 					reasoning: ctx.reasoning.current,
-					error
+					error: sessionErrors.get(nextSessionID) ?? ''
 				});
 			}
 		}
 	}
 
-	async function cancel(nextSessionID?: string) {
-		const id = nextSessionID ?? sessionID;
-		if (!id || !isStreaming) return;
+	async function cancel(targetSessionID?: string) {
+		const id = targetSessionID ?? sessionID;
+		if (!id) return;
+		const handle = streamHandles.get(id);
+		if (!handle) return;
 
 		chatDebug('store:cancel-start', { sessionID: id });
-		streamAbort?.abort();
+		handle.abort.abort();
 		try {
 			await abortSession(id);
 		} catch (err) {
@@ -452,42 +581,63 @@ function createChatStore() {
 	}
 
 	function patchSubagentCard(
+		targetSessionID: string,
 		childSessionId: string,
 		patch: Partial<Extract<ChatItem, { type: 'subagent' }>>
 	) {
-		items = items.map((item) =>
-			item.type === 'subagent' && item.childSessionId === childSessionId ? { ...item, ...patch } : item
+		const next = getCachedItems(targetSessionID).map((item) =>
+			item.type === 'subagent' && item.childSessionId === childSessionId
+				? { ...item, ...patch }
+				: item
 		);
+		writeSessionItems(targetSessionID, next);
 	}
 
 	async function replyToSubagent(childSessionId: string, text: string, permissionOptionId?: string) {
-		patchSubagentCard(childSessionId, {
+		const parentSessionID = sessionID;
+		if (!parentSessionID) return;
+
+		patchSubagentCard(parentSessionID, childSessionId, {
 			status: 'running',
 			pending: true,
 			pendingQuestion: undefined,
 			permissionOptions: undefined
 		});
+
+		const handle: SessionStream = {
+			run: ++globalStreamRun,
+			abort: new AbortController(),
+			pendingBatchEvents: [],
+			batchFrame: 0,
+			ctx: {
+				assistant: { current: null },
+				reasoning: { current: null }
+			}
+		};
+		const ctx = handle.ctx;
+
 		try {
 			for await (const event of respondToSubagent(childSessionId, {
 				text: text || undefined,
 				permission_option_id: permissionOptionId
 			})) {
-				const ctx = {
-					assistant: { current: null as Extract<ChatItem, { type: 'assistant' }> | null },
-					reasoning: { current: null as { text: string; pending: boolean } | null }
-				};
-				applyStreamEvent(event, ctx);
+				applyStreamEventForSession(parentSessionID, event, ctx, handle);
 				if (event.type === 'done') break;
 			}
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to reply to subagent';
+			const message = err instanceof Error ? err.message : 'Failed to reply to subagent';
+			sessionErrors.set(parentSessionID, message);
+			if (sessionID === parentSessionID) error = message;
+		} finally {
+			flushBatchForSession(parentSessionID, ctx, handle);
 		}
 	}
 
 	async function cancelSubagent(childSessionId: string) {
+		if (!sessionID) return;
 		try {
 			await abortSession(childSessionId);
-			patchSubagentCard(childSessionId, {
+			patchSubagentCard(sessionID, childSessionId, {
 				status: 'cancelled',
 				pending: false,
 				pendingQuestion: undefined,
@@ -509,11 +659,12 @@ function createChatStore() {
 			return isLoading;
 		},
 		get isStreaming() {
-			return isStreaming;
+			return streamingSessionIds.size > 0;
 		},
 		get error() {
 			return error;
 		},
+		isStreamingFor,
 		clear,
 		bindSession,
 		loadTranscript,

@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import EmptyChatState from '$lib/components/EmptyChatState.svelte';
 	import Composer from '$lib/components/Composer.svelte';
@@ -128,7 +127,23 @@
 		syncSessionFromStore();
 	});
 
-	onMount(() => {
+	$effect(() => {
+		sessionId;
+		awaitingFirstAssistant = false;
+		firstTurnActive = false;
+		firstTurnFlightDone = false;
+		heroFrameExiting = false;
+		snapshotSynced = false;
+		snapshotLoading = true;
+		syncQueueState();
+	});
+
+	let activatedSessionId = $state<string | null>(null);
+
+	$effect(() => {
+		if (!sessionId) return;
+		if (activatedSessionId === sessionId) return;
+		activatedSessionId = sessionId;
 		syncSessionFromStore();
 		conversation.onMount();
 	});
@@ -163,7 +178,7 @@
 
 	function onWindowKeydown(e: KeyboardEvent) {
 		if (!matchesShortcut(e, settingsStore.settings.shortcuts.stopResponse)) return;
-		if (!chatStore.isStreaming) return;
+		if (!chatStore.isStreamingFor(sessionId)) return;
 		const target = e.target;
 		if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
 			if (target.selectionStart !== target.selectionEnd) return;
@@ -254,7 +269,7 @@
 				onWorkspaceChanged={() => chatStore.loadTranscript(sessionId)}
 				{sessionId}
 				disabled={connectionState.status !== 'ready'}
-				streaming={chatStore.isStreaming}
+				streaming={chatStore.isStreamingFor(sessionId)}
 				{queuedCount}
 				{queuedMessages}
 				waitingForReply={turnBusy || firstTurnActive}

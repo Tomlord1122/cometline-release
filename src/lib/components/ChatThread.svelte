@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { fade, fly, slide } from 'svelte/transition';
+	import { fade, slide } from 'svelte/transition';
 	import {
 		Brain,
 		Check,
@@ -25,9 +25,6 @@
 		type ThinkingBlock
 	} from '$lib/conversation/thinking-attribution';
 
-	const ASSISTANT_ROW_IN = { y: 10, duration: 220 };
-	const TOOL_ROW_IN = { y: 8, duration: 200 };
-	const STATUS_ROW_IN = { y: 6, duration: 180 };
 	const FOLD_IN = { duration: 180 };
 	const TRANSCRIPT_IN = { duration: 140 };
 
@@ -45,6 +42,7 @@
 
 	let isInitialTranscriptPaint = $state(true);
 	let isSessionSynced = $derived(chatStore.sessionID === sessionId);
+	let sessionStreaming = $derived(chatStore.isStreamingFor(sessionId));
 
 	let snapshotItems = $state.raw<ChatItem[]>([]);
 
@@ -78,7 +76,7 @@
 	);
 	let firstAssistantId = $derived(firstAssistantItem?.id ?? null);
 	let streamingAssistantId = $derived.by(() => {
-		if (!chatStore.isStreaming) return null;
+		if (!sessionStreaming) return null;
 		const last = threadItems.at(-1);
 		if (last?.type === 'user') return null;
 		return threadItems.findLast((item) => item.type === 'assistant')?.id ?? null;
@@ -270,11 +268,15 @@
 	$effect(() => {
 		sessionId;
 		followStream = true;
+		if (chatStore.sessionID === sessionId && chatStore.items.length > 0) {
+			isInitialTranscriptPaint = false;
+			return;
+		}
 		isInitialTranscriptPaint = true;
 	});
 
 	$effect(() => {
-		const streaming = chatStore.isStreaming;
+		const streaming = sessionStreaming;
 		if (streaming && !wasStreaming) {
 			followStream = true;
 		}
@@ -282,7 +284,7 @@
 	});
 
 	let scrollKey = $derived.by(() => {
-		if (!chatStore.isStreaming) {
+		if (!sessionStreaming) {
 			const last = threadItems.at(-1);
 			return `idle:${threadItems.length}:${last?.id ?? ''}`;
 		}
@@ -300,7 +302,7 @@
 	let renderDebugSnapshot = $derived.by(() => ({
 		awaitingFirstAssistant,
 		firstTurnFlightDone,
-		isStreaming: chatStore.isStreaming,
+		isStreaming: sessionStreaming,
 		firstUserId,
 		firstAssistantId,
 		firstAssistantItem: firstAssistantItem ? summarizeChatItem(firstAssistantItem) : null,
@@ -362,7 +364,7 @@
 	let heroGlowColor = $derived(settingsStore.settings.appearance.heroComposer.glowColor);
 
 	function showAssistantActivitySpinner(item: Extract<ChatItem, { type: 'assistant' }>) {
-		return chatStore.isStreaming && item.id === streamingAssistantId;
+		return sessionStreaming && item.id === streamingAssistantId;
 	}
 
 	function hasVisibleThinkingBlock(itemId: string) {
@@ -374,7 +376,7 @@
 	}
 
 	function showAssistantPending(item: Extract<ChatItem, { type: 'assistant' }>) {
-		if (!chatStore.isStreaming || item.id !== streamingAssistantId) return false;
+		if (!sessionStreaming || item.id !== streamingAssistantId) return false;
 		if (item.text?.trim()) return false;
 		return !hasVisibleThinkingBlock(item.id);
 	}
@@ -388,38 +390,6 @@
 				showAssistantPending(item) ||
 				showAssistantActivitySpinner(item)
 		);
-	}
-
-	let showOrphanPendingAssistant = $derived(
-		isSessionSynced && isAwaitingVisibleStreamingReply()
-	);
-
-	function isAssistantPendingRenderedInThread(item: Extract<ChatItem, { type: 'assistant' }>) {
-		if (!showAssistantRow(item)) return false;
-		if (firstAssistantInNormalList(item)) return true;
-		return Boolean(
-			awaitingFirstAssistant && item.id === firstAssistantId && showFirstTurnAvatarSlot()
-		);
-	}
-
-	function isAwaitingVisibleStreamingReply() {
-		if (!chatStore.isStreaming) return false;
-		if (pendingAssistantRenderedInFirstTurnSlot()) return false;
-
-		const last = threadItems.at(-1);
-		if (!last) return false;
-		if (last.type === 'user') return true;
-
-		if (last.type === 'assistant' && showAssistantPending(last)) {
-			return !isAssistantPendingRenderedInThread(last);
-		}
-		return false;
-	}
-
-	function pendingAssistantRenderedInFirstTurnSlot() {
-		if (!chatStore.isStreaming || !awaitingFirstAssistant) return false;
-		if (!firstUserId) return true;
-		return showFirstTurnAvatarSlot();
 	}
 
 	function summarizeRenderItem(item: ChatItem, index: number) {
@@ -449,16 +419,13 @@
 	}
 
 	function firstAssistantInNormalList(item: Extract<ChatItem, { type: 'assistant' }>) {
+		if (showFirstTurnAvatarSlot()) return false;
 		return !(
 			awaitingFirstAssistant &&
 			item.id === firstAssistantId &&
 			firstUserId &&
 			!(firstTurnFlightDone && showAssistantRow(item))
 		);
-	}
-
-	function rowIntro<T extends object>(transition: T) {
-		return isInitialTranscriptPaint || awaitingFirstAssistant ? undefined : transition;
 	}
 
 	function startsSpeakerRun(index: number, speaker: 'user' | 'assistant') {
@@ -548,7 +515,7 @@
 				if (!followStream && !isInitialTranscriptPaint && !chatStore.isLoading) return;
 
 				const instant =
-					isInitialTranscriptPaint || chatStore.isLoading || chatStore.isStreaming;
+					isInitialTranscriptPaint || chatStore.isLoading || sessionStreaming;
 				pinScrollTop(instant ? 'auto' : 'smooth');
 			});
 		});
@@ -564,29 +531,6 @@
 	</div>
 {/snippet}
 
-{#snippet assistantPendingRow()}
-	<div
-		class="row assistant-row gap-2.5 md:gap-3 lg:gap-4"
-		aria-live="polite"
-		aria-busy="true"
-		in:fly={rowIntro(ASSISTANT_ROW_IN)}
-	>
-		<div
-			class="avatar-mini size-9 shrink-0 rounded-full border border-gray-400 md:size-10 lg:size-11 xl:size-12"
-		>
-			<img
-				src={projectAvatarSrc(iconVariant, 96)}
-				srcset={projectAvatarSrcset(iconVariant)}
-				sizes="(min-width: 1280px) 48px, (min-width: 1024px) 44px, (min-width: 768px) 40px, 36px"
-				alt=""
-			/>
-		</div>
-		<div class="assistant-stack">
-			{@render assistantActivitySpinner()}
-		</div>
-	</div>
-{/snippet}
-
 {#snippet thinkingBlock(block: ThinkingBlock, hostId: string)}
 	<div class="fold-panel thinking-panel">
 		<button
@@ -597,7 +541,7 @@
 		>
 			<Brain size={13} />
 			<span>{thinkingLabel(block)}</span>
-			{#if thinkingPending(block) && !(hostId === streamingAssistantId && chatStore.isStreaming)}
+			{#if thinkingPending(block) && !(hostId === streamingAssistantId && sessionStreaming)}
 				<LoaderCircle size={12} class="spin" />
 			{/if}
 			<ChevronDown size={13} class={thinkingExpanded(hostId) ? 'expanded' : ''} />
@@ -734,7 +678,7 @@
 				</div>
 				{#if firstAssistantItem && showAssistantRow(firstAssistantItem)}
 					{@render assistantStack(firstAssistantItem)}
-				{:else if chatStore.isStreaming}
+				{:else if sessionStreaming}
 					<div class="assistant-stack">
 						{@render assistantActivitySpinner()}
 					</div>
@@ -784,7 +728,7 @@
 						</div>
 						{#if firstAssistantItem && showAssistantRow(firstAssistantItem)}
 							{@render assistantStack(firstAssistantItem)}
-						{:else if chatStore.isStreaming}
+						{:else if sessionStreaming}
 							<div class="assistant-stack">
 								{@render assistantActivitySpinner()}
 							</div>
@@ -797,7 +741,6 @@
 				<div
 					class="row assistant-row gap-2.5 md:gap-3 lg:gap-4"
 					class:continuation-row={!startsSpeakerRun(index, 'assistant')}
-					in:fly={rowIntro(ASSISTANT_ROW_IN)}
 				>
 					{#if startsSpeakerRun(index, 'assistant')}
 						<div
@@ -822,7 +765,6 @@
 				<div
 					class="row tool-row gap-2.5 md:gap-3 lg:gap-4"
 					class:continuation-row={!startsSpeakerRun(index, 'assistant')}
-					in:fly={rowIntro(TOOL_ROW_IN)}
 				>
 					<div
 						class="avatar-gutter size-9 shrink-0 md:size-10 lg:size-11 xl:size-12"
@@ -880,7 +822,6 @@
 				<div
 					class="row tool-row subagent-row gap-2.5 md:gap-3 lg:gap-4"
 					class:continuation-row={!startsSpeakerRun(index, 'assistant')}
-					in:fly={rowIntro(TOOL_ROW_IN)}
 				>
 					<div
 						class="avatar-gutter size-9 shrink-0 md:size-10 lg:size-11 xl:size-12"
@@ -1009,7 +950,7 @@
 					</div>
 				</div>
 			{:else if item.type === 'memory' && !isMemoryInBuffer(item)}
-				<div class="row event-row" in:fly={rowIntro(TOOL_ROW_IN)}>
+				<div class="row event-row">
 					<div class="event-card memory-card">
 						<div class="event-title"><Brain size={14} /><span>Memories used</span></div>
 						<div class="memory-chips">
@@ -1020,9 +961,9 @@
 					</div>
 				</div>
 			{:else if item.type === 'status'}
-				<div class="status" in:fly={rowIntro(STATUS_ROW_IN)}>{usageText(item)}</div>
+				<div class="status">{usageText(item)}</div>
 			{:else if item.type === 'error'}
-				<div class="row event-row" in:fly={rowIntro(TOOL_ROW_IN)}>
+				<div class="row event-row">
 					<div class="event-card error-card">
 						<div class="event-title"><TriangleAlert size={14} /><span>Error</span></div>
 						<p>{item.text}</p>
@@ -1030,9 +971,6 @@
 				</div>
 			{/if}
 		{/each}
-		{#if showOrphanPendingAssistant}
-			{@render assistantPendingRow()}
-		{/if}
 			</div>
 		{/if}
 	</div>
