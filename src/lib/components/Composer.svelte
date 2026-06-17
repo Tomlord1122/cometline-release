@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onDestroy, tick } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { fade, fly } from 'svelte/transition';
 	import { Check, ChevronDown, FileText, Send, Sparkles, Square, X } from '@lucide/svelte';
 	import type { QueuedMessage } from '$lib/actions/chat-turn-queue';
@@ -8,7 +9,7 @@
 	import { shellStore } from '$lib/stores/shell.svelte';
 	import { matchesShortcut } from '$lib/keyboard-shortcuts';
 	import RichComposerInput from '$lib/components/RichComposerInput.svelte';
-	import { listSkills, listWorkspaces, changeSessionWorkspace } from '$lib/client/cometmind';
+	import { listSkills, listWorkspaces, forkSession } from '$lib/client/cometmind';
 	import {
 		filterFileIndex,
 		getFileIndex,
@@ -371,22 +372,31 @@
 		const clean = path.trim();
 		if (!clean) return;
 		try {
+			let forkedId: string | null = null;
 			if (sessionId) {
-				const session = await changeSessionWorkspace(sessionId, clean);
-				sessionStore.updateSession(session);
+				// Forking preserves the original session and starts a fresh one
+				// rooted in the new directory with the full transcript copied.
+				const forked = await forkSession(sessionId, clean);
+				sessionStore.appendSession(forked);
+				forkedId = forked.id;
 			}
 			await window.electronAPI?.setWorkspacePath?.(clean);
 			shellStore.setWorkspacePath(clean);
 			skillsLoaded = false;
 			skills = [];
 			workspacePathsLoaded = false;
-			setDropMessage(`Switched workspace to ${clean}`);
-			await onWorkspaceChanged?.();
 			input?.clear();
 			value = '';
 			workspaceHighlight = 0;
+			if (forkedId) {
+				setDropMessage(`Forked session into ${clean}`);
+				await goto(`/session/${forkedId}`);
+			} else {
+				setDropMessage(`Switched workspace to ${clean}`);
+			}
+			await onWorkspaceChanged?.();
 		} catch (err) {
-			setDropMessage(err instanceof Error ? err.message : 'Failed to change workspace');
+			setDropMessage(err instanceof Error ? err.message : 'Failed to fork session');
 		}
 	}
 

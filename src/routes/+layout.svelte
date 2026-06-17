@@ -7,7 +7,7 @@
 	import { sessionStore } from '$lib/stores/session.svelte';
 	import { shellStore } from '$lib/stores/shell.svelte';
 	import { heroComposerCssVars } from '$lib/hero-composer-appearance';
-	import { ensureWorkspace, listSessions } from '$lib/client/cometmind';
+	import { ensureWorkspace, listAllSessions } from '$lib/client/cometmind';
 
 	let { children } = $props();
 
@@ -52,7 +52,7 @@
 	async function loadSessions(workspacePath: string) {
 		try {
 			await ensureWorkspace(workspacePath);
-			const result = await listSessions(workspacePath);
+			const result = await listAllSessions();
 			sessionStore.setSessions(result.sessions);
 			shellStore.setBootMessage('');
 		} catch (err) {

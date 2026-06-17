@@ -6,7 +6,7 @@ export interface BuiltinSlashCommand {
 export const BUILTIN_SLASH_COMMANDS: BuiltinSlashCommand[] = [
 	{
 		name: 'change',
-		description: 'Switch workspace for this session'
+		description: 'Fork this session into another workspace directory'
 	},
 	{
 		name: 'create-skill',

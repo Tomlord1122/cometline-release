@@ -6,6 +6,7 @@ import {
 	createMemory as createMemoryApi,
 	createSession as createSessionApi,
 	createWorkspace as createWorkspaceApi,
+	forkSession as forkSessionApi,
 	deleteMemory as deleteMemoryApi,
 	deleteSession as deleteSessionApi,
 	deleteSkill as deleteSkillApi,
@@ -118,6 +119,14 @@ export function changeSessionWorkspace(sessionId: string, workspacePath: string)
 	}).then(({ data }) => data);
 }
 
+export function forkSession(sessionId: string, workspacePath: string): Promise<Session> {
+	return forkSessionApi({
+		path: { id: sessionId },
+		body: { workspace_path: workspacePath },
+		throwOnError: true
+	}).then(({ data }) => data);
+}
+
 export function listSkills(workspacePath = ''): Promise<ListSkillsResponse> {
 	return listSkillsApi({
 		query: skillQuery(workspacePath),
@@ -162,6 +171,13 @@ export function createSession(req: CreateSessionRequest): Promise<Session> {
 export function listSessions(workspacePath: string): Promise<SessionListResponse> {
 	return listSessionsApi({
 		query: { workspace_path: workspacePath },
+		throwOnError: true
+	}).then(({ data }) => data);
+}
+
+export function listAllSessions(): Promise<SessionListResponse> {
+	return listSessionsApi({
+		query: { all: true },
 		throwOnError: true
 	}).then(({ data }) => data);
 }

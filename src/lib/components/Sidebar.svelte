@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
-	import { Settings, Search, SquarePen, Trash2 } from '@lucide/svelte';
+	import { ChevronDown, ChevronRight, Folder, Settings, Search, SquarePen, Trash2 } from '@lucide/svelte';
 	import type { Session } from '$lib/types';
 	import { sessionStore } from '$lib/stores/session.svelte';
 	import { deleteSession } from '$lib/client/cometmind';
@@ -12,6 +12,7 @@
 	import { modelStore } from '$lib/stores/model.svelte';
 	import { shellStore } from '$lib/stores/shell.svelte';
 	import { isNarrowViewport } from '$lib/layout/narrow-viewport';
+	import { groupSessionsByWorkspace } from '$lib/sessions/group-by-workspace';
 
 	let {
 		workspacePath = '/',
@@ -47,6 +48,12 @@
 	function selectSession(session: Session) {
 		sessionStore.selectSession(session);
 		modelStore.selectFromSession(session);
+		// Switch the active workspace to match the selected session so the
+		// sidebar highlight and grouping reorder to the session's directory.
+		if (session.workspace_path && session.workspace_path !== shellStore.workspacePath) {
+			void window.electronAPI?.setWorkspacePath?.(session.workspace_path);
+			shellStore.setWorkspacePath(session.workspace_path);
+		}
 		void goto(`/session/${session.id}`);
 		closeSidebarIfNarrow();
 	}
@@ -88,6 +95,8 @@
 	}
 
 	let currentSessionId = $derived(page.params.id ?? null);
+	// Groups the user has explicitly collapsed. Groups default to expanded.
+	let collapsedGroups = $state<Record<string, boolean>>({});
 	let filteredSessions = $derived.by(() => {
 		const query = searchQuery.trim().toLowerCase();
 		if (!query) return sessionStore.sessions;
@@ -95,6 +104,20 @@
 			(session.title || 'Untitled').toLowerCase().includes(query)
 		);
 	});
+	let groupedSessions = $derived(
+		groupSessionsByWorkspace(filteredSessions, workspacePath)
+	);
+	let totalSessions = $derived(filteredSessions.length);
+
+	function toggleGroup(path: string) {
+		collapsedGroups = { ...collapsedGroups, [path]: !collapsedGroups[path] };
+	}
+
+	function isGroupCollapsed(path: string): boolean {
+		// While searching, force all groups open so matches are always visible.
+		if (searchQuery.trim()) return false;
+		return Boolean(collapsedGroups[path]);
+	}
 </script>
 
 <aside class="sidebar" class:collapsed aria-hidden={collapsed} data-workspace-path={workspacePath}>
@@ -131,24 +154,56 @@
 		</div>
 
 		<div class="session-list">
-			{#each filteredSessions as session (session.id)}
-				<div class="session-row-wrap" class:selected={currentSessionId === session.id}>
-					<button class="session-row" onclick={() => selectSession(session)}>
-						<span class="session-title">{session.title || 'Untitled'}</span>
-						<span class="session-meta">{session.model_id}</span>
-					</button>
+			{#each groupedSessions as group (group.workspacePath)}
+				{@const collapsed = isGroupCollapsed(group.workspacePath)}
+				{@const isActive = group.workspacePath === workspacePath}
+				<div class="workspace-group" class:active={isActive}>
 					<button
-						class="delete-session"
-						disabled={deletingID === session.id}
-						onclick={() => removeSession(session)}
-						aria-label={`Delete ${session.title || 'Untitled'}`}
-						title="Delete session"
+						class="workspace-header"
+						aria-expanded={!collapsed}
+						aria-current={isActive ? 'true' : undefined}
+						onclick={() => toggleGroup(group.workspacePath)}
+						title={group.workspacePath}
 					>
-						<Trash2 size={13} stroke-width={1.9} />
+						<span class="workspace-chevron">
+							{#if collapsed}
+								<ChevronRight size={13} stroke-width={2} />
+							{:else}
+								<ChevronDown size={13} stroke-width={2} />
+							{/if}
+						</span>
+						<Folder size={13} stroke-width={1.8} class="workspace-folder" />
+						<span class="workspace-label">{group.label}</span>
+						<span class="workspace-count">{group.sessions.length}</span>
 					</button>
+
+					{#if !collapsed}
+						<div class="workspace-sessions">
+							{#each group.sessions as session (session.id)}
+								<div
+									class="session-row-wrap"
+									class:selected={currentSessionId === session.id}
+								>
+									<button class="session-row" onclick={() => selectSession(session)}>
+										<span class="session-title">{session.title || 'Untitled'}</span>
+										<span class="session-meta">{session.model_id}</span>
+									</button>
+									<button
+										class="delete-session"
+										disabled={deletingID === session.id}
+										onclick={() => removeSession(session)}
+										aria-label={`Delete ${session.title || 'Untitled'}`}
+										title="Delete session"
+									>
+										<Trash2 size={13} stroke-width={1.9} />
+									</button>
+								</div>
+							{/each}
+						</div>
+					{/if}
 				</div>
 			{/each}
-			{#if filteredSessions.length === 0}
+			{#if totalSessions === 0}
 				<p class="session-empty">
 					{searchQuery.trim() ? 'No chats match your search' : 'No chats yet'}
 				</p>
@@ -206,6 +261,7 @@
 		overflow: hidden;
 		transition: width var(--duration-fast) var(--ease-smooth);
 		view-transition-name: sidebar;
+		--workspace-inactive-color: #9a9a9f;
 	}
 
 	.sidebar-content {
@@ -300,6 +356,97 @@
 		flex-direction: column;
 		gap: 2px;
 		padding: 0 10px;
+	}
+
+	.workspace-group {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.workspace-group + .workspace-group {
+		margin-top: 6px;
+	}
+
+	.workspace-group.active {
+		border-left: 2px solid var(--hero-composer-glow-color, var(--accent));
+		border-radius: 8px;
+		padding-left: 4px;
+		margin-left: -6px;
+		background: color-mix(
+			in srgb,
+			var(--hero-composer-glow-color, var(--accent)) 7%,
+			transparent
+		);
+	}
+
+	.workspace-group.active .workspace-label {
+		color: var(--text-main);
+	}
+
+	.workspace-group.active .workspace-chevron,
+	.workspace-group.active :global(.workspace-folder) {
+		color: var(--hero-composer-glow-color, var(--accent));
+	}
+
+	.workspace-header {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		width: 100%;
+		padding: 6px 8px;
+		border: none;
+		border-radius: 7px;
+		background: transparent;
+		color: var(--workspace-inactive-color);
+		font-size: 11px;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.02em;
+		cursor: pointer;
+		text-align: left;
+	}
+
+	.workspace-header:hover {
+		background: rgba(0, 0, 0, 0.04);
+		color: var(--text-muted);
+	}
+
+	.workspace-chevron {
+		display: grid;
+		place-items: center;
+		flex-shrink: 0;
+		color: var(--workspace-inactive-color);
+	}
+
+	.workspace-header :global(.workspace-folder) {
+		flex-shrink: 0;
+		color: var(--workspace-inactive-color);
+	}
+
+	.workspace-label {
+		min-width: 0;
+		flex: 1;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.workspace-count {
+		flex-shrink: 0;
+		font-size: 10px;
+		font-weight: 600;
+		color: var(--text-soft);
+		background: rgba(15, 23, 42, 0.06);
+		border-radius: 999px;
+		padding: 1px 6px;
+	}
+
+	.workspace-sessions {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		padding-left: 6px;
 	}
 
 	.session-row {

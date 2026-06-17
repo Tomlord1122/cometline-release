@@ -38,6 +38,13 @@ export type ChangeSessionWorkspaceRequest = {
     workspace_path: string;
 };
 
+export type ForkSessionRequest = {
+    /**
+     * Absolute filesystem path for the forked session's workspace root.
+     */
+    workspace_path: string;
+};
+
 export type WorkspaceListResponse = {
     workspaces: Array<Workspace>;
 };
@@ -569,6 +576,10 @@ export type ListSessionsData = {
          * Absolute workspace path for an already-registered workspace.
          */
         workspace_path?: string;
+        /**
+         * When true, returns top-level sessions across all workspaces and ignores workspace scope.
+         */
+        all?: boolean;
     };
     url: '/api/v1/sessions';
 };
@@ -775,6 +786,44 @@ export type ChangeSessionWorkspaceResponses = {
 };
 
 export type ChangeSessionWorkspaceResponse = ChangeSessionWorkspaceResponses[keyof ChangeSessionWorkspaceResponses];
+
+export type ForkSessionData = {
+    body: ForkSessionRequest;
+    path: {
+        /**
+         * Persisted CometMind session identifier.
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/sessions/{id}/fork';
+};
+
+export type ForkSessionErrors = {
+    /**
+     * Invalid request
+     */
+    400: ErrorResponse;
+    /**
+     * Resource not found
+     */
+    404: ErrorResponse;
+    /**
+     * Unexpected server error
+     */
+    500: ErrorResponse;
+};
+
+export type ForkSessionError = ForkSessionErrors[keyof ForkSessionErrors];
+
+export type ForkSessionResponses = {
+    /**
+     * Forked session resource
+     */
+    201: Session;
+};
+
+export type ForkSessionResponse = ForkSessionResponses[keyof ForkSessionResponses];
 
 export type ListChildSessionsData = {
     body?: never;
