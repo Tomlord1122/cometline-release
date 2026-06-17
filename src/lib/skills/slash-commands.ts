@@ -11,6 +11,10 @@ export const BUILTIN_SLASH_COMMANDS: BuiltinSlashCommand[] = [
 	{
 		name: 'create-skill',
 		description: 'Build a new Agent Skill in ~/.cometmind/skills'
+	},
+	{
+		name: 'model',
+		description: 'Switch the model for this session'
 	}
 ];
 
@@ -44,11 +48,20 @@ export function expandBuiltinSlashCommand(text: string): string | null {
 	if (name === 'change') {
 		return null;
 	}
+	if (name === 'model') {
+		return null;
+	}
 	return null;
 }
 
 export function parseChangeCommand(text: string): { query: string } | null {
 	const match = /^\s*\/change(?:\s+(.*))?$/i.exec(text);
+	if (!match) return null;
+	return { query: (match[1] ?? '').trim() };
+}
+
+export function parseModelCommand(text: string): { query: string } | null {
+	const match = /^\s*\/model(?:\s+(.*))?$/i.exec(text);
 	if (!match) return null;
 	return { query: (match[1] ?? '').trim() };
 }
@@ -97,23 +110,31 @@ export function filterSlashMenuOptions(
 	skills: { name: string; description: string }[]
 ): SlashMenuOption[] {
 	const q = query.toLowerCase();
-	const builtins = BUILTIN_SLASH_COMMANDS.filter(
-		(cmd) =>
-			!q ||
-			cmd.name.toLowerCase().includes(q) ||
-			cmd.description.toLowerCase().includes(q)
-	).map((cmd) => ({ kind: 'builtin' as const, name: cmd.name, description: cmd.description }));
+	const scoreMatch = (name: string, description: string): number => {
+		const n = name.toLowerCase();
+		const d = description.toLowerCase();
+		if (n.startsWith(q)) return 3;
+		if (n.includes(q)) return 2;
+		if (d.includes(q)) return 1;
+		return 0;
+	};
+	const builtins = BUILTIN_SLASH_COMMANDS
+		.map((cmd) => ({ cmd, score: q ? scoreMatch(cmd.name, cmd.description) : 4 }))
+		.filter((item) => item.score > 0)
+		.sort((a, b) => b.score - a.score || a.cmd.name.localeCompare(b.cmd.name))
+		.map((item) => ({
+			kind: 'builtin' as const,
+			name: item.cmd.name,
+			description: item.cmd.description
+		}));
 	const skillOptions = skills
-		.filter(
-			(skill) =>
-				!q ||
-				skill.name.toLowerCase().includes(q) ||
-				skill.description.toLowerCase().includes(q)
-		)
-		.map((skill) => ({
+		.map((skill) => ({ skill, score: q ? scoreMatch(skill.name, skill.description) : 4 }))
+		.filter((item) => item.score > 0)
+		.sort((a, b) => b.score - a.score || a.skill.name.localeCompare(b.skill.name))
+		.map((item) => ({
 			kind: 'skill' as const,
-			name: skill.name,
-			description: skill.description
+			name: item.skill.name,
+			description: item.skill.description
 		}));
 	return [...builtins, ...skillOptions];
 }

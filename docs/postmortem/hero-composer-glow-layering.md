@@ -85,7 +85,7 @@ onPrepareFlight={() => {
 - **Frame scale:** `1.01 → 1` (240ms) via `.hero-composer-frame.exit`
 - **Glow:** opacity fade only over `--duration-flight` (560ms) — position from `.composer-wrapper` transition, no independent sink
 
-See also [hero-composer-dock-transition-jank.md](./hero-composer-dock-transition-jank.md) for dock / flight coordination.
+See also [composer-phase-and-positioning.md](./composer-phase-and-positioning.md) for dock / flight coordination.
 
 ### Configurable colors (Settings → Hero glow)
 

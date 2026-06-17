@@ -90,6 +90,8 @@
 		return {
 			providers: settings.providers.map(cloneProvider),
 			activeProviderId: settings.activeProviderId,
+			defaultModelId: settings.defaultModelId ?? '',
+			defaultProviderId: settings.defaultProviderId ?? '',
 			appearance: {
 				heroComposer: { ...settings.appearance.heroComposer },
 				caretTrail: { ...settings.appearance.caretTrail }
@@ -532,6 +534,8 @@
 		return {
 			providers: draft.providers.map(cloneProvider),
 			activeProviderId: activeProvider?.id ?? '',
+			defaultModelId: draft.defaultModelId ?? '',
+			defaultProviderId: draft.defaultProviderId ?? '',
 			appearance: {
 				heroComposer: { ...draft.appearance.heroComposer },
 				caretTrail: { ...draft.appearance.caretTrail }
@@ -880,12 +884,15 @@
 						bind:appearance={draft.appearance.heroComposer}
 						bind:caretTrail={draft.appearance.caretTrail}
 					/>
-				{:else if activeSection === 'general'}
-					<SettingsGeneralPanel
-						bind:openAtLogin={draft.app.openAtLogin}
-						bind:storage={draft.cometmind.storage}
-						onOpenAtLoginChange={setOpenAtLogin}
-					/>
+			{:else if activeSection === 'general'}
+				<SettingsGeneralPanel
+					bind:openAtLogin={draft.app.openAtLogin}
+					bind:storage={draft.cometmind.storage}
+					bind:defaultModelId={draft.defaultModelId}
+					bind:defaultProviderId={draft.defaultProviderId}
+					providers={draft.providers}
+					onOpenAtLoginChange={setOpenAtLogin}
+				/>
 				{:else if activeSection === 'cometmind'}
 					{#key cometmindPanelKey}
 						<SettingsCometMindPanel

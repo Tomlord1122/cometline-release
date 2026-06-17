@@ -83,5 +83,5 @@ Separately, `isInitialTranscriptPaint` could run hydration (opacity 0 → settle
 ## Related postmortems
 
 - [session-switch-slow-and-stuck-load.md](./session-switch-slow-and-stuck-load.md) — superseded load / empty snapshot on rapid switch (load promise cleanup, `snapshotLoading`).
-- [session-switch-composer-stuck-hero.md](./session-switch-composer-stuck-hero.md) — composer phase vs transcript load timing.
+- [composer-phase-and-positioning.md](./composer-phase-and-positioning.md) — composer phase vs transcript load timing.
 - [streaming-ui-not-live-updating.md](./streaming-ui-not-live-updating.md) — `$state.raw` + immutable item updates for live SSE rendering.

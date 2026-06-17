@@ -513,6 +513,8 @@ export function defaultSettings(): ProviderSettings {
 	return {
 		providers,
 		activeProviderId: active.id,
+		defaultModelId: '',
+		defaultProviderId: '',
 		appearance: defaultAppearance(),
 		shortcuts: defaultKeyboardShortcuts(),
 		app: defaultAppSettings(),
@@ -544,6 +546,8 @@ export function normalizeSettings(
 	return {
 		providers,
 		activeProviderId,
+		defaultModelId: String(next.defaultModelId ?? '').trim(),
+		defaultProviderId: String(next.defaultProviderId ?? '').trim(),
 		appearance: {
 			heroComposer: normalizeHeroComposerAppearance(next.appearance?.heroComposer),
 			caretTrail: normalizeCaretTrailSettings(next.appearance?.caretTrail)
@@ -615,6 +619,8 @@ const providerConfigSchema = z.object({
 const providerSettingsSchema = z.object({
 	providers: z.array(providerConfigSchema).min(1),
 	activeProviderId: z.string(),
+	defaultModelId: z.string(),
+	defaultProviderId: z.string(),
 	appearance: z.object({
 		heroComposer: z.object({
 			glowColor: z.string(),

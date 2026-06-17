@@ -623,6 +623,8 @@ function writeProviderSettings(settings) {
 			{
 				providers: nextProviders,
 				activeProviderId: nextActive,
+				defaultModelId: settings.defaultModelId ?? current.defaultModelId ?? '',
+				defaultProviderId: settings.defaultProviderId ?? current.defaultProviderId ?? '',
 				appearance: settings.appearance ?? current.appearance,
 				shortcuts: settings.shortcuts ?? current.shortcuts,
 				cometmind: nextCometMind,

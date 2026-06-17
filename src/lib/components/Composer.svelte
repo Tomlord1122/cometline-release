@@ -26,6 +26,7 @@
 		filterWorkspaceOptions,
 		isChangeWorkspaceCommand,
 		parseChangeCommand,
+		parseModelCommand,
 		type SlashMenuOption,
 		type WorkspaceMenuOption
 	} from '$lib/skills/slash-commands';
@@ -116,6 +117,42 @@
 	let filteredWorkspaceOptions = $derived.by(() => {
 		if (!changeCommand) return [];
 		return filterWorkspaceOptions(workspaceSearchQuery, workspacePaths);
+	});
+	let modelCommand = $derived(parseModelCommand(value));
+	let modelCommandMenuOpen = $derived(Boolean(modelCommand));
+	let modelCommandQuery = $derived(modelCommand?.query ?? '');
+	let modelCommandHighlight = $state(0);
+	let filteredModelCommandOptions = $derived.by(() => {
+		const query = modelCommandQuery.trim().toLowerCase();
+		if (!query) return modelStore.options;
+		return modelStore.options.filter(
+			(option) =>
+				option.label.toLowerCase().includes(query) ||
+				option.modelId.toLowerCase().includes(query) ||
+				option.providerName.toLowerCase().includes(query)
+		);
+	});
+	let groupedModelCommandOptions = $derived.by(() => {
+		const groups: {
+			providerId: string;
+			providerName: string;
+			providerMethod: string;
+			options: ModelOption[];
+		}[] = [];
+		for (const option of filteredModelCommandOptions) {
+			let group = groups.find((item) => item.providerId === option.providerId);
+			if (!group) {
+				group = {
+					providerId: option.providerId,
+					providerName: option.providerName,
+					providerMethod: option.providerMethod,
+					options: []
+				};
+				groups.push(group);
+			}
+			group.options.push(option);
+		}
+		return groups;
 	});
 	let skillNames = $derived([
 		...BUILTIN_SLASH_COMMANDS.map((cmd) => cmd.name),
@@ -289,6 +326,10 @@
 			void handleChangeWorkspaceSubmit(trimmed);
 			return;
 		}
+		if (modelCommand) {
+			void handleModelCommandSubmit();
+			return;
+		}
 		const expanded = expandBuiltinSlashCommand(trimmed) ?? expandSkillCommand(trimmed);
 		if (!canSubmit || disabled || !modelStore.selected) return;
 		const filePaths = input?.getFilePaths() ?? [];
@@ -300,6 +341,7 @@
 
 	function onKeydown(e: KeyboardEvent) {
 		if (handleWorkspaceMenuKeydown(e)) return;
+		if (handleModelCommandMenuKeydown(e)) return;
 		if (handleSkillMenuKeydown(e)) return;
 		if (handleMentionMenuKeydown(e)) return;
 		if (matchesShortcut(e, settingsStore.settings.shortcuts.stopResponse) && streaming) {
@@ -412,6 +454,46 @@
 		return false;
 	}
 
+	function handleModelCommandMenuKeydown(e: KeyboardEvent): boolean {
+		if (!modelCommandMenuOpen) return false;
+		const flatOptions = filteredModelCommandOptions;
+		if (e.key === 'Escape') {
+			e.preventDefault();
+			input?.clear();
+			value = '';
+			return true;
+		}
+		if (e.key === 'ArrowDown') {
+			e.preventDefault();
+			if (flatOptions.length > 0) {
+				modelCommandHighlight = (modelCommandHighlight + 1) % flatOptions.length;
+			}
+			return true;
+		}
+		if (e.key === 'ArrowUp') {
+			e.preventDefault();
+			if (flatOptions.length > 0) {
+				modelCommandHighlight =
+					(modelCommandHighlight - 1 + flatOptions.length) % flatOptions.length;
+			}
+			return true;
+		}
+		if (e.key === 'Tab' || e.key === 'Enter') {
+			const option = flatOptions[modelCommandHighlight];
+			if (!option) {
+				if (e.key === 'Tab') {
+					e.preventDefault();
+					return true;
+				}
+				return false;
+			}
+			e.preventDefault();
+			void selectModelCommandOption(option);
+			return true;
+		}
+		return false;
+	}
+
 	async function scrollHighlightedWorkspaceIntoView() {
 		await tick();
 		const option = skillMenu?.querySelector(`[data-workspace-index="${workspaceHighlight}"]`);
@@ -453,8 +535,6 @@
 		try {
 			let forkedId: string | null = null;
 			if (sessionId) {
-				// Forking preserves the original session and starts a fresh one
-				// rooted in the new directory with the full transcript copied.
 				const forked = await forkSession(sessionId, clean);
 				sessionStore.appendSession(forked);
 				forkedId = forked.id;
@@ -477,6 +557,26 @@
 		} catch (err) {
 			setDropMessage(err instanceof Error ? err.message : 'Failed to fork session');
 		}
+	}
+
+	async function selectModelCommandOption(option: ModelOption) {
+		modelStore.select(option);
+		await onModelChange?.(option);
+		input?.clear();
+		value = '';
+		modelCommandHighlight = 0;
+		setDropMessage(`Switched to ${option.label}`);
+	}
+
+	function handleModelCommandSubmit() {
+		const flatOptions = filteredModelCommandOptions;
+		const option = flatOptions[modelCommandHighlight];
+		if (option) {
+			void selectModelCommandOption(option);
+			return;
+		}
+		input?.clear();
+		value = '';
 	}
 
 	function handleSkillMenuKeydown(e: KeyboardEvent): boolean {
@@ -866,6 +966,54 @@
 						<span class="skill-command-name">{option.label}</span>
 						<span class="skill-command-description">{option.description}</span>
 					</button>
+				{/each}
+			{/if}
+		</div>
+	{:else if modelCommandMenuOpen}
+		<div
+			class="skill-command-menu model-command-menu"
+			role="listbox"
+			aria-label="Select model"
+			transition:fly={{ y: 6, duration: 120 }}
+		>
+			<div class="workspace-search-hint" aria-hidden="true">
+				<Search size={13} stroke-width={2} />
+				{#if modelCommandQuery}
+					<span class="workspace-search-value">{modelCommandQuery}</span>
+				{:else}
+					<span class="workspace-search-placeholder">Type to filter models…</span>
+				{/if}
+			</div>
+			{#if filteredModelCommandOptions.length === 0}
+				<p class="skill-command-empty">No matching models.</p>
+			{:else}
+				{#each groupedModelCommandOptions as group (group.providerId)}
+					<div class="model-command-group">
+						<p class="slash-group-heading">{group.providerName}</p>
+						{#each group.options as option (option.id)}
+							{@const flatIndex = filteredModelCommandOptions.indexOf(option)}
+							<button
+								type="button"
+								class="skill-command-option model-command-option"
+								class:highlighted={flatIndex === modelCommandHighlight}
+								class:is-selected={option.id === modelStore.selected?.id}
+								role="option"
+								aria-selected={flatIndex === modelCommandHighlight}
+								onpointerenter={() => {
+									modelCommandHighlight = flatIndex;
+								}}
+								onclick={() => {
+									void selectModelCommandOption(option);
+								}}
+							>
+								<span class="skill-command-name">{option.label}</span>
+								<span class="skill-command-description">{option.modelId}</span>
+								{#if option.id === modelStore.selected?.id}
+									<span class="model-command-check"><Check size={14} stroke-width={2} /></span>
+								{/if}
+							</button>
+						{/each}
+					</div>
 				{/each}
 			{/if}
 		</div>
@@ -1710,5 +1858,26 @@
 		padding: 12px;
 		font-size: 12px;
 		color: var(--text-muted);
+	}
+
+	.model-command-menu {
+		max-height: 320px;
+		overflow-y: auto;
+	}
+
+	.model-command-option {
+		position: relative;
+	}
+
+	.model-command-option.is-selected {
+		background: rgba(0, 102, 204, 0.04);
+	}
+
+	.model-command-check {
+		position: absolute;
+		right: 10px;
+		top: 50%;
+		transform: translateY(-50%);
+		color: rgba(0, 102, 204, 0.7);
 	}
 </style>

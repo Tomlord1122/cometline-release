@@ -21,6 +21,7 @@ import type { ImageAttachment } from '$lib/types';
 		sessionStore.selectSession(null);
 		chatStore.clear();
 		shellStore.centerComposer();
+		modelStore.selectDefault();
 	});
 
 	function openSettings() {

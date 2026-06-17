@@ -104,9 +104,8 @@ Include `awaitingFirstAssistant || firstTurnActive` so the thread shell mounts a
 
 ## Relation to other postmortems
 
-- [session-switch-composer-stuck-hero.md](./session-switch-composer-stuck-hero.md) — session route composer phase; do **not** fix composer flash by setting `isLoading` in `bindSession()`.
-- [hero-composer-dock-transition-jank.md](./hero-composer-dock-transition-jank.md) — empty session should stay centered until first send; loading UI on the session route is the thread shell, not the home hero.
-- [user-message-hidden-during-reasoning.md](./user-message-hidden-during-reasoning.md) — different mechanism (`reveal: false` / `transition:fly`); same symptom class (user bubble vanishes).
+- [composer-phase-and-positioning.md](./composer-phase-and-positioning.md) — session route composer phase; do **not** fix composer flash by setting `isLoading` in `bindSession()`. Empty session should stay centered until first send; loading UI on the session route is the thread shell, not the home hero.
+- [first-turn-fly-transition-bugs.md](./first-turn-fly-transition-bugs.md) — different mechanism (`reveal: false` / `transition:fly`); same symptom class (user bubble vanishes).
 
 ## How to avoid regressions
 

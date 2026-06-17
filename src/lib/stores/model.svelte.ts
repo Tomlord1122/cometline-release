@@ -35,9 +35,24 @@ function optionsFromProvider(provider: ProviderConfig): ModelOption[] {
 function createModelStore() {
 	let options = $state<ModelOption[]>([]);
 	let selected = $state<ModelOption | null>(null);
+	let defaultProviderId = '';
+	let defaultModelId = '';
 
 	function select(option: ModelOption) {
 		selected = option;
+	}
+
+	function selectDefault() {
+		if (defaultProviderId && defaultModelId) {
+			const match = options.find(
+				(o) => o.providerId === defaultProviderId && o.modelId === defaultModelId
+			);
+			if (match) {
+				selected = match;
+				return;
+			}
+		}
+		selected = options[0] ?? null;
 	}
 
 	function selectByProviderModel(providerId: string, modelId: string) {
@@ -62,12 +77,23 @@ function createModelStore() {
 		selectByProviderModel(session.provider_id, session.model_id);
 	}
 
-	function setProviders(providers: ProviderConfig[]) {
+	function setProviders(providers: ProviderConfig[], nextDefaultProviderId?: string, nextDefaultModelId?: string) {
+		defaultProviderId = nextDefaultProviderId ?? '';
+		defaultModelId = nextDefaultModelId ?? '';
 		const nextOptions = providers.flatMap(optionsFromProvider);
 		options = nextOptions;
 
 		if (selected && options.some((option) => option.id === selected?.id)) {
 			return;
+		}
+		if (defaultProviderId && defaultModelId) {
+			const defaultOption = options.find(
+				(option) => option.providerId === defaultProviderId && option.modelId === defaultModelId
+			);
+			if (defaultOption) {
+				selected = defaultOption;
+				return;
+			}
 		}
 		selected = options[0] ?? null;
 	}
@@ -88,6 +114,7 @@ function createModelStore() {
 			return selected;
 		},
 		select,
+		selectDefault,
 		selectByProviderModel,
 		selectFromSession,
 		setProviders,

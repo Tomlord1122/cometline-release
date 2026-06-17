@@ -4599,6 +4599,8 @@ function defaultSettings() {
   return {
     providers,
     activeProviderId: active.id,
+    defaultModelId: "",
+    defaultProviderId: "",
     appearance: defaultAppearance(),
     shortcuts: defaultKeyboardShortcuts(),
     app: defaultAppSettings(),
@@ -4621,6 +4623,8 @@ function normalizeSettings(next, options = {}) {
   return {
     providers,
     activeProviderId,
+    defaultModelId: String(next.defaultModelId ?? "").trim(),
+    defaultProviderId: String(next.defaultProviderId ?? "").trim(),
     appearance: {
       heroComposer: normalizeHeroComposerAppearance(next.appearance?.heroComposer),
       caretTrail: normalizeCaretTrailSettings(next.appearance?.caretTrail)
@@ -4679,6 +4683,8 @@ var providerConfigSchema = external_exports.object({
 var providerSettingsSchema = external_exports.object({
   providers: external_exports.array(providerConfigSchema).min(1),
   activeProviderId: external_exports.string(),
+  defaultModelId: external_exports.string(),
+  defaultProviderId: external_exports.string(),
   appearance: external_exports.object({
     heroComposer: external_exports.object({
       glowColor: external_exports.string(),

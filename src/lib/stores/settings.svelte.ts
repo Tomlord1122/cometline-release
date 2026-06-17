@@ -48,7 +48,11 @@ function createSettingsStore() {
 
 	function apply(next: ProviderSettings) {
 		settings = normalizeSettings(next);
-		modelStore.setProviders(settings.providers);
+		modelStore.setProviders(
+			settings.providers,
+			settings.defaultProviderId,
+			settings.defaultModelId
+		);
 	}
 
 	async function load() {
@@ -150,7 +154,11 @@ function createSettingsStore() {
 		};
 		const updated = settings.providers.find((p) => p.id === providerId);
 		if (updated) {
-			modelStore.setProviders(settings.providers);
+			modelStore.setProviders(
+				settings.providers,
+				settings.defaultProviderId,
+				settings.defaultModelId
+			);
 		}
 	}
 
@@ -174,7 +182,11 @@ function createSettingsStore() {
 			providers: nextProviders,
 			activeProviderId: nextActive
 		};
-		modelStore.setProviders(settings.providers);
+		modelStore.setProviders(
+			settings.providers,
+			settings.defaultProviderId,
+			settings.defaultModelId
+		);
 	}
 
 	function getActiveProvider() {
