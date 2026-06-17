@@ -355,27 +355,42 @@
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		padding: 0 10px;
+		padding: 0 10px 12px;
 	}
 
 	.workspace-group {
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
+		border-radius: 8px;
+		padding: 2px;
+		transition: background var(--duration-fast) var(--ease-smooth);
 	}
 
 	.workspace-group + .workspace-group {
 		margin-top: 6px;
 	}
 
+	/* Hovering anywhere over a group darkens the whole group. */
+	.workspace-group:hover {
+		background: rgba(0, 0, 0, 0.05);
+	}
+
 	.workspace-group.active {
 		border-left: 2px solid var(--hero-composer-glow-color, var(--accent));
-		border-radius: 8px;
 		padding-left: 4px;
 		margin-left: -6px;
 		background: color-mix(
 			in srgb,
 			var(--hero-composer-glow-color, var(--accent)) 7%,
+			transparent
+		);
+	}
+
+	.workspace-group.active:hover {
+		background: color-mix(
+			in srgb,
+			var(--hero-composer-glow-color, var(--accent)) 12%,
 			transparent
 		);
 	}
@@ -407,8 +422,7 @@
 		text-align: left;
 	}
 
-	.workspace-header:hover {
-		background: rgba(0, 0, 0, 0.04);
+	.workspace-group:hover .workspace-header {
 		color: var(--text-muted);
 	}
 
@@ -516,7 +530,7 @@
 	}
 
 	.session-row-wrap:hover {
-		background: rgba(0, 0, 0, 0.04);
+		background: rgba(0, 0, 0, 0.08);
 	}
 
 	.session-row-wrap:hover .delete-session,

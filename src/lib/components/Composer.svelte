@@ -2,7 +2,7 @@
 	import { onDestroy, tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { fade, fly } from 'svelte/transition';
-	import { Check, ChevronDown, FileText, Send, Sparkles, Square, X } from '@lucide/svelte';
+	import { Check, ChevronDown, FileText, Search, Send, Sparkles, Square, X } from '@lucide/svelte';
 	import type { QueuedMessage } from '$lib/actions/chat-turn-queue';
 	import { modelStore, type ModelOption } from '$lib/stores/model.svelte';
 	import { settingsStore } from '$lib/stores/settings.svelte';
@@ -18,6 +18,7 @@
 	} from '$lib/workspace/file-index';
 	import { sessionStore } from '$lib/stores/session.svelte';
 	import {
+		BUILTIN_SLASH_COMMANDS,
 		expandBuiltinSlashCommand,
 		filterSlashMenuOptions,
 		filterWorkspaceOptions,
@@ -104,7 +105,10 @@
 		if (!changeCommand) return [];
 		return filterWorkspaceOptions(workspaceSearchQuery, workspacePaths);
 	});
-	let skillNames = $derived(skills.map((skill) => skill.name));
+	let skillNames = $derived([
+		...BUILTIN_SLASH_COMMANDS.map((cmd) => cmd.name),
+		...skills.map((skill) => skill.name)
+	]);
 	let fileIndex = $derived(getFileIndex(shellStore.workspacePath));
 	let mentionsEnabled = $derived(isFileIndexReady(shellStore.workspacePath));
 	let filteredMentionFiles = $derived.by(() => {
@@ -715,6 +719,14 @@
 			bind:this={skillMenu}
 			transition:fly={{ y: 6, duration: 120 }}
 		>
+			<div class="workspace-search-hint" aria-hidden="true">
+				<Search size={13} stroke-width={2} />
+				{#if workspaceSearchQuery}
+					<span class="workspace-search-value">{workspaceSearchQuery}</span>
+				{:else}
+					<span class="workspace-search-placeholder">Type to filter workspaces…</span>
+				{/if}
+			</div>
 			{#if workspacePathsLoading && !workspacePathsLoaded}
 				<p class="skill-command-empty">Loading workspaces...</p>
 			{:else if filteredWorkspaceOptions.length === 0}
@@ -755,6 +767,11 @@
 				<p class="skill-command-empty">No matching skills.</p>
 			{:else}
 				{#each filteredSlashOptions as option, index (option.kind + ':' + option.name)}
+					{#if index === 0 || filteredSlashOptions[index - 1].kind !== option.kind}
+						<p class="slash-group-heading">
+							{option.kind === 'builtin' ? 'System commands' : 'Skills'}
+						</p>
+					{/if}
 					<button
 						type="button"
 						class="skill-command-option"
@@ -1106,6 +1123,52 @@
 		padding: 10px 12px;
 		font-size: 12px;
 		color: var(--text-muted);
+	}
+
+	.slash-group-heading {
+		margin: 0;
+		padding: 8px 10px 4px;
+		font-size: 10px;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--text-soft);
+	}
+
+	.slash-group-heading:first-child {
+		padding-top: 4px;
+	}
+
+	.workspace-search-hint {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+		margin: 2px 2px 6px;
+		padding: 7px 10px;
+		border: 1px solid var(--border-soft);
+		border-radius: 9px;
+		background: rgba(255, 255, 255, 0.7);
+		color: var(--text-soft);
+		font-size: 12px;
+		line-height: 1.2;
+	}
+
+	.workspace-search-hint :global(svg) {
+		flex-shrink: 0;
+		color: var(--text-soft);
+	}
+
+	.workspace-search-value {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--text-main);
+		font-weight: 500;
+	}
+
+	.workspace-search-placeholder {
+		color: var(--text-soft);
 	}
 
 	.mention-option {
