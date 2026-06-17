@@ -175,7 +175,7 @@ Desktop settings are stored in `~/.cometmind/cometline-settings.json` and manage
 
 ## License
 
-MIT
+Apache License 2.0. See [LICENSE](./LICENSE).
 
 ## Links
 
