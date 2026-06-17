@@ -41,7 +41,7 @@
 		"concurrently": "^10.0.3",
 		"electron": "^42.4.0",
 		"electron-builder": "^26.15.3",
-		"esbuild": "^0.25.0",
+		"esbuild": "^0.28.0",
 		"eslint": "^9.18.0",
 		"eslint-config-prettier": "^9.1.0",
 		"eslint-plugin-svelte": "^2.46.1",
