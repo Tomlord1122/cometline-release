@@ -77,6 +77,8 @@ func (c *compactor) run(ctx context.Context) error {
 		if int(count) <= target {
 			return nil
 		}
+		before := count
+
 		if err := c.mergePass(ctx); err != nil {
 			return err
 		}
@@ -98,7 +100,9 @@ func (c *compactor) run(ctx context.Context) error {
 			return nil
 		}
 		// Avoid infinite loop if nothing changes.
-		break
+		if count >= before {
+			break
+		}
 	}
 	return nil
 }
