@@ -17,6 +17,7 @@
 	import { projectAvatarSrc, projectAvatarSrcset } from '$lib/project-icon';
 	import { chatDebug, chatDebugEnabled, summarizeChatItem } from '../debug/chat';
 	import AssistantMarkdown from '$lib/components/AssistantMarkdown.svelte';
+	import ThinkingIndicator from '$lib/components/ThinkingIndicator.svelte';
 	import { imageDataURL } from '$lib/files/images';
 	import { memoryUpdateHint, memoryUpdateTooltip } from '$lib/memory-updates';
 	import {
@@ -558,13 +559,8 @@
 </script>
 
 {#snippet assistantActivitySpinner()}
-	<div
-		class="assistant-activity-spinner"
-		role="status"
-		aria-label="Assistant is responding"
-		style:color={heroGlowColor}
-	>
-		<LoaderCircle size={16} class="spin" aria-hidden="true" />
+	<div class="assistant-activity-spinner">
+		<ThinkingIndicator color={heroGlowColor} size={24} label="Assistant is responding" />
 	</div>
 {/snippet}
 
@@ -1508,7 +1504,6 @@
 		display: flex;
 		align-items: center;
 		padding: 8px 2px 2px;
-		color: var(--hero-composer-glow-color);
 	}
 
 	.message-actions {

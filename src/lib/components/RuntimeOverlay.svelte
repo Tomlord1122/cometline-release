@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { connectionState } from '$lib/stores/runtime.svelte';
+	import ThinkingIndicator from '$lib/components/ThinkingIndicator.svelte';
 </script>
 
 {#if connectionState.status === 'connecting'}
 	<div class="overlay">
 		<div class="overlay-card">
-			<div class="spinner spin"></div>
+			<ThinkingIndicator size={24} label="Starting CometMind" />
 			<p>Starting CometMind…</p>
 		</div>
 	</div>
@@ -34,13 +35,5 @@
 		box-shadow: var(--shadow-card);
 		font-size: 14px;
 		color: var(--text-muted);
-	}
-
-	.spinner {
-		width: 18px;
-		height: 18px;
-		border: 2px solid var(--border-soft);
-		border-top-color: var(--text-muted);
-		border-radius: 50%;
 	}
 </style>
