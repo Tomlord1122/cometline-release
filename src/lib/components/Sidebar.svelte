@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
-	import { fade, fly } from 'svelte/transition';
+	import { fade, fly, slide } from 'svelte/transition';
 	import { ChevronDown, ChevronRight, Folder, Settings, Search, SquarePen, Trash2 } from '@lucide/svelte';
 	import type { Session } from '$lib/types';
 	import { sessionStore } from '$lib/stores/session.svelte';
@@ -13,6 +13,8 @@
 	import { shellStore } from '$lib/stores/shell.svelte';
 	import { isNarrowViewport } from '$lib/layout/narrow-viewport';
 	import { groupSessionsByWorkspace } from '$lib/sessions/group-by-workspace';
+
+	const WORKSPACE_SESSIONS_SLIDE = { duration: 180 };
 
 	let {
 		workspacePath = '/',
@@ -181,7 +183,7 @@
 					</button>
 
 					{#if !collapsed}
-						<div class="workspace-sessions">
+						<div class="workspace-sessions" transition:slide={WORKSPACE_SESSIONS_SLIDE}>
 							{#each group.sessions as session (session.id)}
 								<div
 									class="session-row-wrap"
@@ -370,18 +372,21 @@
 		gap: 2px;
 		border-radius: 8px;
 		padding: 2px;
-		transition: background var(--duration-fast) var(--ease-smooth);
+		border-left: 2px solid transparent;
+		transition:
+			background var(--duration-fast) var(--ease-smooth),
+			border-color var(--duration-fast) var(--ease-smooth);
 	}
 
 	.workspace-group:not(.active) {
 		border-left: 2px solid var(--workspace-inactive-color);
 		padding-left: 4px;
 		margin-left: -6px;
-		background: color-mix(in srgb, var(--workspace-inactive-color) 7%, transparent);
+		background: color-mix(in srgb, var(--workspace-inactive-color) 10%, transparent);
 	}
 
 	.workspace-group:not(.active):hover {
-		background: color-mix(in srgb, var(--workspace-inactive-color) 12%, transparent);
+		background: color-mix(in srgb, var(--workspace-inactive-color) 15%, transparent);
 	}
 
 	.workspace-group.active {
@@ -390,7 +395,7 @@
 		margin-left: -6px;
 		background: color-mix(
 			in srgb,
-			var(--hero-composer-glow-color, var(--accent)) 7%,
+			var(--hero-composer-glow-color, var(--accent)) 10%,
 			transparent
 		);
 	}
@@ -398,7 +403,7 @@
 	.workspace-group.active:hover {
 		background: color-mix(
 			in srgb,
-			var(--hero-composer-glow-color, var(--accent)) 12%,
+			var(--hero-composer-glow-color, var(--accent)) 15%,
 			transparent
 		);
 	}
@@ -446,11 +451,13 @@
 		place-items: center;
 		flex-shrink: 0;
 		color: var(--workspace-inactive-color);
+		transition: color var(--duration-fast) var(--ease-smooth);
 	}
 
 	.workspace-header :global(.workspace-folder) {
 		flex-shrink: 0;
 		color: var(--workspace-inactive-color);
+		transition: color var(--duration-fast) var(--ease-smooth);
 	}
 
 	.workspace-label {
@@ -459,6 +466,7 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+		transition: color var(--duration-fast) var(--ease-smooth);
 	}
 
 	.workspace-count {
