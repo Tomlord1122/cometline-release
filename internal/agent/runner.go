@@ -42,9 +42,21 @@ type Runner struct {
 // Run streams CometMind-native events on ch until the turn completes or ctx is cancelled.
 // The caller must receive until the channel closes.
 func (r *Runner) Run(ctx context.Context, turn session.AgentTurn, ch chan<- event.Event) error {
-	defer func() {
+	doneSent := false
+	sendDone := func() {
+		if doneSent {
+			return
+		}
 		ch <- event.Done()
-	}()
+		doneSent = true
+	}
+	defer sendDone()
+
+	completeTurn := func() error {
+		sendDone()
+		go r.extractMemoryBackground(context.WithoutCancel(ctx), turn)
+		return nil
+	}
 
 	if r.MaxSteps <= 0 {
 		r.MaxSteps = 50
@@ -124,12 +136,10 @@ func (r *Runner) Run(ctx context.Context, turn session.AgentTurn, ch chan<- even
 
 		switch result.FinishReason {
 		case cometsdk.FinishStop, cometsdk.FinishMaxTokens:
-			r.emitMemoryExtract(ctx, turn, ch)
-			return nil
+			return completeTurn()
 		}
 		if len(result.ToolCalls) == 0 {
-			r.emitMemoryExtract(ctx, turn, ch)
-			return nil
+			return completeTurn()
 		}
 
 		for _, tc := range result.ToolCalls {
@@ -177,28 +187,12 @@ func (r *Runner) Run(ctx context.Context, turn session.AgentTurn, ch chan<- even
 	return fmt.Errorf("max steps exceeded")
 }
 
-func (r *Runner) emitMemoryExtract(ctx context.Context, turn session.AgentTurn, ch chan<- event.Event) {
+func (r *Runner) extractMemoryBackground(ctx context.Context, turn session.AgentTurn) {
 	if r.Memory == nil || !r.Memory.Enabled() {
 		return
 	}
-	changes, err := r.Memory.ExtractAfterTurn(ctx, turn.ID, turn.ModelID, r.Provider)
-	if err != nil {
-		// Memory extract is best-effort; the turn already completed successfully.
-		return
-	}
-	if len(changes) == 0 {
-		return
-	}
-	wire := make([]event.MemoryChangeWire, len(changes))
-	for i, change := range changes {
-		wire[i] = event.MemoryChangeWire{
-			Action:  change.Action,
-			Kind:    change.Kind,
-			Content: change.Content,
-			ID:      change.ID,
-		}
-	}
-	ch <- event.MemoryUpdated(wire)
+	// Best-effort persistence only; the turn SSE stream has already closed.
+	_, _ = r.Memory.ExtractAfterTurn(ctx, turn.ID, turn.ModelID, r.Provider)
 }
 
 func (r *Runner) systemPrompt() string {

@@ -120,6 +120,9 @@ func TestRunner_TextOnlyTurnPersistsAndStops(t *testing.T) {
 		if ev.Kind == event.KindTextDelta && ev.Delta == "hello" {
 			sawText = true
 		}
+		if ev.Kind == event.KindMemoryUpdated {
+			t.Fatalf("memory_updated should not be streamed; got %+v", ev)
+		}
 	}
 	if !sawText {
 		t.Errorf("expected a text_delta 'hello' event, got %+v", events)
