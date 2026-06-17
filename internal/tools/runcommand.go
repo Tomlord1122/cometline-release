@@ -37,10 +37,16 @@ func (r RunCommand) Execute(ctx context.Context, input json.RawMessage) (Result,
 	}
 	root := filepath.Clean(r.Workspace.Root)
 
+	// Acquire a per-workspace mutex so concurrent sessions do not run
+	// conflicting shell commands (e.g. git commit, go test) simultaneously
+	// against the same workspace root.
+	release := acquireWorkspaceLock(root)
+	defer release()
+
 	cmdCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(cmdCtx, "sh", "-c", in.Command) //nolint:gosec // agent-invoked shell tool by design
+	cmd := exec.CommandContext(cmdCtx, "sh", "-c", in.Command) //nolint:gosec
 	cmd.Dir = root
 
 	out, err := cmd.CombinedOutput()

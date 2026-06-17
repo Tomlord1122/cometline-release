@@ -32,6 +32,12 @@ func (w WriteFile) Execute(ctx context.Context, input json.RawMessage) (Result, 
 	if err != nil {
 		return Result{OK: false, Output: err.Error()}, nil
 	}
+
+	// Acquire a per-workspace mutex to prevent concurrent sessions from
+	// interleaving writes to the same workspace root.
+	release := acquireWorkspaceLock(w.Workspace.Root)
+	defer release()
+
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return Result{OK: false, Output: err.Error()}, nil
 	}
