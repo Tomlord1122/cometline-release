@@ -182,12 +182,25 @@ func (s *Service) ForkSession(ctx context.Context, sessionID, absPath string) (S
 	if err != nil {
 		return Session{}, err
 	}
+	// Tool-call IDs are referenced by both the assistant's tool_call blocks and
+	// the matching tool_result payloads. Copying with fresh IDs requires
+	// remapping the tool_result references so the provider sees consistent
+	// tool_call_id pairs; otherwise it rejects the request (HTTP 400).
+	toolCallIDMap := make(map[string]string)
 	for _, msg := range msgs {
+		content := msg.Content
+		if msg.Role == "tool_result" {
+			remapped, err := remapToolResultContent(content, toolCallIDMap)
+			if err != nil {
+				return Session{}, err
+			}
+			content = remapped
+		}
 		newMsg, err := s.q.CreateMessage(ctx, db.CreateMessageParams{
 			ID:               id.New(),
 			SessionID:        forked.ID,
 			Role:             msg.Role,
-			Content:          msg.Content,
+			Content:          content,
 			ReasoningContent: msg.ReasoningContent,
 			TokenCount:       msg.TokenCount,
 		})
@@ -199,8 +212,10 @@ func (s *Service) ForkSession(ctx context.Context, sessionID, absPath string) (S
 			return Session{}, err
 		}
 		for _, call := range calls {
+			newCallID := id.New()
+			toolCallIDMap[call.ID] = newCallID
 			if _, err := s.q.CreateToolCall(ctx, db.CreateToolCallParams{
-				ID:         id.New(),
+				ID:         newCallID,
 				MessageID:  newMsg.ID,
 				ToolName:   call.ToolName,
 				Arguments:  call.Arguments,
@@ -226,6 +241,24 @@ func (s *Service) ForkSession(ctx context.Context, sessionID, absPath string) (S
 	}
 
 	return s.GetSession(ctx, forked.ID)
+}
+
+// remapToolResultContent rewrites the tool_call_id inside a persisted
+// tool_result payload using the old→new tool-call ID mapping built while
+// copying a forked transcript. Unknown IDs are left untouched.
+func remapToolResultContent(content string, idMap map[string]string) (string, error) {
+	var p toolResultPayload
+	if err := json.Unmarshal([]byte(content), &p); err != nil {
+		return "", fmt.Errorf("decode tool_result for fork: %w", err)
+	}
+	if newID, ok := idMap[p.ToolCallID]; ok {
+		p.ToolCallID = newID
+	}
+	raw, err := json.Marshal(p)
+	if err != nil {
+		return "", fmt.Errorf("encode tool_result for fork: %w", err)
+	}
+	return string(raw), nil
 }
 
 // AppendSystemMessage persists a system notice in the transcript.
