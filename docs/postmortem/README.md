@@ -22,6 +22,7 @@ Short write-ups of non-obvious bugs in the Cometline UI layer (and cross-cutting
 | 2026-06-16 | macOS tray icon oversized and gray                        | [macos-tray-icon-oversized-and-gray.md](./macos-tray-icon-oversized-and-gray.md)                       |
 | 2026-06-16 | Slash commands (Cometline + Discord gateway)              | [slash-commands-cometline-and-discord.md](./slash-commands-cometline-and-discord.md)                 |
 | 2026-06-16 | OpenAPI contract codegen (ISSUE-5)                        | [openapi-contract-codegen.md](./openapi-contract-codegen.md)                                         |
+| 2026-06-17 | Forked session HTTP 400 from stale tool_call IDs          | [forked-session-tool-call-id-mismatch.md](./forked-session-tool-call-id-mismatch.md)                 |
 
 ## When to add a postmortem
 

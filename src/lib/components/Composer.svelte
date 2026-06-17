@@ -2,7 +2,7 @@
 	import { onDestroy, tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { fade, fly } from 'svelte/transition';
-	import { Check, ChevronDown, FileText, Search, Send, Sparkles, Square, X } from '@lucide/svelte';
+	import { Check, ChevronDown, FileText, Loader, Search, Send, Sparkles, Square, X } from '@lucide/svelte';
 	import type { QueuedMessage } from '$lib/actions/chat-turn-queue';
 	import { modelStore, type ModelOption } from '$lib/stores/model.svelte';
 	import { settingsStore } from '$lib/stores/settings.svelte';
@@ -83,6 +83,9 @@
 	let mentionQuery = $state('');
 	let mentionMenuOpen = $state(false);
 	let mentionHighlight = $state(0);
+	// The file-index cache lives outside Svelte's reactivity (a plain module
+	// Map), so bump this version after a refresh to recompute the derived state.
+	let mentionIndexVersion = $state(0);
 	let dragDepth = $state(0);
 	let dropMessage = $state('');
 	let dropProcessing = $state(false);
@@ -109,8 +112,17 @@
 		...BUILTIN_SLASH_COMMANDS.map((cmd) => cmd.name),
 		...skills.map((skill) => skill.name)
 	]);
-	let fileIndex = $derived(getFileIndex(shellStore.workspacePath));
-	let mentionsEnabled = $derived(isFileIndexReady(shellStore.workspacePath));
+	let fileIndex = $derived.by(() => {
+		void mentionIndexVersion;
+		return getFileIndex(shellStore.workspacePath);
+	});
+	// Mentions are available whenever there is a workspace to index. The picker
+	// itself shows an "indexing" state while the file list is still loading.
+	let hasWorkspace = $derived(Boolean(shellStore.workspacePath) && shellStore.workspacePath !== '/');
+	let fileIndexReady = $derived.by(() => {
+		void mentionIndexVersion;
+		return isFileIndexReady(shellStore.workspacePath);
+	});
 	let filteredMentionFiles = $derived.by(() => {
 		const files = fileIndex?.files ?? [];
 		return filterFileIndex(files, mentionQuery);
@@ -157,7 +169,7 @@
 		const workspacePath = shellStore.workspacePath;
 		if (!workspacePath) return;
 		if (isFileIndexReady(workspacePath)) return;
-		void refreshFileIndex(workspacePath);
+		void loadMentionIndex(workspacePath);
 	});
 
 	$effect(() => {
@@ -506,10 +518,24 @@
 			closeMentionMenu();
 			return;
 		}
-		if (!mentionsEnabled) return;
+		if (!hasWorkspace) return;
+		// Open the picker even while indexing; it shows a loading state and
+		// fills in automatically once the file index is ready.
+		if (!fileIndexReady) {
+			void loadMentionIndex(shellStore.workspacePath);
+		}
 		mentionQuery = payload.query;
 		mentionMenuOpen = true;
 		mentionHighlight = 0;
+	}
+
+	async function loadMentionIndex(workspacePath: string) {
+		try {
+			await refreshFileIndex(workspacePath);
+		} finally {
+			// Recompute fileIndex/fileIndexReady now that the cache changed.
+			mentionIndexVersion += 1;
+		}
 	}
 
 	async function scrollHighlightedSkillIntoView() {
@@ -801,8 +827,13 @@
 			bind:this={mentionMenu}
 			transition:fly={{ y: 6, duration: 120 }}
 		>
-			{#if fileIndex?.loading && filteredMentionFiles.length === 0}
-				<p class="skill-command-empty">Indexing workspace...</p>
+			{#if !fileIndexReady && filteredMentionFiles.length === 0}
+				<p class="skill-command-loading">
+					<Loader size={13} stroke-width={2} class="mention-spinner" />
+					<span>Indexing workspace…</span>
+				</p>
+			{:else if fileIndex?.error && filteredMentionFiles.length === 0}
+				<p class="skill-command-empty">Could not index workspace.</p>
 			{:else if filteredMentionFiles.length === 0}
 				<p class="skill-command-empty">No matching files.</p>
 			{:else}
@@ -885,7 +916,7 @@
 		bind:this={input}
 		bind:value
 		{skillNames}
-		{mentionsEnabled}
+		mentionsEnabled={hasWorkspace}
 		caretTrail={settingsStore.settings.appearance.caretTrail}
 		caretColor={settingsStore.settings.appearance.heroComposer.glowColor}
 		onkeydown={onKeydown}
@@ -1123,6 +1154,34 @@
 		padding: 10px 12px;
 		font-size: 12px;
 		color: var(--text-muted);
+	}
+
+	.skill-command-loading {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin: 0;
+		padding: 10px 12px;
+		font-size: 12px;
+		color: var(--text-muted);
+	}
+
+	.skill-command-loading :global(.mention-spinner) {
+		flex-shrink: 0;
+		color: var(--text-soft);
+		animation: mention-spin 0.7s linear infinite;
+	}
+
+	@keyframes mention-spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.skill-command-loading :global(.mention-spinner) {
+			animation: none;
+		}
 	}
 
 	.slash-group-heading {
