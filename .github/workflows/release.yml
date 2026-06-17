@@ -9,6 +9,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
 jobs:
   release-macos:
     runs-on: macos-latest
@@ -19,8 +23,60 @@ jobs:
         with:
           submodules: recursive
           token: ${{ secrets.COMETLINE_SUBMODULE_TOKEN }}
+          fetch-depth: 0
+
+      - name: Resolve release tag
+        id: release_tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG="${{ github.ref_name }}"
+            echo "Using existing tag: $TAG"
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if git describe --exact-match --tags HEAD 2>/dev/null; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Commit $(git rev-parse --short HEAD) already has tag $(git describe --exact-match --tags HEAD)"
+            exit 0
+          fi
+
+          LATEST="$(git tag -l 'v*' --sort=-version:refname | head -1)"
+          if [ -z "$LATEST" ]; then
+            NEXT="v0.0.1"
+          else
+            VERSION="${LATEST#v}"
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+            PATCH=$((PATCH + 1))
+            if [ "$PATCH" -gt 999 ]; then
+              PATCH=0
+              MINOR=$((MINOR + 1))
+            fi
+            if [ "$MINOR" -gt 999 ]; then
+              MINOR=0
+              MAJOR=$((MAJOR + 1))
+            fi
+            NEXT="v${MAJOR}.${MINOR}.${PATCH}"
+          fi
+          if git rev-parse "$NEXT" >/dev/null 2>&1; then
+            echo "Tag $NEXT already exists"
+            exit 1
+          fi
+
+          echo "Latest tag: ${LATEST:-<none>}"
+          echo "Next tag: $NEXT"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git tag -a "$NEXT" -m "Release $NEXT"
+          git push origin "$NEXT"
+          echo "tag=$NEXT" >> "$GITHUB_OUTPUT"
 
       - name: Setup Go
+        if: steps.release_tag.outputs.skip != 'true'
         uses: actions/setup-go@v6
         with:
           go-version-file: cometmind/go.mod
@@ -29,11 +85,13 @@ jobs:
             cometmind/go.sum
 
       - name: Setup pnpm
+        if: steps.release_tag.outputs.skip != 'true'
         uses: pnpm/action-setup@v4
         with:
           package_json_file: cometline/package.json
 
       - name: Setup Node.js
+        if: steps.release_tag.outputs.skip != 'true'
         uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -41,12 +99,16 @@ jobs:
           cache-dependency-path: cometline/pnpm-lock.yaml
 
       - name: Install frontend dependencies
+        if: steps.release_tag.outputs.skip != 'true'
         run: pnpm --dir cometline install --frozen-lockfile
 
       - name: Sync package version from tag
+        if: steps.release_tag.outputs.skip != 'true'
+        env:
+          TAG: ${{ steps.release_tag.outputs.tag }}
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${TAG#v}"
           CURRENT="$(node -p "require('./cometline/package.json').version")"
           if [ "$CURRENT" = "$VERSION" ]; then
             echo "package.json already at $VERSION; skipping version bump"
@@ -55,6 +117,7 @@ jobs:
           fi
 
       - name: Configure GitHub release target
+        if: steps.release_tag.outputs.skip != 'true'
         run: |
           node <<'NODE'
           const fs = require('fs');
@@ -66,9 +129,10 @@ jobs:
           NODE
 
       - name: Remove stale releases for this tag
+        if: steps.release_tag.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ steps.release_tag.outputs.tag }}
         run: |
           set -euo pipefail
           # electron-builder used to create partial DRAFT releases whose tag is
@@ -92,6 +156,7 @@ jobs:
           true
 
       - name: Build, sign, and notarize
+        if: steps.release_tag.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
@@ -102,6 +167,7 @@ jobs:
         run: pnpm --dir cometline run build:mac
 
       - name: Verify build artifacts
+        if: steps.release_tag.outputs.skip != 'true'
         run: |
           set -euo pipefail
           test -f cometline/dist/latest-mac.yml
@@ -112,9 +178,10 @@ jobs:
           done
 
       - name: Publish GitHub Release
+        if: steps.release_tag.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ steps.release_tag.outputs.tag }}
         run: |
           set -euo pipefail
           # Create a NON-draft release and upload every asset synchronously.
@@ -132,9 +199,10 @@ jobs:
             cometline/dist/latest-mac.yml
 
       - name: Verify release assets uploaded
+        if: steps.release_tag.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ steps.release_tag.outputs.tag }}
         run: |
           set -euo pipefail
           ASSETS="$(gh release view "$TAG" --repo "${{ github.repository }}" --json assets --jq '.assets[].name')"

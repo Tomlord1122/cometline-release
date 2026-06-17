@@ -1,15 +1,29 @@
 # Cometline
 
-**A desktop AI assistant that brings coding agents to your workspace.**
+![Minako](./static/preview.png)
 
-Cometline combines a beautiful chat interface with a powerful agent runtime, letting you interact with LLMs while delegating complex coding tasks to specialized agents like OpenCode. Run it locally, connect it to Discord, and let AI help you build.
+**An AI companion for your workspace.**
+
+Cometline is a local-first AI companion with a native desktop chat UI and a powerful agent runtime behind it. It remembers what matters, keeps each project isolated, lets you switch personas, delegates coding work to specialized agents, and runs the same brain as a Discord bot — all on your machine.
+
+## Personas
+
+Pick the companion personality that fits your workflow in Settings → About. Switching personas updates the chat avatar, app icon, and the SOUL system prompt CometMind uses.
+
+| Persona | Avatar | Description |
+| --- | :---: | --- |
+| **Minako** (default) | <img src="./static/minako.png" width="96" alt="Minako" /> | Warm, cute AI companion |
+| **Souma** | <img src="./static/souma.png" width="96" alt="Souma" /> | Warm, humorous AI companion |
 
 ## Why Cometline?
 
-- **Chat UI that feels native** — SvelteKit + Electron desktop app with streaming responses, syntax highlighting, and smooth animations
-- **Agent delegation** — Hand off coding tasks to OpenCode or Claude Code via ACP (Agent Communication Protocol), with progress streamed back to your chat
-- **Discord integration** — Run the same agent runtime as a Discord bot, with per-thread sessions and @mention gating
-- **Local-first** — SQLite persistence, workspace-scoped sessions, and semantic memory that learns from your projects
+- **Persona switch** — Choose between companion personas (e.g. Minako or Souma) in Settings; each persona has its own avatar, tone, and SOUL system prompt
+- **Semantic memory** — Automatically retrieves and learns context across sessions so your companion remembers preferences, decisions, and project details
+- **Coding agent delegation** — Hand off complex tasks to OpenCode or Claude Code via ACP (Agent Communication Protocol), with progress streamed back to your chat
+- **Workspace isolation** — Separate chat history, sessions, tools, and memories per project; file access stays sandboxed to the active workspace
+- **Agent Skills** — Reusable prompt templates invoked with slash commands (`/tdd`, `/create-skill`, or custom skills in your workspace)
+- **Discord bot** — Run the same agent runtime as a Discord bot with per-thread sessions, @mention gating, and skill invocation
+- **Native chat UI** — SvelteKit + Electron desktop app with streaming responses, reasoning blocks, syntax highlighting, and smooth animations
 - **Multi-provider** — Switch between Anthropic, OpenAI, and any OpenAI-compatible API
 
 ## Quick Start
@@ -17,39 +31,37 @@ Cometline combines a beautiful chat interface with a powerful agent runtime, let
 ### Prerequisites
 
 - macOS 13+ (Apple Silicon or Intel)
-- [Node.js](https://nodejs.org/) 22+
-- [Go](https://go.dev/) 1.25+
-- [pnpm](https://pnpm.io/) 11+
 
 ### Install
 
-```bash
-# Clone with submodules
-git clone --recurse-submodules https://github.com/cometline/cometline-release.git
-cd cometline-release
-
-# Install dependencies
-make install
-
-# Build and launch
-make dev
-```
+Download the latest signed release from [GitHub Releases](https://github.com/cometline/cometline-release/releases). The app is notarized and includes auto-update support.
 
 The app will open and prompt you to configure a provider. Add your Anthropic or OpenAI API key in Settings → Providers.
 
-### Download Pre-built App
-
-For macOS users, download the latest signed release from [GitHub Releases](https://github.com/cometline/cometline-release/releases). The app is notarized and includes auto-update support.
-
 ## Features
+
+### Semantic Memory
+
+Cometline builds a persistent memory layer for your companion:
+
+- **Auto-retrieve** — relevant memories are injected before each turn
+- **Auto-extract** — new facts and preferences are captured after conversations
+- **Workspace-scoped** — memories stay tied to the project they belong to
+- **Manageable** — browse, edit, search, and compact memories in Settings
+
+### Workspace Isolation
+
+Every project is a first-class workspace with its own boundary:
+
+- **Separate sessions** — chat history does not leak across projects
+- **Scoped tools** — `read_file`, `write_file`, `list_dir`, and `run_command` operate only inside the active workspace
+- **Per-workspace skills** — discover skills from `~/.cometmind/skills/` and `{workspace}/.agents/skills/`
 
 ### Chat Interface
 
 - **Streaming responses** with visible reasoning blocks and tool call activity
 - **Multimodal input** — paste or drop images (PNG, JPEG, GIF, WebP) and text files
 - **Rich markdown** — syntax highlighting, math (KaTeX), tables, and embedded link previews
-- **Workspace-scoped sessions** — each project gets its own chat history
-- **Semantic memory** — the agent remembers context across sessions with automatic retrieval
 
 ### Agent Delegation
 
@@ -100,11 +112,12 @@ CometMind includes tools for file operations, command execution, and web fetchin
 
 ### Agent Skills
 
-Skills are reusable prompt templates stored in `~/.cometmind/skills/` or your workspace's `.agents/skills/` directory. Invoke them with slash commands:
+Skills are reusable prompt templates — built-in slash commands plus custom skills in `~/.cometmind/skills/` or your workspace's `.agents/skills/` directory:
 
 ```
 /create-skill Build a skill for reviewing PRs
 /tdd Help me implement the user auth feature
+/my-skill Run my custom workflow
 ```
 
 ## Architecture
