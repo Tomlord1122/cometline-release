@@ -109,6 +109,7 @@ declare global {
 	}
 
 	interface CometMindMemorySettings {
+		extractionModel: string;
 		embedding: {
 			providerId: string;
 			provider: string;
@@ -128,6 +129,8 @@ declare global {
 	interface CometMindSettings {
 		systemPromptPath: string;
 		maxTokens: number;
+		titleProviderId: string;
+		titleModelId: string;
 		acp: CometMindACPSettings;
 		skills: CometMindSkillsSettings;
 		memory: CometMindMemorySettings;

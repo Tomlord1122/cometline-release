@@ -84,6 +84,7 @@ export interface CometMindSkillsSettings {
 }
 
 export interface CometMindMemorySettings {
+	extractionModel: string;
 	embedding: {
 		providerId: string;
 		provider: string;
@@ -103,6 +104,8 @@ export interface CometMindStorageSettings {
 export interface CometMindSettings {
 	systemPromptPath: string;
 	maxTokens: number;
+	titleProviderId: string;
+	titleModelId: string;
 	acp: CometMindACPSettings;
 	skills: CometMindSkillsSettings;
 	memory: CometMindMemorySettings;
@@ -228,6 +231,8 @@ export function defaultCometMindSettings(workspacePath = ''): CometMindSettings 
 	return {
 		systemPromptPath: '',
 		maxTokens: 2048,
+		titleProviderId: '',
+		titleModelId: '',
 		acp: {
 			command: 'opencode',
 			args: ['acp'],
@@ -242,6 +247,7 @@ export function defaultCometMindSettings(workspacePath = ''): CometMindSettings 
 			mirrorToCometMind: false
 		},
 		memory: {
+			extractionModel: '',
 			embedding: {
 				providerId: '',
 				provider: '',
@@ -286,6 +292,8 @@ export function normalizeCometMindSettings(
 	return {
 		systemPromptPath: String(input?.systemPromptPath ?? defaults.systemPromptPath).trim(),
 		maxTokens: normalizePositiveInt(input?.maxTokens, defaults.maxTokens),
+		titleProviderId: String(input?.titleProviderId ?? defaults.titleProviderId).trim(),
+		titleModelId: String(input?.titleModelId ?? defaults.titleModelId).trim(),
 		acp: {
 			command: String(acp.command ?? defaults.acp.command).trim() || defaults.acp.command,
 			args: args.length > 0 ? args : defaults.acp.args,
@@ -310,6 +318,7 @@ export function normalizeCometMindSettings(
 					: defaults.skills.mirrorToCometMind
 		},
 		memory: {
+			extractionModel: String(memory.extractionModel ?? defaults.memory.extractionModel).trim(),
 			embedding: {
 				providerId: String(embedding.providerId ?? defaults.memory.embedding.providerId).trim(),
 				provider: String(embedding.provider ?? defaults.memory.embedding.provider).trim(),
@@ -359,6 +368,8 @@ export function cloneCometMindSettings(settings: CometMindSettings): CometMindSe
 	return {
 		systemPromptPath: settings.systemPromptPath,
 		maxTokens: settings.maxTokens,
+		titleProviderId: settings.titleProviderId,
+		titleModelId: settings.titleModelId,
 		acp: {
 			command: settings.acp.command,
 			args: [...settings.acp.args],
@@ -370,6 +381,7 @@ export function cloneCometMindSettings(settings: CometMindSettings): CometMindSe
 			roots: [...settings.skills.roots]
 		},
 		memory: {
+			extractionModel: settings.memory.extractionModel,
 			embedding: { ...settings.memory.embedding }
 		},
 		storage: { ...settings.storage },
@@ -619,7 +631,10 @@ export function runtimeSlice(settings: ProviderSettings): RuntimeSettingsSlice |
 		})),
 		acp: { ...settings.cometmind.acp, args: [...settings.cometmind.acp.args] },
 		skills: { ...settings.cometmind.skills, roots: [...settings.cometmind.skills.roots] },
-		memory: { embedding: { ...settings.cometmind.memory.embedding } },
+		memory: {
+			extractionModel: settings.cometmind.memory.extractionModel,
+			embedding: { ...settings.cometmind.memory.embedding }
+		},
 		gateway: cloneCometMindSettings(settings.cometmind).gateway
 	};
 }
@@ -661,6 +676,8 @@ const providerSettingsSchema = z.object({
 	cometmind: z.object({
 		systemPromptPath: z.string(),
 		maxTokens: z.number().int().positive(),
+		titleProviderId: z.string(),
+		titleModelId: z.string(),
 		acp: z.object({
 			command: z.string().min(1),
 			args: z.array(z.string()),
@@ -675,6 +692,7 @@ const providerSettingsSchema = z.object({
 			mirrorToCometMind: z.boolean()
 		}),
 		memory: z.object({
+			extractionModel: z.string(),
 			embedding: z.object({
 				providerId: z.string(),
 				provider: z.string(),

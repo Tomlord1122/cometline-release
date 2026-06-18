@@ -191,7 +191,6 @@
 								>
 									<button class="session-row" onclick={() => selectSession(session)}>
 										<span class="session-title">{session.title || 'Untitled'}</span>
-										<span class="session-meta">{session.model_id}</span>
 									</button>
 									<button
 										class="delete-session"
@@ -382,6 +381,7 @@
 		border-left: 2px solid var(--workspace-inactive-color);
 		padding-left: 4px;
 		margin-left: -6px;
+		margin-right: -6px;
 		background: color-mix(in srgb, var(--workspace-inactive-color) 10%, transparent);
 	}
 
@@ -393,6 +393,7 @@
 		border-left: 2px solid var(--hero-composer-glow-color, var(--accent));
 		padding-left: 4px;
 		margin-left: -6px;
+		margin-right: -6px;
 		background: color-mix(
 			in srgb,
 			var(--hero-composer-glow-color, var(--accent)) 10%,
@@ -533,16 +534,9 @@
 		opacity: 0;
 	}
 
-	.session-title,
-	.session-meta {
+	.session-title {
 		overflow: hidden;
 		text-overflow: ellipsis;
-	}
-
-	.session-meta {
-		font-size: 11px;
-		font-weight: 400;
-		color: var(--text-soft);
 	}
 
 	.session-empty {
