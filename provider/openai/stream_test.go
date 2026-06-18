@@ -315,6 +315,59 @@ func TestStream_ReasoningSplitFallbackOnUnsupported(t *testing.T) {
 	require.True(t, done)
 }
 
+// TestStream_MaxCompletionTokensFallbackOnUnsupported retries with
+// max_completion_tokens when a newer OpenAI model rejects max_tokens.
+func TestStream_MaxCompletionTokensFallbackOnUnsupported(t *testing.T) {
+	fixtureData, err := os.ReadFile("fixtures/text_response.sse")
+	require.NoError(t, err)
+
+	var fields []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		payload := string(body)
+		switch {
+		case strings.Contains(payload, "max_tokens"):
+			fields = append(fields, "max_tokens")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"error":{"message":"Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead."}}`)) //nolint:errcheck
+			return
+		case strings.Contains(payload, "max_completion_tokens"):
+			fields = append(fields, "max_completion_tokens")
+		default:
+			fields = append(fields, "none")
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		w.Write(fixtureData) //nolint:errcheck
+	}))
+	defer srv.Close()
+
+	p := NewOpenAIProvider("test-key",
+		cometsdk.WithBaseURL(srv.URL),
+		cometsdk.WithMaxRetries(1),
+	)
+	req := &cometsdk.Request{
+		Model:     "gpt-5.5",
+		MaxTokens: 64,
+		Messages:  []cometsdk.Message{{Role: cometsdk.RoleUser, Content: []cometsdk.Block{cometsdk.TextBlock{Text: "Hi"}}}},
+	}
+
+	ch, err := p.Stream(context.Background(), req)
+	require.NoError(t, err)
+
+	events := collectEvents(t, ch)
+	require.Equal(t, []string{"max_tokens", "max_completion_tokens"}, fields)
+
+	var done bool
+	for _, e := range events {
+		if _, ok := e.(cometsdk.DoneEvent); ok {
+			done = true
+		}
+	}
+	require.True(t, done)
+}
+
 // TestStream_NoImageFallbackWithoutImage ensures a 400 that is unrelated to
 // images is NOT retried with the image-downgrade path (it just fails).
 func TestStream_NoImageFallbackWithoutImage(t *testing.T) {

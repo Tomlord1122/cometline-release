@@ -46,8 +46,9 @@ func NewOpenAIProvider(apiKey string, opts ...cometsdk.Option) cometsdk.Provider
 func (p *provider) ID() string { return providerID }
 
 type streamFlags struct {
-	disableImageContent  bool
-	enableReasoningSplit bool
+	disableImageContent    bool
+	enableReasoningSplit   bool
+	useMaxCompletionTokens bool
 }
 
 // Stream sends req to the OpenAI Chat Completions API and returns a channel of events.
@@ -65,6 +66,15 @@ func (p *provider) Stream(ctx context.Context, req *cometsdk.Request) (<-chan co
 	if err != nil && isReasoningSplitUnsupportedError(err) {
 		p.log.DebugContext(ctx, "stream.reasoning_split_fallback", "error", err, "model", req.Model)
 		flags.enableReasoningSplit = false
+		httpResp, err = p.streamWithRetry(ctx, req, flags)
+	}
+
+	// Newer OpenAI models reject max_tokens and require
+	// max_completion_tokens. Retry immediately with the newer field name when
+	// the API explicitly asks for it, without changing OpenAI-compatible defaults.
+	if err != nil && req.MaxTokens > 0 && isMaxTokensUnsupportedError(err) {
+		p.log.DebugContext(ctx, "stream.max_completion_tokens_fallback", "error", err, "model", req.Model)
+		flags.useMaxCompletionTokens = true
 		httpResp, err = p.streamWithRetry(ctx, req, flags)
 	}
 
@@ -114,7 +124,7 @@ func (p *provider) streamWithRetry(ctx context.Context, req *cometsdk.Request, f
 }
 
 func (p *provider) doRequest(ctx context.Context, req *cometsdk.Request, flags streamFlags) (*http.Response, error) {
-	body, err := toOpenAIRequest(req, flags.disableImageContent, flags.enableReasoningSplit)
+	body, err := toOpenAIRequest(req, flags.disableImageContent, flags.enableReasoningSplit, flags.useMaxCompletionTokens)
 	if err != nil {
 		return nil, fmt.Errorf("openai: marshal request: %w", err)
 	}
@@ -205,6 +215,20 @@ func isReasoningSplitUnsupportedError(err error) bool {
 	}
 	msg := strings.ToLower(se.Message)
 	return strings.Contains(msg, "reasoning_split")
+}
+
+// isMaxTokensUnsupportedError reports whether err is a 4xx ServerError whose
+// message says max_tokens is rejected in favour of max_completion_tokens.
+func isMaxTokensUnsupportedError(err error) bool {
+	se, ok := err.(*cometsdk.ServerError)
+	if !ok {
+		return false
+	}
+	if se.StatusCode < 400 || se.StatusCode >= 500 {
+		return false
+	}
+	msg := strings.ToLower(se.Message)
+	return strings.Contains(msg, "max_tokens") && strings.Contains(msg, "max_completion_tokens")
 }
 
 // shouldEnableReasoningSplit reports whether to send the non-standard

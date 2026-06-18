@@ -12,13 +12,14 @@ import (
 // ─── Outgoing: SDK Request → OpenAI JSON ─────────────────────────────────────
 
 type openAIRequest struct {
-	Model          string          `json:"model"`
-	Messages       []openAIMessage `json:"messages"`
-	Tools          []openAITool    `json:"tools,omitempty"`
-	MaxTokens      int             `json:"max_tokens,omitempty"`
-	Stream         bool            `json:"stream"`
-	StreamOptions  *streamOptions  `json:"stream_options,omitempty"`
-	ReasoningSplit *bool           `json:"reasoning_split,omitempty"`
+	Model               string          `json:"model"`
+	Messages            []openAIMessage `json:"messages"`
+	Tools               []openAITool    `json:"tools,omitempty"`
+	MaxTokens           int             `json:"max_tokens,omitempty"`
+	MaxCompletionTokens int             `json:"max_completion_tokens,omitempty"`
+	Stream              bool            `json:"stream"`
+	StreamOptions       *streamOptions  `json:"stream_options,omitempty"`
+	ReasoningSplit      *bool           `json:"reasoning_split,omitempty"`
 }
 
 type streamOptions struct {
@@ -72,7 +73,7 @@ type openAIToolDef struct {
 // frequency_penalty, seed, etc. without requiring changes to this package.
 // SDK-managed fields (model, messages, stream, stream_options) take precedence
 // and cannot be overridden via Options.
-func toOpenAIRequest(req *cometsdk.Request, disableImageContent bool, enableReasoningSplit bool) ([]byte, error) {
+func toOpenAIRequest(req *cometsdk.Request, disableImageContent bool, enableReasoningSplit bool, useMaxCompletionTokens bool) ([]byte, error) {
 	msgs, err := convertMessages(req.System, req.Messages, disableImageContent)
 	if err != nil {
 		return nil, err
@@ -90,7 +91,11 @@ func toOpenAIRequest(req *cometsdk.Request, disableImageContent bool, enableReas
 	}
 
 	if req.MaxTokens > 0 {
-		or.MaxTokens = req.MaxTokens
+		if useMaxCompletionTokens {
+			or.MaxCompletionTokens = req.MaxTokens
+		} else {
+			or.MaxTokens = req.MaxTokens
+		}
 	}
 
 	for _, t := range req.Tools {
@@ -301,12 +306,12 @@ type inProgressToolCall struct {
 
 // streamState maintains per-stream mutable state for the OpenAI parser.
 type streamState struct {
-	inProgress            map[int]*inProgressToolCall
-	reasoning             *inProgressReasoning
-	contentReasoning      contentReasoningSplitter
-	reasoningDetailText   map[int]string
-	pendingUsage          cometsdk.TokenUsage
-	pendingFinish         *cometsdk.StepFinishEvent
+	inProgress          map[int]*inProgressToolCall
+	reasoning           *inProgressReasoning
+	contentReasoning    contentReasoningSplitter
+	reasoningDetailText map[int]string
+	pendingUsage        cometsdk.TokenUsage
+	pendingFinish       *cometsdk.StepFinishEvent
 }
 
 func newStreamState() *streamState {

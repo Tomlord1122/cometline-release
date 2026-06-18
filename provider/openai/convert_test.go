@@ -18,7 +18,7 @@ func TestConvertRequest_SystemPromptPrepended(t *testing.T) {
 		},
 	}
 
-	data, err := toOpenAIRequest(req, false, true)
+	data, err := toOpenAIRequest(req, false, true, false)
 	require.NoError(t, err)
 
 	var out openAIRequest
@@ -44,7 +44,7 @@ func TestConvertRequest_ToolResultRole(t *testing.T) {
 		},
 	}
 
-	data, err := toOpenAIRequest(req, false, true)
+	data, err := toOpenAIRequest(req, false, true, false)
 	require.NoError(t, err)
 
 	var out openAIRequest
@@ -72,7 +72,7 @@ func TestConvertRequest_UserImageBlock(t *testing.T) {
 		},
 	}
 
-	data, err := toOpenAIRequest(req, false, true)
+	data, err := toOpenAIRequest(req, false, true, false)
 	require.NoError(t, err)
 
 	var out openAIRequest
@@ -103,7 +103,7 @@ func TestConvertRequest_UserImageBlockDowngradedWhenDisabled(t *testing.T) {
 		},
 	}
 
-	data, err := toOpenAIRequest(req, true, true)
+	data, err := toOpenAIRequest(req, true, true, false)
 	require.NoError(t, err)
 
 	var out openAIRequest
@@ -141,7 +141,7 @@ func TestConvertRequest_AssistantToolCallsOnlyUsesNullContent(t *testing.T) {
 		},
 	}
 
-	data, err := toOpenAIRequest(req, false, true)
+	data, err := toOpenAIRequest(req, false, true, false)
 	require.NoError(t, err)
 
 	var out map[string]any
@@ -166,7 +166,7 @@ func TestConvertRequest_StreamOptionsIncludeUsage(t *testing.T) {
 		Model:    "gpt-4o",
 		Messages: []cometsdk.Message{{Role: cometsdk.RoleUser, Content: []cometsdk.Block{cometsdk.TextBlock{Text: "Hi"}}}},
 	}
-	data, err := toOpenAIRequest(req, false, true)
+	data, err := toOpenAIRequest(req, false, true, false)
 	require.NoError(t, err)
 
 	var out openAIRequest
@@ -302,7 +302,7 @@ func TestConvertRequest_OptionsPassthrough(t *testing.T) {
 		},
 	}
 
-	data, err := toOpenAIRequest(req, false, true)
+	data, err := toOpenAIRequest(req, false, true, false)
 	require.NoError(t, err)
 
 	var out map[string]any
@@ -333,7 +333,7 @@ func TestConvertRequest_OptionsDoNotOverrideSDKFields(t *testing.T) {
 		},
 	}
 
-	data, err := toOpenAIRequest(req, false, true)
+	data, err := toOpenAIRequest(req, false, true, false)
 	require.NoError(t, err)
 
 	var out map[string]any
@@ -352,7 +352,7 @@ func TestConvertRequest_OptionsNil(t *testing.T) {
 		},
 	}
 
-	data, err := toOpenAIRequest(req, false, true)
+	data, err := toOpenAIRequest(req, false, true, false)
 	require.NoError(t, err)
 
 	var out map[string]any
@@ -374,7 +374,7 @@ func TestConvertRequest_OptionsWrongType(t *testing.T) {
 		},
 	}
 
-	_, err := toOpenAIRequest(req, false, true)
+	_, err := toOpenAIRequest(req, false, true, false)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "map[string]any")
 }
@@ -387,7 +387,7 @@ func TestConvertRequest_ReasoningSplitEnabledForMiniMax(t *testing.T) {
 		},
 	}
 
-	data, err := toOpenAIRequest(req, false, true)
+	data, err := toOpenAIRequest(req, false, true, false)
 	require.NoError(t, err)
 
 	var out map[string]any
@@ -403,7 +403,7 @@ func TestConvertRequest_ReasoningSplitOmittedWhenDisabled(t *testing.T) {
 		},
 	}
 
-	data, err := toOpenAIRequest(req, false, false)
+	data, err := toOpenAIRequest(req, false, false, false)
 	require.NoError(t, err)
 
 	var out map[string]any
