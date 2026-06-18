@@ -100,6 +100,7 @@ func New(deps Deps) (*gin.Engine, error) {
 	api.GET("/workspaces", app.handleListWorkspaces)
 	api.POST("/workspaces", app.handleCreateWorkspace)
 	api.GET("/workspaces/files", app.handleListWorkspaceFiles)
+	api.GET("/workspaces/files/content", app.handleReadWorkspaceFileContent)
 
 	// Sessions
 	api.POST("/sessions", app.handleCreateSession)
@@ -471,6 +472,20 @@ func (a *App) handleListWorkspaceFiles(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, workspaceFileListResponse{Files: result.Files, Truncated: result.Truncated})
+}
+
+func (a *App) handleReadWorkspaceFileContent(c *gin.Context) {
+	ws, ok := a.resolveCreateWorkspace(c, c.Query("workspace_id"), c.Query("workspace_path"))
+	if !ok {
+		return
+	}
+
+	result, err := readWorkspaceFilePreview(ws.Path, c.Query("path"))
+	if err != nil {
+		writeError(c, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	c.JSON(http.StatusOK, result)
 }
 
 func (a *App) handleCreateSession(c *gin.Context) {

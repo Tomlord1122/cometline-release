@@ -122,6 +122,44 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/v1/workspaces/files/content:
+    get:
+      tags: [Files]
+      summary: Read a workspace file for preview
+      description: |
+        Returns the contents of a workspace-relative file for in-app preview.
+        Text files return UTF-8 content; common image types return a data URL.
+        Files larger than 256 KB cannot be previewed.
+      operationId: readWorkspaceFileContent
+      parameters:
+        - name: workspace_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: workspace_path
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Workspace-relative file path.
+      responses:
+        '200':
+          description: File preview content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceFileContent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /api/v1/sessions:
     post:
       tags: [Sessions]
@@ -1021,6 +1059,37 @@ components:
         truncated:
           type: boolean
           description: True when more matching files exist than the limit returned. Narrow with the q query parameter to find files not in this page.
+
+    WorkspaceFileTextContent:
+      type: object
+      additionalProperties: false
+      required: [kind, content, extension]
+      properties:
+        kind:
+          type: string
+          enum: [text]
+        content:
+          type: string
+        extension:
+          type: string
+
+    WorkspaceFileImageContent:
+      type: object
+      additionalProperties: false
+      required: [kind, mime_type, data_url]
+      properties:
+        kind:
+          type: string
+          enum: [image]
+        mime_type:
+          type: string
+        data_url:
+          type: string
+
+    WorkspaceFileContent:
+      oneOf:
+        - $ref: '#/components/schemas/WorkspaceFileTextContent'
+        - $ref: '#/components/schemas/WorkspaceFileImageContent'
 
     PostMessageRequest:
       type: object

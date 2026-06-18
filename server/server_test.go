@@ -209,6 +209,35 @@ func TestListWorkspaceFiles(t *testing.T) {
 	}
 }
 
+func TestReadWorkspaceFileContent(t *testing.T) {
+	t.Parallel()
+
+	engine, _, cleanup := newTestEngine(t, func(sess session.Session, workspacePath string) (Runner, error) {
+		return fakeRunner(func(ctx context.Context, turn session.AgentTurn, ch chan<- event.Event) error {
+			ch <- event.Done()
+			return nil
+		}), nil
+	})
+	defer cleanup()
+
+	workspacePath := t.TempDir()
+	mustWrite(t, filepath.Join(workspacePath, "main.go"), "package main")
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/workspaces/files/content?workspace_path="+workspacePath+"&path=main.go", nil)
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var got workspaceFileTextContent
+	decodeJSON(t, rec.Body.Bytes(), &got)
+	if got.Kind != "text" || got.Content != "package main" || got.Extension != ".go" {
+		t.Fatalf("got = %+v", got)
+	}
+}
+
 func TestListWorkspaceFilesFiltersByQuery(t *testing.T) {
 	t.Parallel()
 
