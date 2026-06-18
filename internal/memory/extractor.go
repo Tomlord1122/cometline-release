@@ -9,6 +9,7 @@ import (
 
 	cometsdk "github.com/cometline/comet-sdk"
 	"github.com/cometline/comet-sdk/llm"
+	"github.com/cometline/cometmind/internal/logging"
 	"github.com/cometline/cometmind/internal/session"
 	"github.com/oklog/ulid/v2"
 )
@@ -49,12 +50,16 @@ func (e *extractor) extractAfterTurn(ctx context.Context, sessionID, model strin
 		return nil, err
 	}
 	if len(msgs) == 0 {
+		logging.L().Info("memory.extract.noop", "session", sessionID, "reason", "empty_messages")
 		return nil, nil
 	}
 	if shouldSkipExtraction(msgs) {
+		logging.L().Info("memory.extract.noop", "session", sessionID, "reason", "low_value_turn", "messages", len(msgs))
 		return nil, nil
 	}
+	originalMessages := len(msgs)
 	msgs = recentMessages(msgs, extractionTranscriptMessages)
+	logging.L().Info("memory.extract.start", "session", sessionID, "model", model, "messages", len(msgs), "total_messages", originalMessages)
 
 	var transcript strings.Builder
 	for _, m := range msgs {
@@ -68,6 +73,7 @@ func (e *extractor) extractAfterTurn(ctx context.Context, sessionID, model strin
 		transcript.WriteString("\n")
 	}
 	if transcript.Len() == 0 {
+		logging.L().Info("memory.extract.noop", "session", sessionID, "reason", "empty_transcript")
 		return nil, nil
 	}
 
@@ -96,10 +102,12 @@ Conversation:
 	if err := llm.GenerateJSON(ctx, llmProvider, req, &result); err != nil {
 		return nil, err
 	}
+	logging.L().Info("memory.extract.proposed", "session", sessionID, "count", len(result.Memories), "model", useModel)
 
 	var changes []Change
 	for _, pm := range result.Memories {
 		if !pm.ShouldSave || strings.TrimSpace(pm.Content) == "" || pm.Confidence < 0.3 {
+			logging.L().Info("memory.extract.proposal_skipped", "session", sessionID, "kind", pm.Kind, "confidence", pm.Confidence, "should_save", pm.ShouldSave)
 			continue
 		}
 		change, err := e.ingestProposal(ctx, sessionID, pm, llmProvider, useModel)
@@ -129,11 +137,14 @@ func (e *extractor) ingestProposal(ctx context.Context, sessionID string, pm pro
 	}
 	if sim > simSkipThreshold {
 		_ = e.store.logEvent(ctx, existing.ID, "extract_skip", fmt.Sprintf("similarity=%.3f", sim))
+		logging.L().Info("memory.extract.change", "session", sessionID, "action", "skip", "reason", "similar", "memory_id", existing.ID, "similarity", sim)
 		return Change{}, nil
 	}
 	if sim >= simUpdateThreshold {
+		logging.L().Info("memory.extract.change", "session", sessionID, "action", "update", "memory_id", existing.ID, "similarity", sim)
 		return e.updater.handleSimilar(ctx, existing, pm, vec, sessionID, llmProvider, useModel)
 	}
+	logging.L().Info("memory.extract.change", "session", sessionID, "action", "create", "kind", pm.Kind, "similarity", sim)
 	return e.create(ctx, sessionID, pm, vec)
 }
 

@@ -9,6 +9,7 @@ import (
 	cometsdk "github.com/cometline/comet-sdk"
 	"github.com/cometline/comet-sdk/llm"
 	"github.com/cometline/cometmind/internal/event"
+	"github.com/cometline/cometmind/internal/logging"
 	"github.com/cometline/cometmind/internal/memory"
 	"github.com/cometline/cometmind/internal/session"
 	"github.com/cometline/cometmind/internal/tools"
@@ -79,6 +80,7 @@ func (r *Runner) Run(ctx context.Context, turn session.AgentTurn, ch chan<- even
 			ch <- event.Errorf(err.Error(), "history")
 			return err
 		}
+		logging.L().Info("agent.step.start", "session", turn.ID, "step", steps+1, "model", turn.ModelID, "messages", len(msgs), "max_tokens", r.MaxTokens)
 
 		system := r.systemPrompt()
 		if r.Memory != nil && r.Memory.Enabled() && steps == 0 {
@@ -87,8 +89,10 @@ func (r *Runner) Run(ctx context.Context, turn session.AgentTurn, ch chan<- even
 			})
 			mems, memErr := r.Memory.RetrieveForTurn(ctx, query)
 			if memErr != nil {
+				logging.L().Error("memory.retrieve.failed", "session", turn.ID, "error", memErr)
 				ch <- event.Errorf(memErr.Error(), "memory")
 			} else if len(mems) > 0 {
+				logging.L().Info("memory.injected", "session", turn.ID, "count", len(mems))
 				system += memory.FormatForPrompt(mems)
 				wire := make([]event.MemoryWire, len(mems))
 				for i, m := range mems {
@@ -124,9 +128,11 @@ func (r *Runner) Run(ctx context.Context, turn session.AgentTurn, ch chan<- even
 
 		result, err := stream.Result()
 		if err != nil {
+			logging.L().Error("agent.step.failed", "session", turn.ID, "step", steps+1, "error", err)
 			ch <- event.Errorf(err.Error(), "llm")
 			return err
 		}
+		logging.L().Info("agent.step.finish", "session", turn.ID, "step", steps+1, "finish_reason", string(result.FinishReason), "tool_calls", len(result.ToolCalls), "input_tokens", result.Usage.InputTokens, "output_tokens", result.Usage.OutputTokens)
 
 		if err := r.Sessions.SaveTokenUsage(ctx, turn.ID, result.Usage); err != nil {
 			ch <- event.Errorf(err.Error(), "db")
@@ -156,12 +162,14 @@ func (r *Runner) Run(ctx context.Context, turn session.AgentTurn, ch chan<- even
 				return fmt.Errorf("missing persisted tool call id for %s", tc.ID)
 			}
 			start := time.Now()
+			logging.L().Info("tool.call.start", "session", turn.ID, "tool", tc.Name, "tool_call_id", tc.ID, "input_bytes", len(tc.Input))
 			toolCtx := tools.WithToolSession(ctx, turn.ID)
 			toolCtx = tools.WithProgress(toolCtx, func(ev event.Event) {
 				ch <- ev
 			})
 			res, execErr := r.Registry.Execute(toolCtx, tc.Name, tc.Input)
 			dur := time.Since(start).Milliseconds()
+			logging.L().Info("tool.call.finish", "session", turn.ID, "tool", tc.Name, "tool_call_id", tc.ID, "ok", res.OK && execErr == nil, "duration_ms", dur, "output_bytes", len(res.Output))
 
 			out := res.Output
 			isErr := !res.OK

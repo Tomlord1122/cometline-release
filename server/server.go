@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -17,6 +16,7 @@ import (
 	"github.com/cometline/cometmind/internal/acp"
 	"github.com/cometline/cometmind/internal/config"
 	"github.com/cometline/cometmind/internal/event"
+	"github.com/cometline/cometmind/internal/logging"
 	"github.com/cometline/cometmind/internal/memory"
 	"github.com/cometline/cometmind/internal/session"
 	skillpkg "github.com/cometline/cometmind/internal/skills"
@@ -87,6 +87,7 @@ func New(deps Deps) (*gin.Engine, error) {
 	}
 
 	r := gin.New()
+	r.Use(logging.Gin())
 	r.Use(localCORS())
 	r.Use(gin.Recovery())
 
@@ -780,7 +781,7 @@ func (a *App) handlePostMessage(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "bad_request", "text or image is required")
 		return
 	}
-	log.Printf("cometmind: message received session=%s provider=%s model=%s text_bytes=%d images=%d files=%d", sess.ID, sess.ProviderID, sess.ModelID, len(req.Text), len(req.Images), len(req.FilePaths))
+	logging.L().Info("message.received", "session", sess.ID, "provider", sess.ProviderID, "model", sess.ModelID, "text_bytes", len(req.Text), "images", len(req.Images), "files", len(req.FilePaths))
 	started := time.Now()
 
 	runner, err := a.newRunner(sess, wsPath)
@@ -838,10 +839,10 @@ func (a *App) handlePostMessage(c *gin.Context) {
 	}
 
 	if err := <-errCh; err != nil {
-		log.Printf("cometmind: message failed session=%s duration_ms=%d error=%v", sess.ID, time.Since(started).Milliseconds(), err)
+		logging.L().Error("message.failed", "session", sess.ID, "duration_ms", time.Since(started).Milliseconds(), "error", err)
 		return
 	}
-	log.Printf("cometmind: message completed session=%s duration_ms=%d", sess.ID, time.Since(started).Milliseconds())
+	logging.L().Info("message.completed", "session", sess.ID, "duration_ms", time.Since(started).Milliseconds())
 }
 
 func contentBlocksFromRequest(req postMessageRequest, workspacePath string) ([]session.ContentBlock, error) {
