@@ -42,6 +42,7 @@
   },
   "cometmind": {
     "systemPromptPath": "/tmp/SOUL.md",
+    "maxTokens": 2048,
     "acp": {
       "command": "opencode",
       "args": ["acp"],

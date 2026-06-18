@@ -14,8 +14,10 @@ import (
 )
 
 const (
-	simSkipThreshold   = 0.92
-	simUpdateThreshold = 0.80
+	extractionTranscriptMessages = 8
+	extractionMaxTokens          = 1024
+	simSkipThreshold             = 0.92
+	simUpdateThreshold           = 0.80
 )
 
 type proposedMemory struct {
@@ -49,6 +51,10 @@ func (e *extractor) extractAfterTurn(ctx context.Context, sessionID, model strin
 	if len(msgs) == 0 {
 		return nil, nil
 	}
+	if shouldSkipExtraction(msgs) {
+		return nil, nil
+	}
+	msgs = recentMessages(msgs, extractionTranscriptMessages)
 
 	var transcript strings.Builder
 	for _, m := range msgs {
@@ -79,13 +85,13 @@ Conversation:
 
 	var result extractionResult
 	req := &cometsdk.Request{
-		Model: useModel,
+		Model:  useModel,
 		System: "You extract long-term memory candidates. Output JSON only.",
 		Messages: []cometsdk.Message{{
 			Role:    cometsdk.RoleUser,
 			Content: []cometsdk.Block{cometsdk.TextBlock{Text: prompt}},
 		}},
-		MaxTokens: 2048,
+		MaxTokens: extractionMaxTokens,
 	}
 	if err := llm.GenerateJSON(ctx, llmProvider, req, &result); err != nil {
 		return nil, err
@@ -162,6 +168,34 @@ func (e *extractor) create(ctx context.Context, sessionID string, pm proposedMem
 		Content: rec.Content,
 		ID:      rec.ID,
 	}, nil
+}
+
+func recentMessages(msgs []cometsdk.Message, max int) []cometsdk.Message {
+	if max <= 0 || len(msgs) <= max {
+		return msgs
+	}
+	return msgs[len(msgs)-max:]
+}
+
+func shouldSkipExtraction(msgs []cometsdk.Message) bool {
+	lastUser := ""
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role != cometsdk.RoleUser {
+			continue
+		}
+		lastUser = strings.ToLower(strings.TrimSpace(messageText(msgs[i])))
+		break
+	}
+	if lastUser == "" || len([]rune(lastUser)) <= 2 {
+		return true
+	}
+	ackOnly := map[string]struct{}{
+		"ok": {}, "okay": {}, "k": {}, "yes": {}, "yep": {}, "yeah": {}, "no": {},
+		"nope": {}, "thanks": {}, "thank you": {}, "thx": {}, "got it": {},
+		"continue": {}, "go on": {}, "sure": {}, "nice": {}, "cool": {},
+	}
+	_, ok := ackOnly[strings.Trim(lastUser, ".! ")]
+	return ok
 }
 
 func messageText(m cometsdk.Message) string {

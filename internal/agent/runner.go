@@ -69,7 +69,7 @@ func (r *Runner) Run(ctx context.Context, turn session.AgentTurn, ch chan<- even
 		r.MaxSteps = 50
 	}
 	if r.MaxTokens <= 0 {
-		r.MaxTokens = 8192
+		r.MaxTokens = 2048
 	}
 
 	steps := 0

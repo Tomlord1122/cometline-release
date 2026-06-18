@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	cometsdk "github.com/cometline/comet-sdk"
 	"github.com/cometline/cometmind/internal/acp"
@@ -778,6 +780,8 @@ func (a *App) handlePostMessage(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "bad_request", "text or image is required")
 		return
 	}
+	log.Printf("cometmind: message received session=%s provider=%s model=%s text_bytes=%d images=%d files=%d", sess.ID, sess.ProviderID, sess.ModelID, len(req.Text), len(req.Images), len(req.FilePaths))
+	started := time.Now()
 
 	runner, err := a.newRunner(sess, wsPath)
 	if err != nil {
@@ -833,7 +837,11 @@ func (a *App) handlePostMessage(c *gin.Context) {
 		flusher.Flush()
 	}
 
-	_ = <-errCh
+	if err := <-errCh; err != nil {
+		log.Printf("cometmind: message failed session=%s duration_ms=%d error=%v", sess.ID, time.Since(started).Milliseconds(), err)
+		return
+	}
+	log.Printf("cometmind: message completed session=%s duration_ms=%d", sess.ID, time.Since(started).Milliseconds())
 }
 
 func contentBlocksFromRequest(req postMessageRequest, workspacePath string) ([]session.ContentBlock, error) {

@@ -62,9 +62,10 @@ type cometlineStorageJSON struct {
 }
 
 type cometlineCometmindJSON struct {
-	SystemPromptPath string                       `json:"systemPromptPath"`
-	ACP              cometlineACPJSON             `json:"acp"`
-	Skills           cometlineSkillsJSON          `json:"skills"`
+	SystemPromptPath string              `json:"systemPromptPath"`
+	MaxTokens        int                 `json:"maxTokens"`
+	ACP              cometlineACPJSON    `json:"acp"`
+	Skills           cometlineSkillsJSON `json:"skills"`
 	Memory           struct {
 		Embedding cometlineMemoryEmbeddingJSON `json:"embedding"`
 	} `json:"memory"`
@@ -76,8 +77,8 @@ type cometlineCometmindJSON struct {
 
 type cometlineSettingsJSON struct {
 	Providers        []cometlineProviderJSON `json:"providers"`
-	ActiveProviderID string                `json:"activeProviderId"`
-	Cometmind        cometlineCometmindJSON `json:"cometmind"`
+	ActiveProviderID string                  `json:"activeProviderId"`
+	Cometmind        cometlineCometmindJSON  `json:"cometmind"`
 }
 
 func primaryModel(provider cometlineProviderJSON) string {
@@ -144,7 +145,7 @@ func adaptCometlineSettings(raw cometlineSettingsJSON) (*Config, error) {
 		Provider:         strings.TrimSpace(active.ID),
 		Model:            primaryModel(*active),
 		BaseURL:          strings.TrimSpace(active.BaseURL),
-		MaxTokens:        8192,
+		MaxTokens:        cm.MaxTokens,
 		MaxSteps:         50,
 		SystemPromptPath: strings.TrimSpace(cm.SystemPromptPath),
 		Providers:        providers,
@@ -255,6 +256,7 @@ func writeMinimalCometlineSettingsJSON(path string, def *Config) error {
 		ActiveProviderID: def.Provider,
 		Cometmind: cometlineCometmindJSON{
 			SystemPromptPath: def.SystemPromptPath,
+			MaxTokens:        def.MaxTokens,
 			ACP: cometlineACPJSON{
 				Command:     "opencode",
 				Args:        []string{"acp"},

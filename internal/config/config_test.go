@@ -24,6 +24,9 @@ func TestLoadCreatesDefaultCometlineSettingsJSON(t *testing.T) {
 	if cfg.BaseURL != "" {
 		t.Fatalf("BaseURL = %q, want empty", cfg.BaseURL)
 	}
+	if cfg.MaxTokens != 2048 {
+		t.Fatalf("MaxTokens = %d, want 2048", cfg.MaxTokens)
+	}
 
 	path := filepath.Join(home, ".cometmind", "cometline-settings.json")
 	if _, err := os.Stat(path); err != nil {
@@ -101,6 +104,9 @@ func TestLoadReadsCometlineSettingsJSON(t *testing.T) {
 	}
 	if cfg.SystemPromptPath != "/tmp/SOUL.md" {
 		t.Fatalf("SystemPromptPath = %q, want /tmp/SOUL.md", cfg.SystemPromptPath)
+	}
+	if cfg.MaxTokens != 2048 {
+		t.Fatalf("MaxTokens = %d, want 2048", cfg.MaxTokens)
 	}
 	if cfg.Storage.RetentionDays != 90 {
 		t.Fatalf("Storage.RetentionDays = %d, want 90", cfg.Storage.RetentionDays)
