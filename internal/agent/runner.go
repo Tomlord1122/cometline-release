@@ -141,30 +141,54 @@ func (r *Runner) Run(ctx context.Context, turn session.AgentTurn, ch chan<- even
 		}
 
 		req := BuildRequest(turn.ModelID, system, msgs, r.Registry.CometSDK(), r.MaxTokens)
+		streamStarted := time.Now()
+		logging.L().Info("llm.stream.start", "session", turn.ID, "step", steps+1, "model", turn.ModelID, "messages", len(req.Messages), "tools", len(req.Tools), "system_bytes", len(req.System), "max_tokens", req.MaxTokens)
 		stream := llm.StreamMessage(ctx, r.Provider, req)
+		logging.L().Info("llm.stream.opened", "session", turn.ID, "step", steps+1, "duration_ms", time.Since(streamStarted).Milliseconds())
 
+		firstEventLogged := false
+		firstOutputLogged := false
+		eventCount := 0
 		for ev := range stream.Events() {
+			eventCount++
+			if !firstEventLogged {
+				firstEventLogged = true
+				logging.L().Info("llm.stream.first_event", "session", turn.ID, "step", steps+1, "event_type", fmt.Sprintf("%T", ev), "duration_ms", time.Since(streamStarted).Milliseconds())
+			}
 			switch e := ev.(type) {
 			case cometsdk.TextDeltaEvent:
+				if !firstOutputLogged {
+					firstOutputLogged = true
+					logging.L().Info("llm.stream.first_output", "session", turn.ID, "step", steps+1, "event_type", fmt.Sprintf("%T", ev), "duration_ms", time.Since(streamStarted).Milliseconds())
+				}
 				ch <- event.TextDelta(e.Text)
 			case cometsdk.ReasoningStartEvent:
 				ch <- event.ReasoningStart()
 			case cometsdk.ReasoningContentEvent:
+				if !firstOutputLogged {
+					firstOutputLogged = true
+					logging.L().Info("llm.stream.first_output", "session", turn.ID, "step", steps+1, "event_type", fmt.Sprintf("%T", ev), "duration_ms", time.Since(streamStarted).Milliseconds())
+				}
 				ch <- event.ReasoningDelta(e.Text)
 			case cometsdk.ToolCallDoneEvent:
+				if !firstOutputLogged {
+					firstOutputLogged = true
+					logging.L().Info("llm.stream.first_output", "session", turn.ID, "step", steps+1, "event_type", fmt.Sprintf("%T", ev), "duration_ms", time.Since(streamStarted).Milliseconds())
+				}
 				ch <- event.ToolCall(e.ID, e.Name, []byte(e.Input))
 			case cometsdk.StepFinishEvent:
 				ch <- event.StepFinish(e.Usage)
 			}
 		}
+		logging.L().Info("llm.stream.events_closed", "session", turn.ID, "step", steps+1, "events", eventCount, "saw_first_output", firstOutputLogged, "duration_ms", time.Since(streamStarted).Milliseconds())
 
 		result, err := stream.Result()
 		if err != nil {
-			logging.L().Error("agent.step.failed", "session", turn.ID, "step", steps+1, "error", err)
+			logging.L().Error("agent.step.failed", "session", turn.ID, "step", steps+1, "events", eventCount, "saw_first_event", firstEventLogged, "saw_first_output", firstOutputLogged, "duration_ms", time.Since(streamStarted).Milliseconds(), "error", err)
 			ch <- event.Errorf(err.Error(), "llm")
 			return err
 		}
-		logging.L().Info("agent.step.finish", "session", turn.ID, "step", steps+1, "finish_reason", string(result.FinishReason), "tool_calls", len(result.ToolCalls), "input_tokens", result.Usage.InputTokens, "output_tokens", result.Usage.OutputTokens)
+		logging.L().Info("agent.step.finish", "session", turn.ID, "step", steps+1, "finish_reason", string(result.FinishReason), "tool_calls", len(result.ToolCalls), "input_tokens", result.Usage.InputTokens, "output_tokens", result.Usage.OutputTokens, "events", eventCount, "duration_ms", time.Since(streamStarted).Milliseconds())
 
 		if err := r.Sessions.SaveTokenUsage(ctx, turn.ID, result.Usage); err != nil {
 			ch <- event.Errorf(err.Error(), "db")
