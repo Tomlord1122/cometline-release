@@ -125,17 +125,22 @@ func (r *Runner) Run(ctx context.Context, turn session.AgentTurn, ch chan<- even
 				if len(prefs) > 0 || len(mems) > 0 {
 					logging.L().Info("memory.injected", "session", turn.ID, "preferences", len(prefs), "relevant", len(mems))
 					system += memory.FormatPromptMemories(memory.PromptMemories{Preferences: prefs, Relevant: mems})
-					wire := make([]event.MemoryWire, len(mems))
-					for i, m := range mems {
-						wire[i] = event.MemoryWire{
-							ID:              m.ID,
-							Content:         m.Content,
-							Kind:            m.Kind,
-							Similarity:      m.Similarity,
-							EffectiveWeight: m.EffectiveWeight,
+					// Only relevant (semantic) memories are surfaced to the UI as a
+					// memory card. Preferences are injected into the prompt silently,
+					// so skip the wire event when there is nothing relevant to show.
+					if len(mems) > 0 {
+						wire := make([]event.MemoryWire, len(mems))
+						for i, m := range mems {
+							wire[i] = event.MemoryWire{
+								ID:              m.ID,
+								Content:         m.Content,
+								Kind:            m.Kind,
+								Similarity:      m.Similarity,
+								EffectiveWeight: m.EffectiveWeight,
+							}
 						}
+						ch <- event.MemoryInjected(wire)
 					}
-					ch <- event.MemoryInjected(wire)
 				}
 			}
 		}
