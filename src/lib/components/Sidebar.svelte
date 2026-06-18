@@ -381,7 +381,7 @@
 		border-left: 2px solid var(--workspace-inactive-color);
 		padding-left: 4px;
 		margin-left: -6px;
-		margin-right: -6px;
+		margin-right: -15px;
 		background: color-mix(in srgb, var(--workspace-inactive-color) 10%, transparent);
 	}
 
@@ -393,7 +393,7 @@
 		border-left: 2px solid var(--hero-composer-glow-color, var(--accent));
 		padding-left: 4px;
 		margin-left: -6px;
-		margin-right: -6px;
+		margin-right: -15px;
 		background: color-mix(
 			in srgb,
 			var(--hero-composer-glow-color, var(--accent)) 10%,
