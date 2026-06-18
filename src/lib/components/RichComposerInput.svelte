@@ -3,6 +3,7 @@
 	import type { CaretTrailSettings } from '$lib/types';
 	import { faviconUrl, domainFromUrl, isHttpUrl } from '$lib/markdown/embed';
 	import { openLink } from '$lib/open-link';
+	import { openWorkspaceFilePreview } from '$lib/workspace/open-file-preview';
 
 	let {
 		value = $bindable(''),
@@ -668,10 +669,18 @@
 		const target = e.target;
 		if (!(target instanceof Element)) return;
 		const chip = target.closest('.rce-chip');
-		if (!(chip instanceof HTMLElement) || !chip.dataset.url) return;
-		// A plain click on a chip opens its link.
-		e.preventDefault();
-		openLink(chip.dataset.url);
+		if (!(chip instanceof HTMLElement)) return;
+		// A plain click on a file chip opens it in the side-panel editor.
+		if (chip.dataset.filePath) {
+			e.preventDefault();
+			openWorkspaceFilePreview(chip.dataset.filePath);
+			return;
+		}
+		// A plain click on a URL chip opens its link.
+		if (chip.dataset.url) {
+			e.preventDefault();
+			openLink(chip.dataset.url);
+		}
 	}
 
 	function onFocus() {
