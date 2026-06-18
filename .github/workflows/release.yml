@@ -178,10 +178,10 @@ jobs:
 
       - name: Install git-cliff
         if: steps.release_tag.outputs.skip != 'true'
-        uses: orhun/git-cliff-action@v4
-        with:
-          version: v2.10.1
-          install-only: true
+        run: |
+          set -euo pipefail
+          brew install git-cliff
+          git-cliff --version
 
       - name: Generate release notes
         if: steps.release_tag.outputs.skip != 'true'
