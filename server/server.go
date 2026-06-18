@@ -814,17 +814,9 @@ func (a *App) handlePostMessage(c *gin.Context) {
 		writeError(c, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
-	title := session.PlainTextFromContent(blocks)
-	if title == "" {
-		title = "Image"
-	}
-	if len(title) > 80 {
-		title = title[:80] + "…"
-	}
-	if err := a.sessions.SetTitleIfEmpty(c.Request.Context(), sess.ID, title); err != nil {
-		writeError(c, http.StatusInternalServerError, "internal_error", err.Error())
-		return
-	}
+	// Generate the session title from the first user message (no-op after the
+	// first turn). Failures are non-fatal and leave a plain-text fallback.
+	a.maybeGenerateTitle(c.Request.Context(), sess, blocks)
 
 	c.Status(http.StatusOK)
 	c.Header("Content-Type", "text/event-stream")

@@ -68,6 +68,8 @@ type Config struct {
 	Provider         string          `mapstructure:"provider"`
 	Model            string          `mapstructure:"model"`
 	BaseURL          string          `mapstructure:"base_url"`
+	TitleProvider    string          `mapstructure:"title_provider"`
+	TitleModel       string          `mapstructure:"title_model"`
 	MaxTokens        int             `mapstructure:"max_tokens"`
 	MaxSteps         int             `mapstructure:"max_steps"`
 	SystemPromptPath string          `mapstructure:"system_prompt_path"`
@@ -197,6 +199,12 @@ func applyEnvOverrides(c *Config, def *Config) {
 	}
 	if baseURL := strings.TrimSpace(v.GetString("base_url")); baseURL != "" {
 		c.BaseURL = baseURL
+	}
+	if titleProvider := strings.TrimSpace(v.GetString("title_provider")); titleProvider != "" {
+		c.TitleProvider = titleProvider
+	}
+	if titleModel := strings.TrimSpace(v.GetString("title_model")); titleModel != "" {
+		c.TitleModel = titleModel
 	}
 	if prompt := strings.TrimSpace(v.GetString("system_prompt_path")); prompt != "" {
 		c.SystemPromptPath = prompt

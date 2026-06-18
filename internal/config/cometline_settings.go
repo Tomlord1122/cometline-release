@@ -64,10 +64,13 @@ type cometlineStorageJSON struct {
 type cometlineCometmindJSON struct {
 	SystemPromptPath string              `json:"systemPromptPath"`
 	MaxTokens        int                 `json:"maxTokens"`
+	TitleProviderID  string              `json:"titleProviderId"`
+	TitleModelID     string              `json:"titleModelId"`
 	ACP              cometlineACPJSON    `json:"acp"`
 	Skills           cometlineSkillsJSON `json:"skills"`
 	Memory           struct {
-		Embedding cometlineMemoryEmbeddingJSON `json:"embedding"`
+		ExtractionModel string                       `json:"extractionModel"`
+		Embedding       cometlineMemoryEmbeddingJSON `json:"embedding"`
 	} `json:"memory"`
 	Storage cometlineStorageJSON `json:"storage"`
 	Gateway struct {
@@ -145,6 +148,8 @@ func adaptCometlineSettings(raw cometlineSettingsJSON) (*Config, error) {
 		Provider:         strings.TrimSpace(active.ID),
 		Model:            primaryModel(*active),
 		BaseURL:          strings.TrimSpace(active.BaseURL),
+		TitleProvider:    strings.TrimSpace(cm.TitleProviderID),
+		TitleModel:       strings.TrimSpace(cm.TitleModelID),
 		MaxTokens:        cm.MaxTokens,
 		MaxSteps:         50,
 		SystemPromptPath: strings.TrimSpace(cm.SystemPromptPath),
@@ -168,7 +173,7 @@ func adaptCometlineSettings(raw cometlineSettingsJSON) (*Config, error) {
 			AutoRetrieve:        memDef.AutoRetrieve,
 			MaxRetrieved:        memDef.MaxRetrieved,
 			SimilarityThreshold: memDef.SimilarityThreshold,
-			ExtractionModel:     memDef.ExtractionModel,
+			ExtractionModel:     firstNonEmpty(strings.TrimSpace(cm.Memory.ExtractionModel), memDef.ExtractionModel),
 			Lifecycle:           memDef.Lifecycle,
 			Embedding: MemoryEmbeddingConfig{
 				ProviderID: strings.TrimSpace(cm.Memory.Embedding.ProviderID),

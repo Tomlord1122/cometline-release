@@ -348,6 +348,15 @@ func (s *Service) SetTitleIfEmpty(ctx context.Context, sessionID, title string) 
 	})
 }
 
+// UpdateTitle unconditionally overwrites a session's title. Used when an
+// LLM-generated title replaces the provisional first-turn placeholder.
+func (s *Service) UpdateTitle(ctx context.Context, sessionID, title string) error {
+	return s.q.UpdateSessionTitle(ctx, db.UpdateSessionTitleParams{
+		ID:    sessionID,
+		Title: title,
+	})
+}
+
 // UpdateSessionModel persists a new model/provider pair for an existing session.
 func (s *Service) UpdateSessionModel(ctx context.Context, sessionID, modelID, providerID string) (Session, error) {
 	modelID = strings.TrimSpace(modelID)
