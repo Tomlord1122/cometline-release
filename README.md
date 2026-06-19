@@ -31,7 +31,7 @@ Comet SDK deliberately stays a **pure LLM I/O library**: no agent loop, no tool 
 
 ## What it does
 
-Comet SDK gives you a single `Provider` interface that works identically for Anthropic, OpenAI, and any OpenAI-compatible endpoint (DeepSeek, company gateways, OpenCode Zen, etc.). It handles:
+Comet SDK gives you a single `Provider` interface that works identically for Anthropic, OpenAI, ChatGPT Codex, and OpenAI-compatible endpoints (DeepSeek, company gateways, OpenCode Zen, etc.). It handles:
 
 - Streaming responses over SSE
 - Reasoning / chain-of-thought events (`ReasoningStartEvent`, `ReasoningContentEvent`)
@@ -73,16 +73,16 @@ Use `Provider.Stream()` directly when you need lower-level control over raw even
 │  AuthError · RateLimitError · ServerError · StreamError     │
 └────────────────┬──────────────────────┬─────────────────────┘
                  │                      │
-    ┌────────────▼────────┐  ┌──────────▼───────────┐
-    │  provider/anthropic  │  │   provider/openai     │
-    │                      │  │                       │
-    │  client.go           │  │  client.go            │
-    │  convert.go          │  │  convert.go           │
-    │  stream.go           │  │  stream.go            │
-    │  fixtures/           │  │  reasoning.go         │
-    └────────┬─────────────┘  │  fixtures/            │
-             │                └──────────┬─────────────┘
-             └─────────────┬─────────────┘
+    ┌────────────▼────────┐  ┌──────────▼───────────┐  ┌──────────▼─────────┐
+    │  provider/anthropic  │  │   provider/openai     │  │  provider/codex    │
+    │                      │  │                       │  │                    │
+    │  client.go           │  │  client.go            │  │  client.go         │
+    │  convert.go          │  │  convert.go           │  │  convert.go        │
+    │  stream.go           │  │  stream.go            │  │  stream.go         │
+    │  fixtures/           │  │  reasoning.go         │  │  auth.go           │
+    └────────┬─────────────┘  │  fixtures/            │  └─────────┬──────────┘
+             │                └──────────┬─────────────┘            │
+             └─────────────┬─────────────┴──────────────────────────┘
                            │
            ┌───────────────▼───────────────┐
            │          internal/            │
@@ -94,8 +94,8 @@ Use `Provider.Stream()` directly when you need lower-level control over raw even
                         │
           ┌─────────────┼──────────────────┐
           ▼             ▼                  ▼
-   Anthropic API   OpenAI API      OpenAI-compatible APIs
-   /v1/messages    /v1/chat/       (DeepSeek, gateways, etc.)
+   Anthropic API   OpenAI API      OpenAI-compatible APIs     ChatGPT Codex
+   /v1/messages    /v1/chat/       (DeepSeek, gateways, etc.) /responses
                    completions
 ```
 
@@ -284,10 +284,9 @@ Options: map[string]any{
     },
 }
 
-// OpenAI — temperature, top_p, presence_penalty, seed, etc.
+// OpenAI — top_p, presence_penalty, seed, etc.
 Options: map[string]any{
     "openai": map[string]any{
-        "temperature":       0.8,
         "top_p":             1.0,
         "presence_penalty":  1.0,
         "frequency_penalty": 0.5,
@@ -295,9 +294,11 @@ Options: map[string]any{
 }
 ```
 
-SDK-managed fields (`model`, `messages`, `stream`, `max_tokens`) cannot be overridden via Options.
+SDK-managed fields (`model`, `messages`, `stream`, `max_tokens`) cannot be overridden via Options. Use the top-level `Request.Temperature` field for providers that support it.
 
-Pass temperature through Options — the top-level `Request.Temperature` field exists but is not wired to providers yet.
+### ChatGPT Codex
+
+`provider/codex` talks to ChatGPT Codex's `/responses` endpoint and reuses the local Codex CLI login. Run `codex login` first so `~/.codex/auth.json` exists. The provider refreshes the borrowed access token when possible and does not use an API key.
 
 ---
 
