@@ -362,13 +362,13 @@
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		padding: 0 10px 12px;
+		padding: 0 12px 12px 12px;
 	}
 
 	.workspace-group {
 		display: flex;
 		flex-direction: column;
-		gap: 2px;
+		gap: 4px;
 		border-radius: 8px;
 		padding: 2px;
 		border-left: 2px solid transparent;
@@ -381,7 +381,7 @@
 		border-left: 2px solid var(--workspace-inactive-color);
 		padding-left: 4px;
 		margin-left: -6px;
-		margin-right: -15px;
+		margin-right: -6px;
 		background: color-mix(in srgb, var(--workspace-inactive-color) 10%, transparent);
 	}
 
@@ -393,7 +393,7 @@
 		border-left: 2px solid var(--hero-composer-glow-color, var(--accent));
 		padding-left: 4px;
 		margin-left: -6px;
-		margin-right: -15px;
+		margin-right: -6px;
 		background: color-mix(
 			in srgb,
 			var(--hero-composer-glow-color, var(--accent)) 10%,
