@@ -8,11 +8,20 @@ import type { Session } from '$lib/types';
 function session(id: string, workspacePath: string, updatedAt: number): Session {
 	return {
 		id,
+		workspace_id: `ws-${workspacePath}`,
 		workspace_path: workspacePath,
-		updated_at: updatedAt,
 		title: id,
 		model_id: 'm',
-		provider_id: 'p'
+		provider_id: 'p',
+		status: 'active',
+		token_usage: {
+			input_tokens: 0,
+			output_tokens: 0,
+			cache_read: 0,
+			cache_write: 0
+		},
+		created_at: updatedAt,
+		updated_at: updatedAt
 	};
 }
 
