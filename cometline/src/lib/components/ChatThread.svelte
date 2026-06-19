@@ -947,7 +947,7 @@
 									{#if subagentExpanded(item.id)}
 										{@const visibleProgress = subagentVisibleProgress(item)}
 										<div
-											class="fold-body subagent-body"
+											class="fold-body subagent-body mt-1 mb-1"
 											transition:slide={FOLD_IN}
 										>
 											<p class="subagent-purpose">{item.purpose}</p>
