@@ -11,12 +11,12 @@ if ! git rev-parse "$TAG" >/dev/null 2>&1; then
   exit 1
 fi
 
-PREV_TAG="$(git tag -l 'v*' --sort=-version:refname | awk -v tag="$TAG" '$0 == tag { if (getline > 0) print; exit }')"
-
 if ! command -v git-cliff >/dev/null 2>&1; then
   echo "git-cliff is required but not installed" >&2
   exit 1
 fi
+
+PREV_TAG="$(git tag -l 'v*' --sort=-version:refname | awk -v tag="$TAG" '$0 == tag { if (getline > 0) print; exit }')"
 
 if [ -n "$PREV_TAG" ]; then
   RANGE="${PREV_TAG}..${TAG}"
@@ -67,12 +67,22 @@ normalize_notes() {
 sections=0
 
 for component in cometline cometmind comet-sdk; do
-  notes="$(git cliff \
-    --config "$ROOT/cliff.toml" \
-    --strip all \
-    --include-path "$component" \
-    --include-path "$component/**" \
-    "$RANGE" || true)"
+  cliff_commits=()
+  while IFS= read -r subject; do
+    if [ -n "$subject" ]; then
+      cliff_commits+=(--with-commit "$subject")
+    fi
+  done < <(git log --format=%s --reverse "$RANGE" -- "$component" "$component/**")
+
+  if [ "${#cliff_commits[@]}" -eq 0 ]; then
+    notes=""
+  else
+    notes="$(git cliff \
+      --config "$ROOT/cliff.toml" \
+      --strip all \
+      --skip-tags '.*' \
+      "${cliff_commits[@]}" || true)"
+  fi
 
   notes="$(printf '%s\n' "$notes" | normalize_notes)"
 
