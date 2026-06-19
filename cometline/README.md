@@ -2,6 +2,8 @@
 
 A local-first desktop AI assistant with persistent workspace sessions, live streaming reasoning and tool visibility, semantic memory, and a native-feeling macOS UI — while keeping the trusted agent runtime outside the renderer.
 
+This directory is one module inside the `cometline-release` monorepo. The historical standalone `cometline` repo is archived; current development, issues, and pull requests land in the monorepo root.
+
 Cometline is the **desktop shell** in the Cometline stack:
 
 ```
@@ -70,6 +72,8 @@ From the monorepo root:
 make install   # pnpm install in cometline/
 make dev       # build CometMind sidecar + launch Electron dev app
 ```
+
+You can still run frontend-only commands from `cometline/`, but day-to-day contributor workflow now starts from the monorepo root.
 
 On first launch, open **Settings** (⌘,) to enable a provider, add credentials if needed, fetch or enter models, and choose default model roles. Settings are saved to `~/.cometmind/cometline-settings.json` (CometMind reads the same file).
 

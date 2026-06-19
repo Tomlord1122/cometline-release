@@ -2,6 +2,8 @@
 
 > A local, session-first **general AI agent runtime**. CometMind is the brain — it reasons, plans, remembers, and acts through a pluggable tool layer, and delegates coding work to specialized coding agents (OpenCode, Claude Code, etc.) over **ACP**.
 
+This directory is one module inside the `cometline-release` monorepo. The historical standalone `cometmind` repo is archived; current development, issues, and pull requests land in the monorepo root.
+
 CometMind is the middle tier of the Cometline stack:
 
 ```
@@ -19,6 +21,8 @@ CometMind started as a coding-focused agent and is now a **general-purpose orche
 - **Coding tasks are delegated** to an external ACP-speaking agent instead of being hardcoded into the runtime.
 - The same agent loop powers the **desktop app**, the **CLI**, and the **Discord gateway**.
 - Built-in workspace tools cover file I/O, shell commands, web fetch, and skill management.
+
+CometMind still has a clear runtime boundary inside the product: it owns the CLI, config, database, and localhost HTTP/SSE API. But in practice it is now tightly coupled to Cometline's product workflow and monorepo development model. It should be read as an internal first-party runtime, not as a separately evolving project.
 
 ## Architecture
 
@@ -348,6 +352,8 @@ make package  # build sidecar + package Electron app
 ```
 
 Requires Go 1.25+. `comet-sdk` is consumed via `replace github.com/cometline/comet-sdk => ../comet-sdk`.
+
+CometMind is not versioned or released independently today, and the current documentation should assume monorepo-first development rather than future standalone distribution.
 
 ## Closed-loop self-improvement
 

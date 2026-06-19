@@ -2,10 +2,20 @@
 
 A provider-agnostic Go LLM client library. One interface, any backend.
 
+This directory is one module inside the `cometline-release` monorepo. The historical standalone `comet-sdk` repo is archived; current development, issues, and pull requests land in the monorepo root.
+
 ```
 module: github.com/cometline/comet-sdk
 go:     1.25
 ```
+
+---
+
+## Status
+
+Comet SDK remains a reusable Go module boundary, but it is no longer developed as a separate repository or separately released package today. In practice, it is maintained monorepo-first for CometMind and Cometline.
+
+The code is still intentionally shaped like a library rather than an internal dump: the public types, provider packages, and `llm` helpers remain useful if Comet SDK is spun back out or published independently again later.
 
 ---
 
@@ -101,17 +111,15 @@ Use `Provider.Stream()` directly when you need lower-level control over raw even
 
 ---
 
-## Installation
+## Using it
 
-```bash
-go get github.com/cometline/comet-sdk
-```
-
-In this monorepo, CometMind uses a local replace:
+Inside this monorepo, CometMind uses a local replace:
 
 ```go
 replace github.com/cometline/comet-sdk => ../comet-sdk
 ```
+
+For now, treat this module as source that lives in the monorepo rather than as a separately published package with its own release flow.
 
 ---
 
