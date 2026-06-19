@@ -9,15 +9,50 @@ import {
 } from './schema';
 
 describe('settings schema', () => {
-	it('normalizes default providers', () => {
+	it('orders built-in providers for the settings sidebar', () => {
 		const settings = defaultSettings();
 		expect(settings.providers).toHaveLength(5);
+		expect(settings.providers.map((provider) => provider.id)).toEqual([
+			'codex',
+			'openai',
+			'anthropic',
+			'opencode-go',
+			'openai-compatible'
+		]);
 		expect(settings.providers.find((p) => p.id === 'codex')?.apiKey).toBe('');
 		expect(settings.app.iconVariant).toBe('default');
 		expect(settings.cometmind.systemPromptPath).toBe('');
 		expect(settings.cometmind.maxTokens).toBe(2048);
 		expect(settings.cometmind.storage.retentionDays).toBe(90);
 		expect(settings.cometmind.storage.maxSessionsPerWorkspace).toBe(0);
+	});
+
+	it('appends custom providers after built-ins', () => {
+		const settings = normalizeSettings({
+			...defaultSettings(),
+			providers: [
+				...defaultSettings().providers,
+				{
+					id: 'custom-local',
+					name: 'Local Ollama',
+					method: 'openai-compatible',
+					enabled: false,
+					baseURL: 'http://localhost:11434/v1',
+					apiKey: '',
+					models: [],
+					enabledModels: []
+				}
+			]
+		});
+
+		expect(settings.providers.map((provider) => provider.id)).toEqual([
+			'codex',
+			'openai',
+			'anthropic',
+			'opencode-go',
+			'openai-compatible',
+			'custom-local'
+		]);
 	});
 
 	it('normalizes Codex without an API key', () => {
@@ -32,8 +67,7 @@ describe('settings schema', () => {
 
 		const codex = settings.providers.find((p) => p.id === 'codex');
 		expect(codex?.apiKey).toBe('');
-		expect(codex?.models).toContain('gpt-5.4');
-		expect(codex?.models).toContain('gpt-test');
+		expect(codex?.models).toEqual(['gpt-test']);
 	});
 
 	it('allows disabling session retention with zero days', () => {

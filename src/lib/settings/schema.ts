@@ -14,24 +14,6 @@ import type {
 	ProviderSettings
 } from '../types';
 
-export const OPENCODE_GO_AVAILABLE_MODELS = [
-	'deepseek-v4-flash',
-	'deepseek-v4-pro',
-	'glm-5',
-	'glm-5.1',
-	'kimi-k2.6',
-	'kimi-k2.7-code',
-	'mimo-v2.5',
-	'mimo-v2.5-pro',
-	'minimax-m2.7',
-	'minimax-m3',
-	'qwen3.6-plus',
-	'qwen3.7-max',
-	'qwen3.7-plus'
-] as const;
-
-export const CODEX_FALLBACK_MODELS = ['gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano'] as const;
-
 export const VALID_PROVIDER_METHODS: ProviderMethod[] = [
 	'openai-compatible',
 	'openai',
@@ -144,22 +126,11 @@ export interface RuntimeSettingsSlice {
 
 const DEFAULT_PROVIDERS: ProviderConfig[] = [
 	{
-		id: 'openai-compatible',
-		name: 'OpenAI Compatible',
-		method: 'openai-compatible',
+		id: 'codex',
+		name: 'ChatGPT Codex',
+		method: 'codex',
 		enabled: false,
-		baseURL: '',
-		apiKey: '',
-		selectedModel: '',
-		models: [],
-		enabledModels: []
-	},
-	{
-		id: 'anthropic',
-		name: 'Anthropic',
-		method: 'anthropic',
-		enabled: false,
-		baseURL: 'https://api.anthropic.com',
+		baseURL: 'https://chatgpt.com/backend-api/codex',
 		apiKey: '',
 		selectedModel: '',
 		models: [],
@@ -177,6 +148,17 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
 		enabledModels: []
 	},
 	{
+		id: 'anthropic',
+		name: 'Anthropic',
+		method: 'anthropic',
+		enabled: false,
+		baseURL: 'https://api.anthropic.com',
+		apiKey: '',
+		selectedModel: '',
+		models: [],
+		enabledModels: []
+	},
+	{
 		id: 'opencode-go',
 		name: 'OpenCode Go',
 		method: 'opencode-go',
@@ -184,18 +166,18 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
 		baseURL: 'https://opencode.ai/zen/go/v1',
 		apiKey: '',
 		selectedModel: '',
-		models: [...OPENCODE_GO_AVAILABLE_MODELS],
+		models: [],
 		enabledModels: []
 	},
 	{
-		id: 'codex',
-		name: 'ChatGPT Codex',
-		method: 'codex',
+		id: 'openai-compatible',
+		name: 'OpenAI Compatible',
+		method: 'openai-compatible',
 		enabled: false,
-		baseURL: 'https://chatgpt.com/backend-api/codex',
+		baseURL: '',
 		apiKey: '',
 		selectedModel: '',
-		models: [...CODEX_FALLBACK_MODELS],
+		models: [],
 		enabledModels: []
 	}
 ];
@@ -461,13 +443,7 @@ export function normalizeProvider(
 		? (provider.method as ProviderMethod)
 		: (fallback?.method ?? 'openai-compatible');
 	const rawModels = Array.isArray(provider.models) ? provider.models : (fallback?.models ?? []);
-	const models = rawModels.map((model) => String(model || '').trim()).filter(Boolean);
-	const modelList =
-		method === 'opencode-go'
-			? Array.from(new Set([...OPENCODE_GO_AVAILABLE_MODELS, ...models]))
-			: method === 'codex'
-				? Array.from(new Set([...CODEX_FALLBACK_MODELS, ...models]))
-			: models;
+	const modelList = rawModels.map((model) => String(model || '').trim()).filter(Boolean);
 	const legacySelected = String(provider.selectedModel || fallback?.selectedModel || '').trim();
 	const rawEnabledModels = Array.isArray(provider.enabledModels)
 		? provider.enabledModels

@@ -841,13 +841,13 @@
 													e.currentTarget.value as ProviderMethod
 												)}
 										>
+											<option value="codex">ChatGPT Codex</option>
+											<option value="openai">OpenAI</option>
+											<option value="anthropic">Anthropic</option>
+											<option value="opencode-go">OpenCode Go</option>
 											<option value="openai-compatible"
 												>OpenAI-compatible</option
 											>
-											<option value="anthropic">Anthropic</option>
-											<option value="openai">OpenAI</option>
-											<option value="opencode-go">OpenCode Go</option>
-											<option value="codex">ChatGPT Codex</option>
 										</select>
 									</label>
 

@@ -7,8 +7,6 @@ const os = require('os');
 const http = require('http');
 const crypto = require('crypto');
 const {
-	CODEX_FALLBACK_MODELS,
-	OPENCODE_GO_AVAILABLE_MODELS,
 	defaultSettings,
 	normalizeProviders,
 	normalizeSettings,
@@ -1724,7 +1722,8 @@ async function fetchCodexModels(baseURL) {
 		.map((item) => (typeof item === 'string' ? item : item.slug || item.id))
 		.filter((id) => typeof id === 'string' && id.trim())
 		.map((id) => id.trim());
-	return Array.from(new Set(models.length > 0 ? models : CODEX_FALLBACK_MODELS)).sort();
+	if (models.length === 0) throw new Error('No models returned by Codex');
+	return Array.from(new Set(models)).sort();
 }
 
 async function fetchOpenCodeGoModels(baseURL) {
@@ -1746,9 +1745,8 @@ async function fetchOpenCodeGoModels(baseURL) {
 		.map((item) => (typeof item === 'string' ? item : item?.id))
 		.filter((id) => typeof id === 'string' && id.trim())
 		.map((id) => id.trim());
-	return Array.from(
-		new Set(models.length > 0 ? models : OPENCODE_GO_AVAILABLE_MODELS)
-	).sort();
+	if (models.length === 0) throw new Error('No models returned by OpenCode Go');
+	return Array.from(new Set(models)).sort();
 }
 
 async function fetchProviderModels(config) {

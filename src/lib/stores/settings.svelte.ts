@@ -12,7 +12,6 @@ import {
 	runtimeProviders,
 	runtimeSlice,
 	validateSettings,
-	OPENCODE_GO_AVAILABLE_MODELS,
 	type CometMindSettings,
 	type RuntimeSettingsSlice
 } from '$lib/settings/schema';
@@ -239,7 +238,6 @@ export {
 	normalizeProvider,
 	normalizeProviders,
 	normalizeSettings,
-	OPENCODE_GO_AVAILABLE_MODELS,
 	runtimeProviders,
 	runtimeSlice,
 	type CometMindSettings,
