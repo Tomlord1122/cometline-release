@@ -2,8 +2,11 @@ package discord
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -16,6 +19,20 @@ import (
 )
 
 const platformName = "discord"
+
+const (
+	maxMessageImages     = 6
+	maxMessageImageBytes = 4 * 1024 * 1024
+)
+
+var supportedImageMediaTypes = map[string]bool{
+	"image/png":  true,
+	"image/jpeg": true,
+	"image/gif":  true,
+	"image/webp": true,
+}
+
+var attachmentHTTPClient = &http.Client{Timeout: 30 * time.Second}
 
 // Adapter connects CometMind to Discord via discordgo.
 type Adapter struct {
@@ -514,9 +531,18 @@ func (a *Adapter) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCrea
 		}
 	}
 	routingChannelID, threadID := discordRoutingIDs(m.ChannelID, parentChannelID)
+	if a.Config.RequireMention && !mentioned && threadID == "" {
+		log.Printf("discord: ignoring message in channel %s (mention required)", m.ChannelID)
+		return
+	}
 
 	text := strings.TrimSpace(stripBotMentions(m.Content, s.State))
-	if text == "" {
+	images, err := imageAttachments(context.Background(), m.Attachments)
+	if err != nil {
+		log.Printf("discord: ignoring message in channel %s (attachments unsupported: %v)", m.ChannelID, err)
+		return
+	}
+	if text == "" && len(images) == 0 {
 		if strings.TrimSpace(m.Content) != "" {
 			log.Printf("discord: ignoring message in channel %s (only mentions, no text)", m.ChannelID)
 		} else if m.GuildID != "" {
@@ -528,13 +554,14 @@ func (a *Adapter) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCrea
 		return
 	}
 	log.Printf(
-		"discord: inbound user=%s channel=%s thread=%s parent=%s guild=%s text=%q",
+		"discord: inbound user=%s channel=%s thread=%s parent=%s guild=%s text=%q images=%d",
 		m.Author.ID,
 		routingChannelID,
 		threadID,
 		parentChannelID,
 		m.GuildID,
 		truncateLog(text, 80),
+		len(images),
 	)
 	a.onInbound(context.Background(), gateway.InboundMessage{
 		Platform:        platformName,
@@ -544,8 +571,81 @@ func (a *Adapter) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCrea
 		ChannelID:       routingChannelID,
 		ThreadID:        threadID,
 		Text:            text,
+		Images:          images,
 		Mentioned:       mentioned,
 	})
+}
+
+func imageAttachments(ctx context.Context, attachments []*discordgo.MessageAttachment) ([]gateway.InboundImage, error) {
+	images := make([]gateway.InboundImage, 0, len(attachments))
+	for _, attachment := range attachments {
+		if attachment == nil {
+			continue
+		}
+		mediaType := strings.ToLower(strings.TrimSpace(attachment.ContentType))
+		if mediaType == "" {
+			mediaType = mediaTypeFromFilename(attachment.Filename)
+		}
+		if !supportedImageMediaTypes[mediaType] {
+			continue
+		}
+		if len(images) >= maxMessageImages {
+			return nil, fmt.Errorf("at most %d images are allowed", maxMessageImages)
+		}
+		if attachment.Size > maxMessageImageBytes {
+			return nil, fmt.Errorf("image %q is larger than %d MB", attachment.Filename, maxMessageImageBytes/(1024*1024))
+		}
+		data, err := downloadAttachment(ctx, attachment.URL, maxMessageImageBytes)
+		if err != nil {
+			return nil, fmt.Errorf("download image %q: %w", attachment.Filename, err)
+		}
+		images = append(images, gateway.InboundImage{
+			MediaType: mediaType,
+			Data:      base64.StdEncoding.EncodeToString(data),
+		})
+	}
+	return images, nil
+}
+
+func mediaTypeFromFilename(filename string) string {
+	switch strings.ToLower(strings.TrimSpace(filename[strings.LastIndex(filename, ".")+1:])) {
+	case "png":
+		return "image/png"
+	case "jpg", "jpeg":
+		return "image/jpeg"
+	case "gif":
+		return "image/gif"
+	case "webp":
+		return "image/webp"
+	default:
+		return ""
+	}
+}
+
+func downloadAttachment(ctx context.Context, url string, maxBytes int64) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	res, err := attachmentHTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return nil, fmt.Errorf("HTTP %d", res.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(res.Body, maxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("image is larger than %d MB", maxBytes/(1024*1024))
+	}
+	if len(data) == 0 {
+		return nil, fmt.Errorf("image is empty")
+	}
+	return data, nil
 }
 
 func (a *Adapter) handleCreateSkillCommand(s *discordgo.Session, i *discordgo.InteractionCreate, data discordgo.ApplicationCommandInteractionData) {

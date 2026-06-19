@@ -4,14 +4,21 @@ import "context"
 
 // InboundMessage is a normalized message from an external chat platform.
 type InboundMessage struct {
-	Platform         string
-	GuildID          string
-	ParentChannelID  string
-	UserID           string
-	ChannelID        string
-	ThreadID         string
-	Text             string
-	Mentioned        bool
+	Platform        string
+	GuildID         string
+	ParentChannelID string
+	UserID          string
+	ChannelID       string
+	ThreadID        string
+	Text            string
+	Images          []InboundImage
+	Mentioned       bool
+}
+
+// InboundImage is a normalized image attachment from an external chat platform.
+type InboundImage struct {
+	MediaType string
+	Data      string
 }
 
 // TypingIndicator can show a platform-specific "typing" state while a turn runs.

@@ -23,12 +23,12 @@ type Runner interface {
 
 // Router maps platform identities to CometMind sessions and runs turns.
 type Router struct {
-	Sessions  *session.Service
-	Config    *config.Config
-	Runner    Runner
-	ACPMgr    *acp.SessionManager
-	Typing    TypingIndicator
-	onReply   func(context.Context, OutboundMessage) error
+	Sessions *session.Service
+	Config   *config.Config
+	Runner   Runner
+	ACPMgr   *acp.SessionManager
+	Typing   TypingIndicator
+	onReply  func(context.Context, OutboundMessage) error
 }
 
 // SetReplyHandler registers the callback used to deliver outbound messages.
@@ -78,7 +78,11 @@ func (r *Router) HandleInbound(ctx context.Context, msg InboundMessage) error {
 		}
 	}
 
-	if _, err := r.Sessions.AppendUserMessageAndMaybeTitle(ctx, sess.ID, msg.Text); err != nil {
+	blocks := contentBlocksFromInbound(msg)
+	if _, err := r.Sessions.AppendUserMessageContent(ctx, sess.ID, blocks); err != nil {
+		return err
+	}
+	if err := r.Sessions.SetTitleIfEmpty(ctx, sess.ID, titleFromInbound(msg)); err != nil {
 		return err
 	}
 
@@ -326,6 +330,28 @@ func deliveryChannelID(msg InboundMessage) string {
 		return msg.ThreadID
 	}
 	return msg.ChannelID
+}
+
+func contentBlocksFromInbound(msg InboundMessage) []session.ContentBlock {
+	blocks := make([]session.ContentBlock, 0, 1+len(msg.Images))
+	if msg.Text != "" {
+		blocks = append(blocks, session.ContentBlock{Type: "text", Text: msg.Text})
+	}
+	for _, img := range msg.Images {
+		blocks = append(blocks, session.ContentBlock{Type: "image", MediaType: img.MediaType, Data: img.Data})
+	}
+	return blocks
+}
+
+func titleFromInbound(msg InboundMessage) string {
+	title := strings.TrimSpace(msg.Text)
+	if title == "" && len(msg.Images) > 0 {
+		title = "Image message"
+	}
+	if len(title) > 80 {
+		title = title[:80] + "…"
+	}
+	return title
 }
 
 func (r *Router) allowed(msg InboundMessage) bool {

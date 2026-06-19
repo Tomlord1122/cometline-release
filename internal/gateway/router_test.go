@@ -6,9 +6,19 @@ import (
 	"testing"
 
 	"github.com/cometline/cometmind/internal/config"
+	"github.com/cometline/cometmind/internal/event"
 	"github.com/cometline/cometmind/internal/session"
 	"github.com/cometline/cometmind/internal/store"
 )
+
+type routerTestRunner struct{}
+
+func (routerTestRunner) RunTurn(_ context.Context, _ session.Session, _, _ string, onEvent func(event.Event)) error {
+	if onEvent != nil {
+		onEvent(event.TextDelta("ok"))
+	}
+	return nil
+}
 
 func TestRouterAllowed(t *testing.T) {
 	t.Parallel()
@@ -203,5 +213,68 @@ func TestSuggestWorkspacePathsIncludesConfiguredDefault(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("paths = %+v, want %q", paths, ws.Path)
+	}
+}
+
+func TestHandleInboundPersistsImages(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "cometmind.db")
+	sqlDB, err := store.OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatalf("OpenSQLite() error = %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+
+	svc := session.New(sqlDB)
+	ws, err := svc.EnsureWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("EnsureWorkspace() error = %v", err)
+	}
+
+	r := &Router{
+		Sessions: svc,
+		Runner:   routerTestRunner{},
+		Config: &config.Config{
+			Model:    "test-model",
+			Provider: "test-provider",
+			Gateway: config.GatewayConfig{
+				Discord: config.DiscordGatewayConfig{
+					WorkspacePath: ws.Path,
+				},
+			},
+		},
+	}
+	if err := r.HandleInbound(ctx, InboundMessage{
+		Platform:  "discord",
+		UserID:    "user-1",
+		ChannelID: "chan-1",
+		Text:      "what is this?",
+		Images: []InboundImage{{
+			MediaType: "image/png",
+			Data:      "aGVsbG8=",
+		}},
+		Mentioned: true,
+	}); err != nil {
+		t.Fatalf("HandleInbound() error = %v", err)
+	}
+
+	mapped, err := svc.LookupGatewaySession(ctx, "discord", "user-1", "chan-1", "")
+	if err != nil {
+		t.Fatalf("LookupGatewaySession() error = %v", err)
+	}
+	transcript, err := svc.LoadTranscript(ctx, mapped.CometmindSessionID)
+	if err != nil {
+		t.Fatalf("LoadTranscript() error = %v", err)
+	}
+	if len(transcript) != 1 {
+		t.Fatalf("transcript len = %d, want 1", len(transcript))
+	}
+	if transcript[0].Text != "what is this?" {
+		t.Fatalf("text = %q, want prompt", transcript[0].Text)
+	}
+	if len(transcript[0].Images) != 1 || transcript[0].Images[0].MediaType != "image/png" || transcript[0].Images[0].Data != "aGVsbG8=" {
+		t.Fatalf("images = %#v, want one png image", transcript[0].Images)
 	}
 }
