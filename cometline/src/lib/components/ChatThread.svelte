@@ -64,8 +64,8 @@
 	// Gap left above the freshly-sent user message. The first turn pins close to
 	// the top; follow-up turns sit a little lower (upper-middle) so the message
 	// reads naturally and leaves the bulk of the screen for the reply below.
-	const USER_SEND_TOP_OFFSET = 16;
-	const USER_SEND_FOLLOWUP_OFFSET = 96;
+	const USER_SEND_TOP_OFFSET = 24;
+	const USER_SEND_FOLLOWUP_OFFSET = 128;
 	// ChatGPT-style: reserve empty space below the latest turn so a freshly-sent
 	// user message can always scroll up to the top, leaving room for the
 	// assistant avatar/response to appear below it (never clipped).
@@ -98,12 +98,16 @@
 	let userMessageCount = $derived(
 		threadItems.reduce((count, item) => (item.type === 'user' ? count + 1 : count), 0)
 	);
-	// Reserve a viewport-tall gap below the conversation so the latest user
-	// message can scroll to the top. Only applies once a follow-up turn exists
-	// (the first turn keeps its natural layout). The 160px keeps a little of the
-	// previous turn visible while leaving the bulk of the screen for the reply.
+	// Reserve a viewport-tall gap below the conversation right after the user
+	// sends a message, so the latest user message can scroll up toward the
+	// top-right area. Once the assistant starts responding (assistant/tool/
+	// subagent items appear), the spacer collapses so the reply grows upward
+	// naturally instead of leaving a big empty gap. Only applies once a
+	// follow-up turn exists (the first turn keeps its natural layout).
 	let bottomSpacerHeight = $derived(
-		userMessageCount > 1 && viewportHeight > 0 ? Math.max(0, viewportHeight - 160) : 0
+		userMessageCount > 1 && viewportHeight > 0 && threadItems.at(-1)?.type === 'user'
+			? Math.max(0, viewportHeight - 240)
+			: 0
 	);
 	let showMessages = $derived(
 		threadItems.length > 0 || (isSessionSynced && awaitingFirstAssistant && !firstUserId)
