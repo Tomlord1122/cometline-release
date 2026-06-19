@@ -14,6 +14,7 @@ import { reduceChatState } from '$lib/reducers/chat';
 import { stripInlinedFileBlocks } from '$lib/messages/strip-inlined-files';
 import { sessionStore } from '$lib/stores/session.svelte';
 import { chatDebug, summarizeChatItems, summarizeStreamEvent } from '../debug/chat';
+import { playResponseCompleteSound } from '$lib/sound/response-complete';
 
 export type { ChatItem } from '$lib/types';
 
@@ -583,6 +584,7 @@ function createChatStore() {
 		writeSessionItems(nextSessionID, preItems);
 		ctx.assistant.current = preAssistant;
 		let eventIndex = 0;
+		let streamOutcome: 'success' | 'abort' | 'error' = 'success';
 		try {
 			for await (const event of streamMessage(
 				nextSessionID,
@@ -620,13 +622,16 @@ function createChatStore() {
 				return;
 			}
 			if (isAbortError(err)) {
+				streamOutcome = 'abort';
 				chatDebug('store:send-aborted', { sessionID: nextSessionID, run: handle.run });
 				return;
 			}
 			if (isSessionNotFoundError(err)) {
+				streamOutcome = 'error';
 				discardMissingSession(nextSessionID);
 				return;
 			}
+			streamOutcome = 'error';
 			applyStreamEventForSession(
 				nextSessionID,
 				{
@@ -651,6 +656,9 @@ function createChatStore() {
 					reasoning: ctx.reasoning.current,
 					error: sessionErrors.get(nextSessionID) ?? ''
 				});
+				if (streamOutcome === 'success' && !sessionErrors.get(nextSessionID)) {
+					playResponseCompleteSound();
+				}
 			}
 		}
 	}
