@@ -378,25 +378,25 @@
 	}
 
 	.workspace-group:not(.active) {
-		border-left: 2px solid var(--workspace-inactive-color);
+		border-left: 3px solid var(--workspace-inactive-color);
 		padding-left: 4px;
 		margin-left: -6px;
 		margin-right: -6px;
-		background: color-mix(in srgb, var(--workspace-inactive-color) 10%, transparent);
+		background: color-mix(in srgb, var(--workspace-inactive-color) 30%, transparent);
 	}
 
 	.workspace-group:not(.active):hover {
-		background: color-mix(in srgb, var(--workspace-inactive-color) 15%, transparent);
+		background: color-mix(in srgb, var(--workspace-inactive-color) 40%, transparent);
 	}
 
 	.workspace-group.active {
-		border-left: 2px solid var(--hero-composer-glow-color, var(--accent));
+		border-left: 3px solid var(--hero-composer-glow-color, var(--accent));
 		padding-left: 4px;
 		margin-left: -6px;
 		margin-right: -6px;
 		background: color-mix(
 			in srgb,
-			var(--hero-composer-glow-color, var(--accent)) 10%,
+			var(--hero-composer-glow-color, var(--accent)) 30%,
 			transparent
 		);
 	}
@@ -404,7 +404,7 @@
 	.workspace-group.active:hover {
 		background: color-mix(
 			in srgb,
-			var(--hero-composer-glow-color, var(--accent)) 15%,
+			var(--hero-composer-glow-color, var(--accent)) 40%,
 			transparent
 		);
 	}
