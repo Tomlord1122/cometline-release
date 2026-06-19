@@ -34,7 +34,7 @@ Pick the companion personality that fits your workflow in Settings → About. Sw
 
 ### Install
 
-Download the latest signed release from [GitHub Releases](https://github.com/cometline/cometline-release/releases). The app is notarized and includes auto-update support.
+Download the latest signed release from [GitHub Releases](https://github.com/cometline/cometline/releases). The app is notarized and includes auto-update support.
 
 The app will open and prompt you to configure a provider. Add your API key, enable models, and choose default model roles in Settings → Providers.
 
@@ -140,8 +140,8 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed system design.
 
 ```bash
 # Clone the single monorepo
-git clone https://github.com/cometline/cometline-release.git
-cd cometline-release
+git clone https://github.com/cometline/cometline.git
+cd cometline
 
 # Install frontend dependencies
 make install
@@ -171,7 +171,7 @@ See [AGENTS.md](./AGENTS.md) for development rules and commands.
 
 ## Contributing
 
-- Fork `cometline-release`
+- Fork `cometline`
 - Clone your fork normally; no submodule bootstrap is required
 - Run `make install` and `make dev` from the repository root
 - Run `make check` before opening a PR
@@ -214,4 +214,4 @@ Apache License 2.0. See [LICENSE](./LICENSE).
 
 - [Documentation](./ARCHITECTURE.md)
 - [Contributing](#contributing)
-- [Issues](https://github.com/cometline/cometline-release/issues)
+- [Issues](https://github.com/cometline/cometline/issues)

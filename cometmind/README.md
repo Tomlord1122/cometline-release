@@ -2,7 +2,7 @@
 
 > A local, session-first **general AI agent runtime**. CometMind is the brain — it reasons, plans, remembers, and acts through a pluggable tool layer, and delegates coding work to specialized coding agents (OpenCode, Claude Code, etc.) over **ACP**.
 
-This directory is one module inside the `cometline-release` monorepo. The historical standalone `cometmind` repo is archived; current development, issues, and pull requests land in the monorepo root.
+This directory is one module inside the `cometline` monorepo. The historical standalone `cometmind` repo is archived; current development, issues, and pull requests land in the monorepo root.
 
 CometMind is the middle tier of the Cometline stack:
 

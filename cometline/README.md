@@ -2,7 +2,7 @@
 
 A local-first desktop AI assistant with persistent workspace sessions, live streaming reasoning and tool visibility, semantic memory, and a native-feeling macOS UI — while keeping the trusted agent runtime outside the renderer.
 
-This directory is one module inside the `cometline-release` monorepo. The historical standalone `cometline` repo is archived; current development, issues, and pull requests land in the monorepo root.
+This directory is one module inside the `cometline` monorepo. The historical standalone `cometline` repo is archived; current development, issues, and pull requests land in the monorepo root.
 
 Cometline is the **desktop shell** in the Cometline stack:
 

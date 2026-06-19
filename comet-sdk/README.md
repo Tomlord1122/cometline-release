@@ -2,7 +2,7 @@
 
 A provider-agnostic Go LLM client library. One interface, any backend.
 
-This directory is one module inside the `cometline-release` monorepo. The historical standalone `comet-sdk` repo is archived; current development, issues, and pull requests land in the monorepo root.
+This directory is one module inside the `cometline` monorepo. The historical standalone `comet-sdk` repo is archived; current development, issues, and pull requests land in the monorepo root.
 
 ```
 module: github.com/cometline/comet-sdk
