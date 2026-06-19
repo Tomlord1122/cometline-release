@@ -363,29 +363,9 @@ function applyEvent(
 				...card,
 				status,
 				summary: event.summary,
-				pending: false,
-				pendingQuestion: undefined,
-				permissionOptions: undefined
+				pending: false
 			};
 		}
-		return;
-	}
-
-	if (event.type === 'subagent_awaiting_input') {
-		if (event.kind === 'resumed') return;
-		const card = items.find(
-			(item) => item.type === 'subagent' && item.childSessionId === event.child_session_id
-		) as Extract<ChatItem, { type: 'subagent' }> | undefined;
-		if (!card) return;
-		const index = items.indexOf(card);
-		const status = event.kind === 'permission' ? 'awaiting_permission' : 'awaiting_user';
-		items[index] = {
-			...card,
-			status,
-			pending: true,
-			pendingQuestion: event.question,
-			permissionOptions: event.permission_options
-		};
 		return;
 	}
 

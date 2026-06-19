@@ -11,8 +11,7 @@ vi.mock('$lib/client/cometmind', () => ({
 	isSessionNotFoundError: vi.fn((err) => err?.code === 'session_not_found'),
 	listChildSessions: vi.fn(),
 	streamMessage: vi.fn(),
-	abortSession: vi.fn(),
-	respondToSubagent: vi.fn()
+	abortSession: vi.fn()
 }));
 
 import { getSessionMessages, listChildSessions, streamMessage } from '$lib/client/cometmind';

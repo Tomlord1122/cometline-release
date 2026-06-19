@@ -147,12 +147,8 @@ export type ChatItem =
 				| 'completed'
 				| 'failed'
 				| 'cancelled'
-				| 'pending'
-				| 'awaiting_user'
-				| 'awaiting_permission';
+				| 'pending';
 			progress: SubagentProgressEntry[];
 			summary?: string;
 			pending?: boolean;
-			pendingQuestion?: string;
-			permissionOptions?: { id: string; kind: string; name: string }[];
 	  };

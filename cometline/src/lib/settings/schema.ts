@@ -46,7 +46,6 @@ export interface CometMindACPSettings {
 	command: string;
 	args: string[];
 	timeout: string;
-	interactive: boolean;
 }
 
 export interface CometMindDiscordGatewaySettings {
@@ -234,8 +233,7 @@ export function defaultCometMindSettings(workspacePath = ''): CometMindSettings 
 		acp: {
 			command: 'opencode',
 			args: ['acp'],
-			timeout: '30m',
-			interactive: true
+			timeout: '30m'
 		},
 		skills: {
 			enabled: true,
@@ -296,9 +294,7 @@ export function normalizeCometMindSettings(
 		acp: {
 			command: String(acp.command ?? defaults.acp.command).trim() || defaults.acp.command,
 			args: args.length > 0 ? args : defaults.acp.args,
-			timeout: String(acp.timeout ?? defaults.acp.timeout).trim() || defaults.acp.timeout,
-			interactive:
-				typeof acp.interactive === 'boolean' ? acp.interactive : defaults.acp.interactive
+			timeout: String(acp.timeout ?? defaults.acp.timeout).trim() || defaults.acp.timeout
 		},
 		skills: {
 			enabled: typeof skills.enabled === 'boolean' ? skills.enabled : defaults.skills.enabled,
@@ -387,8 +383,7 @@ export function cloneCometMindSettings(settings: CometMindSettings): CometMindSe
 		acp: {
 			command: settings.acp.command,
 			args: [...settings.acp.args],
-			timeout: settings.acp.timeout,
-			interactive: settings.acp.interactive
+			timeout: settings.acp.timeout
 		},
 		skills: {
 			...settings.skills,
@@ -704,8 +699,7 @@ const providerSettingsSchema = z.object({
 		acp: z.object({
 			command: z.string().min(1),
 			args: z.array(z.string()),
-			timeout: z.string().min(1),
-			interactive: z.boolean()
+			timeout: z.string().min(1)
 		}),
 		skills: z.object({
 			enabled: z.boolean(),

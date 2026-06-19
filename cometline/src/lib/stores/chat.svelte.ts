@@ -5,7 +5,6 @@ import {
 	getSessionMessages,
 	isSessionNotFoundError,
 	listChildSessions,
-	respondToSubagent,
 	streamMessage
 } from '$lib/client/cometmind';
 import type { ChatItem, ImageAttachment, Session, StreamEvent, TranscriptItem } from '$lib/types';
@@ -37,10 +36,6 @@ function mapDelegationStatus(
 			return 'failed';
 		case 'running':
 			return 'running';
-		case 'awaiting_user':
-			return 'awaiting_user';
-		case 'awaiting_permission':
-			return 'awaiting_permission';
 		default:
 			return 'pending';
 	}
@@ -59,11 +54,7 @@ function subagentFromChild(
 		status: mapDelegationStatus(child.delegation_status),
 		progress: [],
 		summary: child.output_summary,
-		pending:
-			child.delegation_status === 'running' ||
-			child.delegation_status === 'awaiting_user' ||
-			child.delegation_status === 'awaiting_permission',
-		pendingQuestion: child.pending_question || undefined
+		pending: child.delegation_status === 'running'
 	};
 }
 
@@ -733,59 +724,13 @@ function createChatStore() {
 		writeSessionItems(targetSessionID, next);
 	}
 
-	async function replyToSubagent(
-		childSessionId: string,
-		text: string,
-		permissionOptionId?: string
-	) {
-		const parentSessionID = sessionID;
-		if (!parentSessionID) return;
-
-		patchSubagentCard(parentSessionID, childSessionId, {
-			status: 'running',
-			pending: true,
-			pendingQuestion: undefined,
-			permissionOptions: undefined
-		});
-
-		const handle: SessionStream = {
-			run: ++globalStreamRun,
-			abort: new AbortController(),
-			pendingBatchEvents: [],
-			batchFrame: 0,
-			ctx: {
-				assistant: { current: null },
-				reasoning: { current: null }
-			}
-		};
-		const ctx = handle.ctx;
-
-		try {
-			for await (const event of respondToSubagent(childSessionId, {
-				text: text || undefined,
-				permission_option_id: permissionOptionId
-			})) {
-				applyStreamEventForSession(parentSessionID, event, ctx, handle);
-				if (event.type === 'done') break;
-			}
-		} catch (err) {
-			const message = err instanceof Error ? err.message : 'Failed to reply to subagent';
-			sessionErrors.set(parentSessionID, message);
-			if (sessionID === parentSessionID) error = message;
-		} finally {
-			flushBatchForSession(parentSessionID, ctx, handle);
-		}
-	}
-
 	async function cancelSubagent(childSessionId: string) {
 		if (!sessionID) return;
 		try {
 			await abortSession(childSessionId);
 			patchSubagentCard(sessionID, childSessionId, {
 				status: 'cancelled',
-				pending: false,
-				pendingQuestion: undefined,
-				permissionOptions: undefined
+				pending: false
 			});
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to cancel subagent';
@@ -820,7 +765,6 @@ function createChatStore() {
 		revealStagedUser,
 		send,
 		cancel,
-		replyToSubagent,
 		cancelSubagent
 	};
 }

@@ -157,17 +157,17 @@ export type Session = {
      * Delegation task purpose for child sessions.
      */
     purpose?: string;
-    delegation_status?: 'pending' | 'running' | 'awaiting_user' | 'awaiting_permission' | 'completed' | 'failed' | 'cancelled';
+    delegation_status?: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
     /**
      * Final summary from a delegated child session.
      */
     output_summary?: string;
     /**
-     * External ACP session ID for resuming interactive delegation.
+     * External ACP session ID recorded for diagnostics.
      */
     acp_session_id?: string;
     /**
-     * Question or prompt awaiting user input on a child session.
+     * Legacy field retained for persisted child session compatibility.
      */
     pending_question?: string;
 };
@@ -236,17 +236,6 @@ export type SyncSkillsResponse = {
     errors?: Array<string>;
 };
 
-export type RespondToChildRequest = {
-    /**
-     * Free-text follow-up for the delegated coder.
-     */
-    text?: string;
-    /**
-     * Selected permission option when the child is awaiting permission.
-     */
-    permission_option_id?: string;
-};
-
 export type CreateWorkspaceRequest = {
     /**
      * Absolute filesystem path for the workspace.
@@ -257,12 +246,6 @@ export type CreateWorkspaceRequest = {
 export type Workspace = {
     id: string;
     path: string;
-};
-
-export type PermissionOption = {
-    id: string;
-    kind: string;
-    name: string;
 };
 
 export type MemoryWire = {
@@ -330,14 +313,6 @@ export type SubagentProgressEvent = {
     progress_text: string;
 };
 
-export type SubagentAwaitingInputEvent = {
-    type: 'subagent_awaiting_input';
-    child_session_id: string;
-    kind: string;
-    question: string;
-    permission_options?: Array<PermissionOption>;
-};
-
 export type SubagentFinishedEvent = {
     type: 'subagent_finished';
     child_session_id: string;
@@ -382,8 +357,6 @@ export type StreamEvent = ({
 } & SubagentStartedEvent) | ({
     type?: 'subagent_progress';
 } & SubagentProgressEvent) | ({
-    type?: 'subagent_awaiting_input';
-} & SubagentAwaitingInputEvent) | ({
     type?: 'subagent_finished';
 } & SubagentFinishedEvent) | ({
     type?: 'memory_injected';
@@ -1124,48 +1097,6 @@ export type AbortSessionResponses = {
 };
 
 export type AbortSessionResponse = AbortSessionResponses[keyof AbortSessionResponses];
-
-export type RespondToChildSessionData = {
-    body: RespondToChildRequest;
-    path: {
-        /**
-         * Persisted CometMind session identifier.
-         */
-        id: string;
-    };
-    query?: never;
-    url: '/api/v1/sessions/{id}/respond';
-};
-
-export type RespondToChildSessionErrors = {
-    /**
-     * Invalid request
-     */
-    400: ErrorResponse;
-    /**
-     * Resource not found
-     */
-    404: ErrorResponse;
-    /**
-     * Child session is not awaiting input
-     */
-    409: ErrorResponse;
-    /**
-     * Unexpected server error
-     */
-    500: ErrorResponse;
-};
-
-export type RespondToChildSessionError = RespondToChildSessionErrors[keyof RespondToChildSessionErrors];
-
-export type RespondToChildSessionResponses = {
-    /**
-     * Reply accepted; SSE stream with subagent events
-     */
-    200: StreamEvent;
-};
-
-export type RespondToChildSessionResponse = RespondToChildSessionResponses[keyof RespondToChildSessionResponses];
 
 export type ListSkillsData = {
     body?: never;

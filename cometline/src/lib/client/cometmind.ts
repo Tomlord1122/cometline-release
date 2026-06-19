@@ -36,7 +36,6 @@ import type {
 	MemoryResource,
 	MemorySettings as MemorySettingsWire,
 	PostMessageRequest,
-	RespondToChildRequest,
 	Session,
 	SessionListResponse,
 	StreamEvent,
@@ -52,8 +51,7 @@ import { createSSEParser } from '$lib/sse/parser';
 export type {
 	CompactMemoryPreviewResponse,
 	CreateMemoryRequest,
-	MemoryResource,
-	RespondToChildRequest as RespondToSubagentRequest
+	MemoryResource
 } from '$lib/generated/cometmind-api';
 
 export type MemoryLifecycleSettings = {
@@ -329,14 +327,6 @@ export function abortSession(id: string): Promise<{ status: string }> {
 		path: { id },
 		throwOnError: true
 	}).then(({ data }) => data);
-}
-
-export async function* respondToSubagent(
-	childId: string,
-	req: RespondToChildRequest,
-	signal?: AbortSignal
-): AsyncGenerator<StreamEvent, void, unknown> {
-	yield* streamSse(`/api/v1/sessions/${childId}/respond`, req, signal);
 }
 
 export async function* streamMessage(

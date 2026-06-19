@@ -89,7 +89,6 @@ declare global {
 		command: string;
 		args: string[];
 		timeout: string;
-		interactive: boolean;
 	}
 
 	interface CometMindDiscordGatewaySettings {

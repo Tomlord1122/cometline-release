@@ -504,7 +504,7 @@ paths:
         The SSE payloads reuse CometMind-native event names discriminated by `type`:
         `text_delta`, `reasoning_start`, `reasoning_delta`, `tool_call`,
         `tool_result`, `step_finish`, `subagent_started`, `subagent_progress`,
-        `subagent_awaiting_input`, `subagent_finished`, `memory_injected`,
+        `subagent_finished`, `memory_injected`,
         `memory_updated`, `error`, and `done`.
 
         Each `data:` frame body matches `#/components/schemas/StreamEvent`.
@@ -576,40 +576,6 @@ paths:
                 error:
                   code: session_not_running
                   message: session is not currently running
-        '500':
-          $ref: '#/components/responses/InternalError'
-
-  /api/v1/sessions/{id}/respond:
-    post:
-      tags: [Sessions]
-      summary: Reply to an awaiting delegated child session
-      description: Delivers user input to an active ACP child session and streams acknowledgement events.
-      operationId: respondToChildSession
-      parameters:
-        - $ref: '#/components/parameters/SessionId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RespondToChildRequest'
-      responses:
-        '200':
-          description: Reply accepted; SSE stream with subagent events
-          content:
-            text/event-stream:
-              schema:
-                $ref: '#/components/schemas/StreamEvent'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          description: Child session is not awaiting input
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -1250,8 +1216,6 @@ components:
           enum:
             - pending
             - running
-            - awaiting_user
-            - awaiting_permission
             - completed
             - failed
             - cancelled
@@ -1260,10 +1224,10 @@ components:
           description: Final summary from a delegated child session.
         acp_session_id:
           type: string
-          description: External ACP session ID for resuming interactive delegation.
+          description: External ACP session ID recorded for diagnostics.
         pending_question:
           type: string
-          description: Question or prompt awaiting user input on a child session.
+          description: Legacy field retained for persisted child session compatibility.
 
     SessionListResponse:
       type: object
@@ -1400,17 +1364,6 @@ components:
           items:
             type: string
 
-    RespondToChildRequest:
-      type: object
-      additionalProperties: false
-      properties:
-        text:
-          type: string
-          description: Free-text follow-up for the delegated coder.
-        permission_option_id:
-          type: string
-          description: Selected permission option when the child is awaiting permission.
-
     CreateWorkspaceRequest:
       type: object
       additionalProperties: false
@@ -1428,18 +1381,6 @@ components:
         id:
           type: string
         path:
-          type: string
-
-    PermissionOption:
-      type: object
-      additionalProperties: false
-      required: [id, kind, name]
-      properties:
-        id:
-          type: string
-        kind:
-          type: string
-        name:
           type: string
 
     MemoryWire:
@@ -1578,25 +1519,6 @@ components:
         progress_text:
           type: string
 
-    SubagentAwaitingInputEvent:
-      type: object
-      additionalProperties: false
-      required: [type, child_session_id, kind, question]
-      properties:
-        type:
-          type: string
-          const: subagent_awaiting_input
-        child_session_id:
-          type: string
-        kind:
-          type: string
-        question:
-          type: string
-        permission_options:
-          type: array
-          items:
-            $ref: '#/components/schemas/PermissionOption'
-
     SubagentFinishedEvent:
       type: object
       additionalProperties: false
@@ -1670,7 +1592,6 @@ components:
         - $ref: '#/components/schemas/StepFinishEvent'
         - $ref: '#/components/schemas/SubagentStartedEvent'
         - $ref: '#/components/schemas/SubagentProgressEvent'
-        - $ref: '#/components/schemas/SubagentAwaitingInputEvent'
         - $ref: '#/components/schemas/SubagentFinishedEvent'
         - $ref: '#/components/schemas/MemoryInjectedEvent'
         - $ref: '#/components/schemas/MemoryUpdatedEvent'
@@ -1687,7 +1608,6 @@ components:
           step_finish: '#/components/schemas/StepFinishEvent'
           subagent_started: '#/components/schemas/SubagentStartedEvent'
           subagent_progress: '#/components/schemas/SubagentProgressEvent'
-          subagent_awaiting_input: '#/components/schemas/SubagentAwaitingInputEvent'
           subagent_finished: '#/components/schemas/SubagentFinishedEvent'
           memory_injected: '#/components/schemas/MemoryInjectedEvent'
           memory_updated: '#/components/schemas/MemoryUpdatedEvent'
