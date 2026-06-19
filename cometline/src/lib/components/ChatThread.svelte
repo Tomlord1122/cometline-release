@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { tick } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import { fade, slide } from 'svelte/transition';
 	import {
 		Brain,
@@ -53,13 +53,18 @@
 
 	let scroller: HTMLDivElement;
 	let scrollFrame = 0;
-	let userScrolledUp = $state(false);
-	let showJumpToBottom = $derived(sessionStreaming && userScrolledUp);
-	let suppressScrollPin = false;
-	let wasStreaming = $state(false);
+	// We never auto-scroll the thread. Instead, when the content overflows the
+	// viewport and the user is not already near the bottom, we show a
+	// jump-to-bottom button so they can opt in to jumping to the latest content.
+	let showJumpToBottom = $state(false);
 	const SCROLL_PIN_THRESHOLD = 96;
+	// Tracks the most recently sent user message so we can scroll it near the
+	// top of the viewport once (revealing the assistant avatar/response below).
+	let lastScrolledUserId: string | null = null;
+	// Gap left above the freshly-sent user message when we pin it near the top.
+	const USER_SEND_TOP_OFFSET = 16;
 	let expandedToolOutput = $state(new Set<string>());
-	let expandedThinking = $state(new Set<string>());
+	let thinkingOverrides = $state(new Map<string, boolean>());
 	let expandedMemoryInThinking = $state(new Set<string>());
 	let subagentFold = $state(new Map<string, boolean>());
 	let subagentReply = $state(new Map<string, string>());
@@ -82,6 +87,7 @@
 		return threadItems.findLast((item) => item.type === 'assistant')?.id ?? null;
 	});
 	let firstUserId = $derived(threadItems.find((item) => item.type === 'user')?.id ?? null);
+	let lastUserId = $derived(threadItems.findLast((item) => item.type === 'user')?.id ?? null);
 	let showMessages = $derived(
 		threadItems.length > 0 || (isSessionSynced && awaitingFirstAssistant && !firstUserId)
 	);
@@ -110,12 +116,21 @@
 		return thinkingForAssistant.memoryIdsInBuffer.has(item.id);
 	}
 
-	function thinkingExpanded(id: string) {
-		return expandedThinking.has(id);
+	// A thinking block auto-expands while reasoning is actively streaming and
+	// folds when it is done. Tool execution does NOT expand the block (tools are
+	// only surfaced as a count in the toggle). The user can override the default
+	// by toggling; the override is keyed per block and wins over the auto
+	// behaviour.
+	function thinkingExpanded(id: string, block: ThinkingBlock) {
+		const override = thinkingOverrides.get(id);
+		if (override !== undefined) return override;
+		return thinkingActive(block);
 	}
 
-	function toggleThinking(id: string) {
-		expandedThinking = toggleExpanded(expandedThinking, id);
+	function toggleThinking(id: string, block: ThinkingBlock) {
+		const next = new Map(thinkingOverrides);
+		next.set(id, !thinkingExpanded(id, block));
+		thinkingOverrides = next;
 	}
 
 	function memoryInThinkingExpanded(id: string) {
@@ -252,8 +267,27 @@
 		}, 1600);
 	}
 
-	function thinkingPending(block: ThinkingBlock) {
-		return block.reasoning?.pending === true || block.tools.some((tool) => tool.pending);
+	// Drives auto-expand: only the reasoning stream should expand the block.
+	// Tool execution must not expand the thinking block.
+	function thinkingActive(block: ThinkingBlock) {
+		return block.reasoning?.pending === true;
+	}
+
+	// Keeps a scrollable element pinned to its bottom as its text content grows
+	// (used by the live reasoning area so the latest thinking stays visible).
+	// The `text` param is the reactive trigger: passing the latest reasoning text
+	// re-runs `update` whenever it changes.
+	function autoScrollBottom(node: HTMLElement, text: string) {
+		const pin = (value: string) => {
+			void value;
+			node.scrollTop = node.scrollHeight;
+		};
+		pin(text);
+		return {
+			update(value: string) {
+				pin(value);
+			}
+		};
 	}
 
 	function isNearBottom(element: HTMLElement) {
@@ -262,51 +296,38 @@
 		);
 	}
 
-	function onThreadScroll() {
-		if (suppressScrollPin || !scroller) return;
-		const nearBottom = isNearBottom(scroller);
-		if (!sessionStreaming) return;
-		if (!nearBottom) {
-			userScrolledUp = true;
-		} else if (userScrolledUp) {
-			userScrolledUp = false;
+	// Show the jump-to-bottom button only when the content overflows the viewport
+	// and the user is not already near the bottom. No auto-scrolling happens.
+	function updateJumpToBottom() {
+		if (!scroller) {
+			showJumpToBottom = false;
+			return;
 		}
+		const overflowing = scroller.scrollHeight - scroller.clientHeight > SCROLL_PIN_THRESHOLD;
+		showJumpToBottom = overflowing && !isNearBottom(scroller);
 	}
 
-	function pinScrollTop(behavior: ScrollBehavior = 'auto') {
-		if (!scroller) return;
-		suppressScrollPin = true;
-		if (behavior === 'auto') {
-			scroller.scrollTop = scroller.scrollHeight;
-		} else {
-			scroller.scrollTo({ top: scroller.scrollHeight, behavior });
-		}
-		requestAnimationFrame(() => {
-			suppressScrollPin = false;
-		});
+	function onThreadScroll() {
+		updateJumpToBottom();
 	}
 
 	function jumpToBottom() {
-		userScrolledUp = false;
-		pinScrollTop('auto');
+		if (!scroller) return;
+		scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' });
+		showJumpToBottom = false;
 	}
 
 	$effect(() => {
 		void sessionId;
-		userScrolledUp = false;
+		thinkingOverrides = new Map();
+		// Treat the session's existing latest user message as already-positioned so
+		// switching sessions doesn't trigger the send auto-scroll.
+		lastScrolledUserId = untrack(() => lastUserId);
 		if (sessionHasCachedTranscript(sessionId)) {
 			isInitialTranscriptPaint = false;
 			return;
 		}
 		isInitialTranscriptPaint = true;
-	});
-
-	$effect(() => {
-		const streaming = sessionStreaming;
-		if (!streaming && wasStreaming) {
-			userScrolledUp = false;
-		}
-		wasStreaming = streaming;
 	});
 
 	let scrollKey = $derived.by(() => {
@@ -526,6 +547,7 @@
 			if (cancelled) return;
 			if (scroller) scroller.scrollTop = scroller.scrollHeight;
 			isInitialTranscriptPaint = false;
+			updateJumpToBottom();
 		};
 
 		const settle = () => {
@@ -567,35 +589,51 @@
 			void tick().then(() => {
 				scrollFrame = 0;
 				if (!scroller) return;
-
-				if (isInitialTranscriptPaint || chatStore.isLoading) {
-					pinScrollTop('auto');
-					return;
-				}
-
-				const nearBottom = isNearBottom(scroller);
-
-				if (sessionStreaming) {
-					if (userScrolledUp) {
-						if (nearBottom) userScrolledUp = false;
-						return;
-					}
-					if (nearBottom) {
-						pinScrollTop('auto');
-					} else {
-						userScrolledUp = true;
-					}
-					return;
-				}
-
-				if (nearBottom) {
-					pinScrollTop('smooth');
-				}
+				// We never auto-scroll on new content. We only re-evaluate whether
+				// the jump-to-bottom button should be visible now that the content
+				// height (and therefore the distance from the bottom) has changed.
+				if (isInitialTranscriptPaint) return;
+				updateJumpToBottom();
 			});
 		});
 		return () => {
 			if (scrollFrame) cancelAnimationFrame(scrollFrame);
 		};
+	});
+
+	// When the user sends a new message, scroll that message close to the top of
+	// the viewport so the assistant avatar and its incoming response are visible
+	// below it. This is the one deliberate auto-scroll in the thread.
+	function scrollUserMessageToTop(userId: string) {
+		if (!scroller) return;
+		const target = scroller.querySelector<HTMLElement>(
+			`[data-user-item-id="${userId}"]`
+		);
+		if (!target) return;
+		const top = Math.max(
+			0,
+			target.offsetTop - scroller.offsetTop - USER_SEND_TOP_OFFSET
+		);
+		scroller.scrollTo({ top, behavior: 'smooth' });
+		updateJumpToBottom();
+	}
+
+	$effect(() => {
+		const userId = lastUserId;
+		if (!userId) {
+			lastScrolledUserId = null;
+			return;
+		}
+		if (userId === lastScrolledUserId) return;
+		// Don't fight the initial transcript hydration scroll.
+		if (isInitialTranscriptPaint) {
+			lastScrolledUserId = userId;
+			return;
+		}
+		lastScrolledUserId = userId;
+		void tick().then(() => {
+			requestAnimationFrame(() => scrollUserMessageToTop(userId));
+		});
 	});
 </script>
 
@@ -611,17 +649,17 @@
 		<button
 			type="button"
 			class="fold-toggle thinking-toggle"
-			aria-expanded={thinkingExpanded(hostId)}
-			onclick={() => toggleThinking(hostId)}
+			aria-expanded={thinkingExpanded(hostId, block)}
+			onclick={() => toggleThinking(hostId, block)}
 		>
 			<Brain size={13} />
 			<span>{thinkingLabel(block)}</span>
-			{#if thinkingPending(block) && !(hostId === streamingAssistantId && sessionStreaming)}
+			{#if thinkingActive(block) && !(hostId === streamingAssistantId && sessionStreaming)}
 				<LoaderCircle size={12} class="spin" />
 			{/if}
-			<ChevronDown size={13} class={thinkingExpanded(hostId) ? 'expanded' : ''} />
+			<ChevronDown size={13} class={thinkingExpanded(hostId, block) ? 'expanded' : ''} />
 		</button>
-		{#if thinkingExpanded(hostId)}
+		{#if thinkingExpanded(hostId, block)}
 			<div class="fold-body thinking-body" transition:slide={FOLD_IN}>
 				{#if block.memories.length > 0}
 					<div class="thinking-memories">
@@ -653,37 +691,9 @@
 				{/if}
 				{#if block.reasoning}
 					<div class="thinking-reasoning">
-						<p>{block.reasoning.text || 'Thinking…'}</p>
-					</div>
-				{/if}
-				{#if block.tools.length > 0}
-					<div class="thinking-tools">
-						{#each block.tools as tool (tool.id)}
-							<div
-								class="thinking-tool"
-								class:error={!!tool.error}
-								class:pending={tool.pending}
-							>
-								<div class="thinking-tool-header">
-									<Terminal size={12} />
-									<span class="thinking-tool-name">{tool.toolName}</span>
-									{#if tool.pending}
-										<LoaderCircle size={11} class="spin" />
-									{:else}
-										<CircleCheck size={11} />
-									{/if}
-								</div>
-								{#if tool.output || tool.error}
-									<div class="thinking-tool-output">
-										{#if tool.error}
-											<p class="tool-error-text">{tool.error}</p>
-										{:else if tool.output}
-											<p>{tool.output}</p>
-										{/if}
-									</div>
-								{/if}
-							</div>
-						{/each}
+						<p use:autoScrollBottom={block.reasoning.text}>
+							{block.reasoning.text || 'Thinking…'}
+						</p>
 					</div>
 				{/if}
 			</div>
@@ -740,8 +750,9 @@
 	</div>
 {/snippet}
 
-<div class="thread" bind:this={scroller} onscroll={onThreadScroll} aria-live="polite">
-	<div class="thread-inner">
+<div class="thread-wrap">
+	<div class="thread" bind:this={scroller} onscroll={onThreadScroll} aria-live="polite">
+		<div class="thread-inner">
 		{#if showMessages}
 			<div
 				class="thread-messages"
@@ -782,6 +793,7 @@
 						<div
 							class="row user-row"
 							class:continuation-row={!startsSpeakerRun(index, 'user')}
+							data-user-item-id={item.id}
 						>
 							<div
 								class="bubble user-bubble"
@@ -1121,20 +1133,20 @@
 				{/each}
 			</div>
 		{/if}
+		</div>
 	</div>
+	{#if showJumpToBottom}
+		<button
+			type="button"
+			class="jump-to-bottom"
+			onclick={jumpToBottom}
+			aria-label="Jump to latest"
+		>
+			<ChevronDown size={16} />
+			<span>Jump to latest</span>
+		</button>
+	{/if}
 </div>
-
-{#if showJumpToBottom}
-	<button
-		type="button"
-		class="jump-to-bottom"
-		onclick={jumpToBottom}
-		aria-label="Jump to bottom"
-	>
-		<ChevronDown size={16} />
-		<span>New response</span>
-	</button>
-{/if}
 
 <style>
 	.thinking-memories {
@@ -1157,20 +1169,27 @@
 
 	.memory-chips {
 		display: flex;
-		flex-wrap: wrap;
+		flex-direction: column;
 		gap: 6px;
 	}
 
 	.memory-chip {
+		min-width: 0;
 		max-width: 100%;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		padding: 4px 8px;
-		border-radius: 999px;
+		overflow-wrap: anywhere;
+		word-break: break-word;
+		white-space: normal;
+		padding: 5px 10px;
+		border-radius: 10px;
 		background: rgba(0, 102, 204, 0.08);
 		color: var(--text-main);
 		font-size: 11px;
+		line-height: 1.45;
+	}
+
+	.thread-wrap {
+		position: absolute;
+		inset: 0;
 	}
 
 	.thread {
@@ -1180,6 +1199,31 @@
 		scrollbar-gutter: stable;
 		padding: 32px var(--chat-gutter) var(--thread-padding-bottom);
 		scrollbar-width: thin;
+	}
+
+	.jump-to-bottom {
+		position: absolute;
+		bottom: 20px;
+		left: 50%;
+		transform: translateX(-50%);
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 8px 14px;
+		border: 1px solid var(--border-soft);
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.92);
+		color: var(--text-main);
+		font-size: 12px;
+		font-weight: 600;
+		box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12);
+		cursor: pointer;
+		z-index: 10;
+		backdrop-filter: blur(6px);
+	}
+
+	.jump-to-bottom:hover {
+		background: rgba(255, 255, 255, 1);
 	}
 
 	.thread-inner {
@@ -1390,68 +1434,6 @@
 		overflow: auto;
 		scrollbar-gutter: stable;
 		color: var(--text-muted);
-	}
-
-	.thinking-tools {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-	}
-
-	.thinking-tool {
-		border: 1px solid var(--border-soft);
-		border-radius: 10px;
-		padding: 7px 9px;
-		background: rgba(15, 23, 42, 0.02);
-	}
-
-	.thinking-tool.pending {
-		background: rgba(255, 255, 255, 0.5);
-	}
-
-	.thinking-tool.error {
-		background: rgba(255, 245, 245, 0.72);
-		border-color: rgba(244, 63, 94, 0.18);
-	}
-
-	.thinking-tool-header {
-		display: flex;
-		align-items: center;
-		gap: 5px;
-		font-size: 11px;
-		font-weight: 650;
-		color: var(--text-main);
-	}
-
-	.thinking-tool-header :global(svg) {
-		flex-shrink: 0;
-		color: var(--text-muted);
-	}
-
-	.thinking-tool-name {
-		flex: 1;
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.thinking-tool-output {
-		margin-top: 6px;
-		padding-top: 6px;
-		border-top: 1px solid var(--border-soft);
-		color: var(--text-muted);
-	}
-
-	.thinking-tool-output p {
-		margin: 0;
-		font-size: 11px;
-		line-height: 1.45;
-		white-space: pre-wrap;
-		word-break: break-word;
-		max-height: 160px;
-		overflow: auto;
-		scrollbar-gutter: stable;
 	}
 
 	.tool-card {
@@ -1897,33 +1879,4 @@
 		overflow: auto;
 	}
 
-	.jump-to-bottom {
-		position: absolute;
-		bottom: 24px;
-		left: 50%;
-		transform: translateX(-50%);
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		padding: 8px 14px;
-		border: 1px solid var(--border-soft);
-		border-radius: 999px;
-		background: rgba(255, 255, 255, 0.9);
-		color: var(--text-main);
-		font-size: 12px;
-		font-weight: 600;
-		box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
-		cursor: pointer;
-		z-index: 10;
-	}
-
-	.jump-to-bottom:hover {
-		background: rgba(255, 255, 255, 1);
-	}
-
-	@media (prefers-reduced-motion: reduce) {
-		.jump-to-bottom {
-			transition: none;
-		}
-	}
 </style>
