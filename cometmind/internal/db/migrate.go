@@ -55,7 +55,7 @@ var alterStatements = [][]string{
 			platform, platform_user_id, platform_channel_id, thread_id
 		)`,
 	},
-	// v3 -> v4: interactive subagent ACP session fields
+	// v3 -> v4: subagent ACP session fields
 	{
 		"ALTER TABLE sessions ADD COLUMN acp_session_id TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE sessions ADD COLUMN pending_question TEXT NOT NULL DEFAULT ''",

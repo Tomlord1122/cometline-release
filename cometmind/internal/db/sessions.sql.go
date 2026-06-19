@@ -134,11 +134,7 @@ SELECT id, workspace_id, title, model_id, provider_id, status, token_usage, pare
 FROM sessions
 WHERE
     parent_session_id = ?
-    AND delegation_status IN (
-        'running',
-        'awaiting_user',
-        'awaiting_permission'
-    )
+    AND delegation_status = 'running'
 ORDER BY updated_at DESC
 LIMIT 1
 `
@@ -378,9 +374,7 @@ WHERE
     AND updated_at < ?
     AND delegation_status NOT IN (
         'pending',
-        'running',
-        'awaiting_user',
-        'awaiting_permission'
+        'running'
     )
 ORDER BY updated_at ASC
 `

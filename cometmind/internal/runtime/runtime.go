@@ -136,7 +136,7 @@ func (r *Runtime) ProviderForSession(sess session.Session) (cometsdk.Provider, e
 	return provider.NewFor(&cfg, sess.ProviderID)
 }
 
-// ACPManager returns the shared interactive ACP session manager.
+// ACPManager returns the shared ACP session manager.
 func (r *Runtime) ACPManager() *acp.SessionManager {
 	if r.acpMgr == nil {
 		r.acpMgr = acp.NewSessionManager(r.Config.ACPSettings())

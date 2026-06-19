@@ -31,10 +31,9 @@ type ProviderEntry struct {
 
 // ACPConfig controls external coding agent delegation.
 type ACPConfig struct {
-	Command     string   `mapstructure:"command"`
-	Args        []string `mapstructure:"args"`
-	Timeout     string   `mapstructure:"timeout"`
-	Interactive bool     `mapstructure:"interactive"`
+	Command string   `mapstructure:"command"`
+	Args    []string `mapstructure:"args"`
+	Timeout string   `mapstructure:"timeout"`
 }
 
 // SkillsConfig controls local Agent Skills discovery.
@@ -89,7 +88,6 @@ func Defaults() *Config {
 		Model:     "claude-sonnet-4-5",
 		MaxTokens: 2048,
 		MaxSteps:  50,
-		ACP:       ACPConfig{Interactive: true},
 		Skills:    SkillsConfig{Enabled: true, IncludeOpenCode: true, IncludeClaude: true},
 		Memory:    defaultMemoryConfig(),
 		Storage:   defaultStorageConfig(),
@@ -155,9 +153,6 @@ func loadLegacyTomlConfig(cfgPath string, def *Config) (*Config, error) {
 	var c Config
 	if err := v.Unmarshal(&c); err != nil {
 		return nil, fmt.Errorf("unmarshal legacy config: %w", err)
-	}
-	if !v.IsSet("acp.interactive") {
-		c.ACP.Interactive = def.ACP.Interactive
 	}
 	if !v.IsSet("skills.enabled") {
 		c.Skills.Enabled = def.Skills.Enabled

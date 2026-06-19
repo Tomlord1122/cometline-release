@@ -115,7 +115,6 @@ func New(deps Deps) (*gin.Engine, error) {
 	api.GET("/sessions/:id/messages", app.handleGetMessages)
 	api.GET("/sessions/:id/children", app.handleListChildSessions)
 	api.POST("/sessions/:id/message", app.handlePostMessage)
-	api.POST("/sessions/:id/respond", app.handleRespondToChildSession)
 	api.POST("/sessions/:id/abort", app.handleAbortSession)
 
 	// Skills
@@ -1006,7 +1005,7 @@ func (a *App) handleAbortSession(c *gin.Context) {
 		if err == nil && a.acpMgr != nil {
 			for _, child := range children {
 				switch child.DelegationStatus {
-				case "running", "awaiting_user", "awaiting_permission":
+				case "running":
 					_ = a.acpMgr.Cancel(child.ID)
 					_ = a.sessions.UpdateDelegationState(c.Request.Context(), child.ID, "cancelled", "", "")
 				}
@@ -1022,71 +1021,6 @@ func (a *App) handleAbortSession(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusAccepted, statusResponse{Status: "aborting"})
-}
-
-type respondToChildRequest struct {
-	Text               string `json:"text"`
-	PermissionOptionID string `json:"permission_option_id"`
-}
-
-func (a *App) handleRespondToChildSession(c *gin.Context) {
-	childID := c.Param("id")
-	var req respondToChildRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		writeError(c, http.StatusBadRequest, "bad_request", "invalid JSON body")
-		return
-	}
-	text := strings.TrimSpace(req.Text)
-	if text == "" && strings.TrimSpace(req.PermissionOptionID) == "" {
-		writeError(c, http.StatusBadRequest, "bad_request", "text or permission_option_id is required")
-		return
-	}
-
-	child, _, ok := a.loadSessionWithWorkspace(c, childID)
-	if !ok {
-		return
-	}
-	if child.ParentSessionID == "" {
-		writeError(c, http.StatusBadRequest, "not_child_session", "session is not a delegated child")
-		return
-	}
-	switch child.DelegationStatus {
-	case "running", "awaiting_user", "awaiting_permission":
-	default:
-		writeError(c, http.StatusConflict, "not_awaiting_input", "child session is not awaiting input")
-		return
-	}
-	if a.acpMgr == nil {
-		writeError(c, http.StatusServiceUnavailable, "acp_unavailable", "ACP manager is not configured")
-		return
-	}
-
-	if text != "" {
-		_, _ = a.sessions.AppendUserMessage(c.Request.Context(), childID, text)
-	}
-	_ = a.sessions.UpdateDelegationState(c.Request.Context(), childID, "running", child.OutputSummary, "")
-
-	if err := a.acpMgr.Respond(childID, acp.RespondInput{
-		Text:               text,
-		PermissionOptionID: strings.TrimSpace(req.PermissionOptionID),
-	}); err != nil {
-		writeError(c, http.StatusConflict, "respond_failed", err.Error())
-		return
-	}
-
-	c.Status(http.StatusOK)
-	c.Header("Content-Type", "text/event-stream")
-	c.Header("Cache-Control", "no-cache")
-	c.Header("Connection", "keep-alive")
-	flusher, ok := c.Writer.(http.Flusher)
-	if !ok {
-		writeError(c, http.StatusInternalServerError, "streaming_unsupported", "response writer does not support streaming")
-		return
-	}
-	_ = writeSSE(c.Writer, event.SubagentAwaitingInput(childID, "resumed", text, nil))
-	flusher.Flush()
-	_ = writeSSE(c.Writer, event.Done())
-	flusher.Flush()
 }
 
 func (a *App) resolveCreateWorkspace(c *gin.Context, workspaceID, workspacePath string) (session.Workspace, bool) {

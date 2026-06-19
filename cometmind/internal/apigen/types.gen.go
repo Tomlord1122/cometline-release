@@ -57,22 +57,16 @@ func (e MemoryChangeWireAction) Valid() bool {
 
 // Defines values for SessionDelegationStatus.
 const (
-	AwaitingPermission SessionDelegationStatus = "awaiting_permission"
-	AwaitingUser       SessionDelegationStatus = "awaiting_user"
-	Cancelled          SessionDelegationStatus = "cancelled"
-	Completed          SessionDelegationStatus = "completed"
-	Failed             SessionDelegationStatus = "failed"
-	Pending            SessionDelegationStatus = "pending"
-	Running            SessionDelegationStatus = "running"
+	Cancelled SessionDelegationStatus = "cancelled"
+	Completed SessionDelegationStatus = "completed"
+	Failed    SessionDelegationStatus = "failed"
+	Pending   SessionDelegationStatus = "pending"
+	Running   SessionDelegationStatus = "running"
 )
 
 // Valid indicates whether the value is a known member of the SessionDelegationStatus enum.
 func (e SessionDelegationStatus) Valid() bool {
 	switch e {
-	case AwaitingPermission:
-		return true
-	case AwaitingUser:
-		return true
 	case Cancelled:
 		return true
 	case Completed:
@@ -354,13 +348,6 @@ type MemoryWire struct {
 	Similarity      float32 `json:"similarity"`
 }
 
-// PermissionOption defines model for PermissionOption.
-type PermissionOption struct {
-	Id   string `json:"id"`
-	Kind string `json:"kind"`
-	Name string `json:"name"`
-}
-
 // PostMessageRequest defines model for PostMessageRequest.
 type PostMessageRequest struct {
 	// FilePaths Workspace-relative file paths to include as context. Each file must be a readable text file at most 256 KB.
@@ -402,15 +389,6 @@ type ReasoningStartEvent struct {
 	Type string `json:"type"`
 }
 
-// RespondToChildRequest defines model for RespondToChildRequest.
-type RespondToChildRequest struct {
-	// PermissionOptionId Selected permission option when the child is awaiting permission.
-	PermissionOptionId *string `json:"permission_option_id,omitempty"`
-
-	// Text Free-text follow-up for the delegated coder.
-	Text *string `json:"text,omitempty"`
-}
-
 // SearchMemoryRequest defines model for SearchMemoryRequest.
 type SearchMemoryRequest struct {
 	Limit *int   `json:"limit,omitempty"`
@@ -419,7 +397,7 @@ type SearchMemoryRequest struct {
 
 // Session defines model for Session.
 type Session struct {
-	// AcpSessionId External ACP session ID for resuming interactive delegation.
+	// AcpSessionId External ACP session ID recorded for diagnostics.
 	AcpSessionId *string `json:"acp_session_id,omitempty"`
 
 	// CreatedAt Unix epoch milliseconds.
@@ -434,7 +412,7 @@ type Session struct {
 	// ParentSessionId Parent session ID for delegated child sessions.
 	ParentSessionId *string `json:"parent_session_id,omitempty"`
 
-	// PendingQuestion Question or prompt awaiting user input on a child session.
+	// PendingQuestion Legacy field retained for persisted child session compatibility.
 	PendingQuestion *string `json:"pending_question,omitempty"`
 	ProviderId      string  `json:"provider_id"`
 
@@ -498,15 +476,6 @@ type StepFinishEvent struct {
 // StreamEvent defines model for StreamEvent.
 type StreamEvent struct {
 	union json.RawMessage
-}
-
-// SubagentAwaitingInputEvent defines model for SubagentAwaitingInputEvent.
-type SubagentAwaitingInputEvent struct {
-	ChildSessionId    string              `json:"child_session_id"`
-	Kind              string              `json:"kind"`
-	PermissionOptions *[]PermissionOption `json:"permission_options,omitempty"`
-	Question          string              `json:"question"`
-	Type              string              `json:"type"`
 }
 
 // SubagentFinishedEvent defines model for SubagentFinishedEvent.
@@ -774,9 +743,6 @@ type ForkSessionJSONRequestBody = ForkSessionRequest
 // PostSessionMessageJSONRequestBody defines body for PostSessionMessage for application/json ContentType.
 type PostSessionMessageJSONRequestBody = PostMessageRequest
 
-// RespondToChildSessionJSONRequestBody defines body for RespondToChildSession for application/json ContentType.
-type RespondToChildSessionJSONRequestBody = RespondToChildRequest
-
 // ChangeSessionWorkspaceJSONRequestBody defines body for ChangeSessionWorkspace for application/json ContentType.
 type ChangeSessionWorkspaceJSONRequestBody = ChangeSessionWorkspaceRequest
 
@@ -1010,34 +976,6 @@ func (t *StreamEvent) MergeSubagentProgressEvent(v SubagentProgressEvent) error 
 	return err
 }
 
-// AsSubagentAwaitingInputEvent returns the union data inside the StreamEvent as a SubagentAwaitingInputEvent
-func (t StreamEvent) AsSubagentAwaitingInputEvent() (SubagentAwaitingInputEvent, error) {
-	var body SubagentAwaitingInputEvent
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromSubagentAwaitingInputEvent overwrites any union data inside the StreamEvent as the provided SubagentAwaitingInputEvent
-func (t *StreamEvent) FromSubagentAwaitingInputEvent(v SubagentAwaitingInputEvent) error {
-	v.Type = "subagent_awaiting_input"
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeSubagentAwaitingInputEvent performs a merge with any union data inside the StreamEvent, using the provided SubagentAwaitingInputEvent
-func (t *StreamEvent) MergeSubagentAwaitingInputEvent(v SubagentAwaitingInputEvent) error {
-	v.Type = "subagent_awaiting_input"
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
 // AsSubagentFinishedEvent returns the union data inside the StreamEvent as a SubagentFinishedEvent
 func (t StreamEvent) AsSubagentFinishedEvent() (SubagentFinishedEvent, error) {
 	var body SubagentFinishedEvent
@@ -1206,8 +1144,6 @@ func (t StreamEvent) ValueByDiscriminator() (interface{}, error) {
 		return t.AsReasoningStartEvent()
 	case "step_finish":
 		return t.AsStepFinishEvent()
-	case "subagent_awaiting_input":
-		return t.AsSubagentAwaitingInputEvent()
 	case "subagent_finished":
 		return t.AsSubagentFinishedEvent()
 	case "subagent_progress":

@@ -20,10 +20,9 @@ type cometlineProviderJSON struct {
 }
 
 type cometlineACPJSON struct {
-	Command     string   `json:"command"`
-	Args        []string `json:"args"`
-	Timeout     string   `json:"timeout"`
-	Interactive bool     `json:"interactive"`
+	Command string   `json:"command"`
+	Args    []string `json:"args"`
+	Timeout string   `json:"timeout"`
 }
 
 type cometlineSkillsJSON struct {
@@ -156,10 +155,9 @@ func adaptCometlineSettings(raw cometlineSettingsJSON) (*Config, error) {
 		SystemPromptPath: strings.TrimSpace(cm.SystemPromptPath),
 		Providers:        providers,
 		ACP: ACPConfig{
-			Command:     strings.TrimSpace(cm.ACP.Command),
-			Args:        append([]string(nil), cm.ACP.Args...),
-			Timeout:     strings.TrimSpace(cm.ACP.Timeout),
-			Interactive: cm.ACP.Interactive,
+			Command: strings.TrimSpace(cm.ACP.Command),
+			Args:    append([]string(nil), cm.ACP.Args...),
+			Timeout: strings.TrimSpace(cm.ACP.Timeout),
 		},
 		Skills: SkillsConfig{
 			Enabled:           cm.Skills.Enabled,
@@ -276,10 +274,9 @@ func writeMinimalCometlineSettingsJSON(path string, def *Config) error {
 			SystemPromptPath: def.SystemPromptPath,
 			MaxTokens:        def.MaxTokens,
 			ACP: cometlineACPJSON{
-				Command:     "opencode",
-				Args:        []string{"acp"},
-				Timeout:     "30m",
-				Interactive: true,
+				Command: "opencode",
+				Args:    []string{"acp"},
+				Timeout: "30m",
 			},
 			Skills: cometlineSkillsJSON{
 				Enabled:         true,

@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cometline/cometmind/internal/acp"
 	"github.com/cometline/cometmind/internal/config"
 	"github.com/cometline/cometmind/internal/event"
 	"github.com/cometline/cometmind/internal/session"
@@ -26,7 +25,6 @@ type Router struct {
 	Sessions *session.Service
 	Config   *config.Config
 	Runner   Runner
-	ACPMgr   *acp.SessionManager
 	Typing   TypingIndicator
 	onReply  func(context.Context, OutboundMessage) error
 }
@@ -71,13 +69,6 @@ func (r *Router) HandleInbound(ctx context.Context, msg InboundMessage) error {
 		return err
 	}
 
-	if child, err := r.Sessions.GetActiveChildForParent(ctx, sess.ID); err == nil {
-		switch child.DelegationStatus {
-		case "awaiting_user", "awaiting_permission":
-			return r.replyToAwaitingChild(ctx, msg, child)
-		}
-	}
-
 	blocks := contentBlocksFromInbound(msg)
 	if _, err := r.Sessions.AppendUserMessageContent(ctx, sess.ID, blocks); err != nil {
 		return err
@@ -115,12 +106,6 @@ func (r *Router) HandleInbound(ctx context.Context, msg InboundMessage) error {
 				reply.WriteString(ev.Summary)
 				reply.WriteByte('\n')
 			}
-		case event.KindSubagentAwaitingInput:
-			if ev.Question != "" {
-				reply.WriteString("\n[subagent question] ")
-				reply.WriteString(ev.Question)
-				reply.WriteByte('\n')
-			}
 		}
 	})
 	var text string
@@ -144,34 +129,6 @@ func (r *Router) HandleInbound(ctx context.Context, msg InboundMessage) error {
 		})
 	}
 	return nil
-}
-
-func (r *Router) replyToAwaitingChild(ctx context.Context, msg InboundMessage, child session.Session) error {
-	if r.ACPMgr == nil {
-		return fmt.Errorf("ACP manager is not configured")
-	}
-	if _, err := r.Sessions.AppendUserMessage(ctx, child.ID, msg.Text); err != nil {
-		return err
-	}
-	_ = r.Sessions.UpdateDelegationState(ctx, child.ID, "running", child.OutputSummary, "")
-	if err := r.ACPMgr.Respond(child.ID, acp.RespondInput{Text: msg.Text}); err != nil {
-		return err
-	}
-	if r.onReply == nil {
-		return nil
-	}
-	question := child.PendingQuestion
-	if question == "" {
-		question = "the coder"
-	}
-	text := fmt.Sprintf("Got it — sent your reply to OpenCode (%s).", question)
-	return r.onReply(ctx, OutboundMessage{
-		Platform:  msg.Platform,
-		UserID:    msg.UserID,
-		ChannelID: msg.ChannelID,
-		ThreadID:  msg.ThreadID,
-		Text:      text,
-	})
 }
 
 func (r *Router) resolveSession(ctx context.Context, msg InboundMessage, ws session.Workspace) (string, error) {

@@ -27,7 +27,7 @@ Use `/create-skill` when the user wants the agent to create a reusable skill. Th
 
 ## Delegation Setup
 
-ACP delegation is configured under Settings -> CometMind -> ACP. Use it when the user wants CometMind to hand coding work to OpenCode, Claude Code, or another ACP-compatible coding agent. Confirm the configured command, arguments, working directory behavior, and whether interactive mode is enabled.
+ACP delegation is configured under Settings -> CometMind -> ACP. Use it when the user wants CometMind to hand coding work to OpenCode, Claude Code, or another ACP-compatible coding agent. Confirm the configured command, arguments, and working directory behavior.
 
 ## Discord Gateway
 

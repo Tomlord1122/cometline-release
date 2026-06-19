@@ -26,14 +26,11 @@ type ProgressUpdate struct {
 
 // WorkspaceClient implements acp.Client with workspace-sandboxed file and terminal access.
 type WorkspaceClient struct {
-	WorkspaceRoot     string
-	OnProgress        func(ProgressUpdate)
-	Interactive       bool
-	PermissionHandler func(ctx context.Context, params acpsdk.RequestPermissionRequest) (acpsdk.PermissionOptionId, error)
+	WorkspaceRoot string
+	OnProgress    func(ProgressUpdate)
 
 	mu        sync.Mutex
 	terminals map[string]*terminalSession
-	lastAgent string
 }
 
 type terminalSession struct {
@@ -53,9 +50,6 @@ func (c *WorkspaceClient) SessionUpdate(ctx context.Context, params acpsdk.Sessi
 	switch {
 	case u.AgentMessageChunk != nil && u.AgentMessageChunk.Content.Text != nil:
 		text := u.AgentMessageChunk.Content.Text.Text
-		c.mu.Lock()
-		c.lastAgent += text
-		c.mu.Unlock()
 		c.OnProgress(ProgressUpdate{Kind: "message", Content: text})
 	case u.AgentThoughtChunk != nil && u.AgentThoughtChunk.Content.Text != nil:
 		c.OnProgress(ProgressUpdate{Kind: "thought", Content: u.AgentThoughtChunk.Content.Text.Text})
@@ -85,17 +79,6 @@ func (c *WorkspaceClient) SessionUpdate(ctx context.Context, params acpsdk.Sessi
 }
 
 func (c *WorkspaceClient) RequestPermission(ctx context.Context, params acpsdk.RequestPermissionRequest) (acpsdk.RequestPermissionResponse, error) {
-	if c.Interactive && c.PermissionHandler != nil {
-		optionID, err := c.PermissionHandler(ctx, params)
-		if err != nil {
-			return acpsdk.RequestPermissionResponse{}, err
-		}
-		return acpsdk.RequestPermissionResponse{
-			Outcome: acpsdk.RequestPermissionOutcome{
-				Selected: &acpsdk.RequestPermissionOutcomeSelected{OptionId: optionID},
-			},
-		}, nil
-	}
 	// Local dogfood mode: auto-approve the first allow-style option.
 	for _, opt := range params.Options {
 		if opt.Kind == acpsdk.PermissionOptionKindAllowOnce || opt.Kind == acpsdk.PermissionOptionKindAllowAlways {
@@ -114,20 +97,6 @@ func (c *WorkspaceClient) RequestPermission(ctx context.Context, params acpsdk.R
 		}, nil
 	}
 	return acpsdk.RequestPermissionResponse{}, errors.New("no permission options")
-}
-
-// LastAgentMessage returns accumulated agent message text for the current prompt turn.
-func (c *WorkspaceClient) LastAgentMessage() string {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.lastAgent
-}
-
-// ResetAgentMessage clears accumulated agent text before a new prompt turn.
-func (c *WorkspaceClient) ResetAgentMessage() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.lastAgent = ""
 }
 
 func (c *WorkspaceClient) ReadTextFile(ctx context.Context, params acpsdk.ReadTextFileRequest) (acpsdk.ReadTextFileResponse, error) {

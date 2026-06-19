@@ -30,7 +30,6 @@ func (DelegateCodingTask) Spec() ToolSpec {
 				"task":{"type":"string","description":"Coding task for the subagent"},
 				"context":{"type":"string","description":"Optional extra context, file notes, or constraints"},
 				"verify_command":{"type":"string","description":"Optional shell command to run after coding, e.g. cd cometmind && go test ./..."},
-				"child_session_id":{"type":"string","description":"Resume an existing child session instead of creating a new one"},
 				"async":{"type":"boolean","description":"Return immediately after starting delegation without waiting for completion"}
 			},
 			"required":["task"]
@@ -40,11 +39,10 @@ func (DelegateCodingTask) Spec() ToolSpec {
 
 func (d DelegateCodingTask) Execute(ctx context.Context, input json.RawMessage) (Result, error) {
 	var in struct {
-		Task           string `json:"task"`
-		Context        string `json:"context"`
-		VerifyCommand  string `json:"verify_command"`
-		ChildSessionID string `json:"child_session_id"`
-		Async          bool   `json:"async"`
+		Task          string `json:"task"`
+		Context       string `json:"context"`
+		VerifyCommand string `json:"verify_command"`
+		Async         bool   `json:"async"`
 	}
 	if err := json.Unmarshal(input, &in); err != nil {
 		return Result{}, err
@@ -67,13 +65,13 @@ func (d DelegateCodingTask) Execute(ctx context.Context, input json.RawMessage) 
 		return Result{OK: false, Output: err.Error()}, nil
 	}
 
-	child, resumed, err := d.resolveChild(ctx, parent, task, strings.TrimSpace(in.ChildSessionID))
+	child, err := d.Sessions.NewChildSession(ctx, parent, task)
 	if err != nil {
 		return Result{OK: false, Output: err.Error()}, nil
 	}
 
 	emit := ProgressFrom(ctx)
-	if !resumed && emit != nil {
+	if emit != nil {
 		emit(event.SubagentStarted(child.ID, task, d.ACP.Command))
 	}
 
@@ -90,7 +88,6 @@ func (d DelegateCodingTask) Execute(ctx context.Context, input json.RawMessage) 
 		Task:           task,
 		Context:        in.Context,
 		VerifyCommand:  in.VerifyCommand,
-		Interactive:    d.ACP.Interactive,
 		OnProgress: func(u acp.ProgressUpdate) {
 			if emit == nil {
 				return
@@ -103,25 +100,6 @@ func (d DelegateCodingTask) Execute(ctx context.Context, input json.RawMessage) 
 				}
 			}
 			emit(event.SubagentProgress(child.ID, u.Kind, text))
-		},
-		OnAwaiting: func(info acp.AwaitingInfo) {
-			status := "awaiting_user"
-			if info.Kind == "permission" {
-				status = "awaiting_permission"
-			}
-			_ = d.Sessions.UpdateDelegationState(ctx, child.ID, status, "", info.Question)
-			if emit == nil {
-				return
-			}
-			opts := make([]event.PermissionOptionWire, 0, len(info.Options))
-			for _, opt := range info.Options {
-				opts = append(opts, event.PermissionOptionWire{
-					ID:   opt.ID,
-					Kind: opt.Kind,
-					Name: opt.Name,
-				})
-			}
-			emit(event.SubagentAwaitingInput(child.ID, info.Kind, info.Question, opts))
 		},
 		OnACPSessionID: func(acpSessionID string) {
 			_ = d.Sessions.UpdateACPSessionID(ctx, child.ID, acpSessionID)
@@ -182,30 +160,4 @@ func (d DelegateCodingTask) buildResult(
 		ok = false
 	}
 	return Result{OK: ok, Output: out}, nil
-}
-
-func (d DelegateCodingTask) resolveChild(
-	ctx context.Context,
-	parent session.Session,
-	task string,
-	childSessionID string,
-) (session.Session, bool, error) {
-	if childSessionID == "" {
-		child, err := d.Sessions.NewChildSession(ctx, parent, task)
-		return child, false, err
-	}
-
-	child, err := d.Sessions.GetSession(ctx, childSessionID)
-	if err != nil {
-		return session.Session{}, false, err
-	}
-	if child.ParentSessionID != parent.ID {
-		return session.Session{}, false, fmt.Errorf("child session does not belong to parent")
-	}
-	switch child.DelegationStatus {
-	case "running", "awaiting_user", "awaiting_permission":
-	default:
-		return session.Session{}, false, fmt.Errorf("child session %s cannot be resumed (status=%s)", child.ID, child.DelegationStatus)
-	}
-	return child, true, nil
 }

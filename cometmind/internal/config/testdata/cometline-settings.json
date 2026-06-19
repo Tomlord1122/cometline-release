@@ -46,8 +46,7 @@
     "acp": {
       "command": "opencode",
       "args": ["acp"],
-      "timeout": "30m",
-      "interactive": true
+      "timeout": "30m"
     },
     "skills": {
       "enabled": true,

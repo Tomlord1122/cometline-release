@@ -42,7 +42,6 @@ func TestStreamEventMarshalJSONMatchesOpenAPI(t *testing.T) {
 		{name: "step_finish", ev: event.StepFinish(cometsdk.TokenUsage{InputTokens: 1, OutputTokens: 2, CacheRead: 3, CacheWrite: 4})},
 		{name: "subagent_started", ev: event.SubagentStarted("child-1", "refactor", "opencode")},
 		{name: "subagent_progress", ev: event.SubagentProgress("child-1", "stream", "working")},
-		{name: "subagent_awaiting_input", ev: event.SubagentAwaitingInput("child-1", "permission", "allow?", []event.PermissionOptionWire{{ID: "yes", Kind: "allow", Name: "Allow"}})},
 		{name: "subagent_finished", ev: event.SubagentFinished("child-1", "completed", "done")},
 		{name: "memory_injected", ev: event.MemoryInjected([]event.MemoryWire{{ID: "m1", Content: "fact", Kind: "preference", Similarity: 0.9, EffectiveWeight: 1.2}})},
 		{name: "memory_updated", ev: event.MemoryUpdated([]event.MemoryChangeWire{{Action: "create", Kind: "preference", Content: "likes tea"}})},

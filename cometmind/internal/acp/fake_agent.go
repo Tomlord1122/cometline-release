@@ -15,7 +15,6 @@ type FakeAgent struct {
 	conn         *acpsdk.AgentSideConnection
 	sessions     map[string]struct{}
 	promptCounts map[acpsdk.SessionId]int
-	Interactive  bool
 	mu           sync.Mutex
 }
 
@@ -55,9 +54,7 @@ func (a *FakeAgent) NewSession(ctx context.Context, params acpsdk.NewSessionRequ
 
 func (a *FakeAgent) Prompt(ctx context.Context, params acpsdk.PromptRequest) (acpsdk.PromptResponse, error) {
 	a.mu.Lock()
-	count := a.promptCounts[params.SessionId]
-	a.promptCounts[params.SessionId] = count + 1
-	interactive := a.Interactive
+	a.promptCounts[params.SessionId]++
 	a.mu.Unlock()
 
 	text := "done"
@@ -66,19 +63,6 @@ func (a *FakeAgent) Prompt(ctx context.Context, params acpsdk.PromptRequest) (ac
 			text = "completed: " + block.Text.Text
 			break
 		}
-	}
-
-	if interactive && count == 0 {
-		text = "Which branch should I use?"
-		_ = a.conn.SessionUpdate(ctx, acpsdk.SessionNotification{
-			SessionId: params.SessionId,
-			Update: acpsdk.SessionUpdate{
-				AgentMessageChunk: &acpsdk.SessionUpdateAgentMessageChunk{
-					Content: acpsdk.TextBlock(text),
-				},
-			},
-		})
-		return acpsdk.PromptResponse{StopReason: acpsdk.StopReasonEndTurn}, nil
 	}
 
 	_ = a.conn.SessionUpdate(ctx, acpsdk.SessionNotification{
@@ -138,13 +122,6 @@ func randomSessionID() string {
 // StartFakeAgentPipes returns pipes connected to a fake agent subprocess in-process.
 func StartFakeAgentPipes(ctx context.Context) (io.WriteCloser, io.ReadCloser, io.Closer, error) {
 	return startFakeAgentPipes(NewFakeAgent())
-}
-
-// StartInteractiveFakeAgentPipes returns pipes for a multi-turn fake agent.
-func StartInteractiveFakeAgentPipes(ctx context.Context) (io.WriteCloser, io.ReadCloser, io.Closer, error) {
-	agent := NewFakeAgent()
-	agent.Interactive = true
-	return startFakeAgentPipes(agent)
 }
 
 func startFakeAgentPipes(agent *FakeAgent) (io.WriteCloser, io.ReadCloser, io.Closer, error) {

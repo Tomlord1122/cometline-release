@@ -13,10 +13,9 @@ import (
 
 // Config controls how CometMind spawns an external ACP coding agent.
 type Config struct {
-	Command     string
-	Args        []string
-	Timeout     time.Duration
-	Interactive bool
+	Command string
+	Args    []string
+	Timeout time.Duration
 }
 
 // DefaultConfig returns defaults for OpenCode in ACP mode.
@@ -65,7 +64,6 @@ func (r *AgentRunner) Run(ctx context.Context, req TaskRequest) (TaskResult, err
 		Task:          req.Task,
 		Context:       req.Context,
 		VerifyCommand: req.VerifyCommand,
-		Interactive:   cfg.Interactive,
 		OnProgress:    req.OnProgress,
 	})
 }

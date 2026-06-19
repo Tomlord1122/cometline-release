@@ -78,7 +78,7 @@ Registered per workspace in `internal/tools/registry.go`:
 | `load_skill` | Load full `SKILL.md` for a discovered skill |
 | `read_skill_file` | Read auxiliary files inside a skill directory |
 | `write_skill` | Create or update a skill under `~/.cometmind/skills/{name}/` |
-| `delegate_coding_task` | Spawn or resume an ACP child session (sync or async) |
+| `delegate_coding_task` | Spawn an ACP child session (sync or async) |
 
 File tools are workspace-scoped through `internal/tools/sandbox/pathcheck.go`.
 
@@ -87,8 +87,7 @@ File tools are workspace-scoped through `internal/tools/sandbox/pathcheck.go`.
 When the model calls `delegate_coding_task`, CometMind spawns an external coding agent (default: `opencode acp`) and streams progress back through the same SSE pipeline:
 
 - Child sessions are persisted with `parent_session_id`, delegation status, and ACP session ID.
-- Interactive mode can pause for user questions or permission prompts (`subagent_awaiting_input`).
-- The desktop can reply to awaiting children via `POST /api/v1/sessions/{id}/respond`.
+- ACP permission prompts are handled automatically by selecting an allow-style option when available.
 
 Configure in Settings → CometMind → ACP, persisted in `~/.cometmind/cometline-settings.json` (legacy `config.toml` is read only when JSON settings are missing):
 
@@ -97,7 +96,6 @@ Configure in Settings → CometMind → ACP, persisted in `~/.cometmind/cometlin
 command = "opencode"
 args = ["acp"]
 timeout = "30m"
-interactive = true
 ```
 
 ### Semantic memory
@@ -194,7 +192,6 @@ Localhost-only HTTP + SSE, versioned under `/api/v1` (default `http://127.0.0.1:
 | `GET /api/v1/sessions/{id}/children` | Delegated child sessions |
 | `POST /api/v1/sessions/{id}/message` | Send text + up to 6 images (4 MiB each) → SSE |
 | `POST /api/v1/sessions/{id}/abort` | Abort in-flight run (202, or 409 if none) |
-| `POST /api/v1/sessions/{id}/respond` | Reply to an awaiting ACP child → SSE |
 
 ### Skills
 
@@ -223,7 +220,7 @@ Localhost-only HTTP + SSE, versioned under `/api/v1` (default `http://127.0.0.1:
 
 ### SSE event names
 
-`text_delta`, `reasoning_start`, `reasoning_delta`, `tool_call`, `tool_result`, `step_finish`, `subagent_started`, `subagent_progress`, `subagent_awaiting_input`, `subagent_finished`, `memory_injected`, `memory_updated`, `error`, `done`
+`text_delta`, `reasoning_start`, `reasoning_delta`, `tool_call`, `tool_result`, `step_finish`, `subagent_started`, `subagent_progress`, `subagent_finished`, `memory_injected`, `memory_updated`, `error`, `done`
 
 Only one run is allowed per session at a time (`409 session_running` on duplicate POST).
 

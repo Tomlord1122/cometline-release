@@ -14,10 +14,10 @@ import (
 
 // Result summarizes one retention pass.
 type Result struct {
-	SessionsDeleted      int
-	MemoriesPurged       int
-	MemoryEventsPurged   int
-	Vacuumed             bool
+	SessionsDeleted    int
+	MemoriesPurged     int
+	MemoryEventsPurged int
+	Vacuumed           bool
 }
 
 // Runner performs session retention and memory purge.
@@ -142,7 +142,7 @@ func (r *Runner) skipSession(sessionID string) bool {
 
 func protectedDelegation(status string) bool {
 	switch status {
-	case "pending", "running", "awaiting_user", "awaiting_permission":
+	case "pending", "running":
 		return true
 	default:
 		return false

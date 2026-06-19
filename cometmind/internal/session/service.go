@@ -147,10 +147,8 @@ func workspaceRootExists(path string) bool {
 
 func activeDelegationStatuses() map[string]bool {
 	return map[string]bool{
-		"pending":              true,
-		"running":              true,
-		"awaiting_user":        true,
-		"awaiting_permission":  true,
+		"pending": true,
+		"running": true,
 	}
 }
 

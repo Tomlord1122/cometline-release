@@ -11,27 +11,20 @@ import (
 type Kind string
 
 const (
-	KindTextDelta      Kind = "text_delta"
-	KindReasoningStart Kind = "reasoning_start"
-	KindReasoningDelta Kind = "reasoning_delta"
-	KindToolCall       Kind = "tool_call"
-	KindToolResult     Kind = "tool_result"
-	KindStepFinish         Kind = "step_finish"
-	KindSubagentStarted    Kind = "subagent_started"
-	KindSubagentProgress   Kind = "subagent_progress"
-	KindSubagentAwaitingInput Kind = "subagent_awaiting_input"
-	KindSubagentFinished   Kind = "subagent_finished"
-	KindMemoryInjected     Kind = "memory_injected"
-	KindMemoryUpdated      Kind = "memory_updated"
-	KindError              Kind = "error"
-	KindDone           Kind = "done"
+	KindTextDelta        Kind = "text_delta"
+	KindReasoningStart   Kind = "reasoning_start"
+	KindReasoningDelta   Kind = "reasoning_delta"
+	KindToolCall         Kind = "tool_call"
+	KindToolResult       Kind = "tool_result"
+	KindStepFinish       Kind = "step_finish"
+	KindSubagentStarted  Kind = "subagent_started"
+	KindSubagentProgress Kind = "subagent_progress"
+	KindSubagentFinished Kind = "subagent_finished"
+	KindMemoryInjected   Kind = "memory_injected"
+	KindMemoryUpdated    Kind = "memory_updated"
+	KindError            Kind = "error"
+	KindDone             Kind = "done"
 )
-
-type PermissionOptionWire struct {
-	ID   string `json:"id"`
-	Kind string `json:"kind"`
-	Name string `json:"name"`
-}
 
 // MemoryWire is the SSE payload for an injected memory.
 type MemoryWire struct {
@@ -78,17 +71,14 @@ type Event struct {
 	ToolErr string // tool_result: empty if success
 	// step_finish
 	Usage Usage
-	// subagent_* 
-	ChildSessionID string
-	Purpose        string
-	AgentName      string
-	ProgressKind   string
-	ProgressText   string
+	// subagent_*
+	ChildSessionID   string
+	Purpose          string
+	AgentName        string
+	ProgressKind     string
+	ProgressText     string
 	DelegationStatus string
-	Summary        string
-	AwaitingKind   string
-	Question       string
-	PermissionOptions []PermissionOptionWire
+	Summary          string
 	// memory_injected
 	Memories []MemoryWire
 	// memory_updated
@@ -153,14 +143,6 @@ func (e Event) MarshalJSON() ([]byte, error) {
 			ProgressKind   string `json:"progress_kind"`
 			ProgressText   string `json:"progress_text"`
 		}{t, e.ChildSessionID, e.ProgressKind, e.ProgressText})
-	case KindSubagentAwaitingInput:
-		return json.Marshal(struct {
-			Type              string                 `json:"type"`
-			ChildSessionID    string                 `json:"child_session_id"`
-			Kind              string                 `json:"kind"`
-			Question          string                 `json:"question"`
-			PermissionOptions []PermissionOptionWire `json:"permission_options,omitempty"`
-		}{t, e.ChildSessionID, e.AwaitingKind, e.Question, e.PermissionOptions})
 	case KindSubagentFinished:
 		return json.Marshal(struct {
 			Type             string `json:"type"`
@@ -245,17 +227,6 @@ func SubagentProgress(childSessionID, progressKind, progressText string) Event {
 		ChildSessionID: childSessionID,
 		ProgressKind:   progressKind,
 		ProgressText:   progressText,
-	}
-}
-
-// SubagentAwaitingInput builds a subagent_awaiting_input event.
-func SubagentAwaitingInput(childSessionID, kind, question string, options []PermissionOptionWire) Event {
-	return Event{
-		Kind:              KindSubagentAwaitingInput,
-		ChildSessionID:    childSessionID,
-		AwaitingKind:      kind,
-		Question:          question,
-		PermissionOptions: options,
 	}
 }
 
