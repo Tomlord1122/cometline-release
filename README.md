@@ -28,7 +28,7 @@ The rule: **Cometline is not the brain.** CometMind is the brain. Comet SDK is o
 - Per-session model picker grouped by provider
 - Multimodal input: paste/drop up to 6 images (PNG/JPEG/GIF/WebP)
 - Drop text files as fenced code blocks in the composer
-- Slash commands: `/create-skill` plus dynamic `/skill-name` menu from CometMind skills
+- Slash commands: `/change`, `/create-skill`, `/model`, plus dynamic `/skill-name` menu from CometMind skills
 
 ### Markdown & links
 
@@ -44,7 +44,7 @@ The rule: **Cometline is not the brain.** CometMind is the brain. Comet SDK is o
 
 ### Settings
 
-- **Providers** — OpenAI, Anthropic, OpenAI-compatible, OpenCode Go, plus custom providers; fetch models from the provider API
+- **Providers** — ChatGPT Codex, OpenAI, Anthropic, OpenAI-compatible, OpenCode Go, plus custom providers; fetch models from the provider API where available
 - **CometMind** — ACP (OpenCode) config, Agent Skills management, Discord gateway toggle and config
 - **Memory** — auto retrieve/extract, thresholds, embedding model, compaction
 - **General** — open at login (macOS); session retention, max sessions per workspace, archived memory purge
@@ -71,7 +71,7 @@ make install   # pnpm install in cometline/
 make dev       # build CometMind sidecar + launch Electron dev app
 ```
 
-On first launch, open **Settings** (⌘,) to configure a provider base URL, API key, and model. Settings are saved to `~/.cometmind/cometline-settings.json` (CometMind reads the same file).
+On first launch, open **Settings** (⌘,) to enable a provider, add credentials if needed, fetch or enter models, and choose default model roles. Settings are saved to `~/.cometmind/cometline-settings.json` (CometMind reads the same file).
 
 Optional one-off provider overrides:
 
@@ -112,12 +112,12 @@ Default bindings (rebindable in Settings → Shortcuts):
 cometline/
 ├── electron/
 │   ├── main.cjs          sidecar lifecycle, IPC, settings, updater, tray
-│   └── preload.cjs       contextBridge → window.electronAPI
+│   └── preload.cjs       contextBridge -> window.electronAPI
 ├── src/
 │   ├── routes/           SvelteKit pages (/ and /session/[id])
 │   └── lib/
 │       ├── client/       CometMind REST/SSE client
-│       ├── components/   AppShell, ChatView, Composer, Settings*, WebPanel, …
+│       ├── components/   AppShell, ChatView, Composer, Settings*, WebPanel, ...
 │       ├── stores/       chat, session, settings, model, shell, runtime
 │       └── reducers/     pure SSE → chat item reducer
 ├── buildResources/       app icon, tray icons, entitlements
@@ -133,9 +133,12 @@ cometline/
 
 ```bash
 # From cometline/
+pnpm run generate:api    # regenerate TS client from ../cometmind/openapi.yaml
 pnpm run check          # svelte-check
 pnpm run test           # vitest
+pnpm run lint           # eslint
 pnpm run build          # production renderer build
+pnpm run build:electron # sidecar + renderer + electron-builder
 pnpm run build:mac      # sidecar + renderer + electron-builder (no publish)
 pnpm run release:mac    # build + publish to GitHub releases
 ```

@@ -1432,7 +1432,6 @@
 		white-space: nowrap;
 	}
 
-	.provider-card small,
 	.model-row small {
 		overflow: hidden;
 		font-size: 11px;

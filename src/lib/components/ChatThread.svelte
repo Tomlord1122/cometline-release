@@ -843,13 +843,13 @@
 							{#if showToolOutputPanel(item) && toolOutputExpanded(item)}
 								<div class="tool-output-body" transition:slide={FOLD_IN}>
 									{#if item.output}
-										<p>{item.output}</p>
+										<pre>{item.output}</pre>
 									{/if}
 									{#if item.error}
-										<p class="tool-error-text">{item.error}</p>
+										<pre class="tool-error-text">{item.error}</pre>
 									{/if}
 									{#if item.pending && !item.output && !item.error}
-										<p>Running…</p>
+										<pre>Running…</pre>
 									{/if}
 								</div>
 							{/if}
@@ -1171,6 +1171,10 @@
 		max-width: calc(var(--chat-content-max) * 0.35);
 	}
 
+	.tool-stack:has(.tool-output-body) {
+		max-width: var(--chat-assistant-column);
+	}
+
 	.flight-placeholder {
 		pointer-events: none;
 	}
@@ -1379,18 +1383,20 @@
 		color: var(--text-muted);
 	}
 
-	.tool-output-body p {
+	.tool-output-body pre {
 		margin: 0;
 		font-size: 12px;
 		line-height: 1.5;
+		font-family: inherit;
 		white-space: pre-wrap;
-		word-break: break-word;
+		word-break: normal;
+		overflow-wrap: break-word;
 		max-height: 220px;
 		overflow: auto;
 		scrollbar-gutter: stable;
 	}
 
-	.tool-output-body p + p {
+	.tool-output-body pre + pre {
 		margin-top: 8px;
 		padding-top: 8px;
 		border-top: 1px solid var(--border-soft);
