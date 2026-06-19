@@ -14,6 +14,7 @@ export default [
 			'build/',
 			'buildResources/',
 			'dist/',
+			'electron/settings-schema.cjs',
 			'node_modules/',
 			'pnpm-lock.yaml',
 			'static/',
