@@ -6,7 +6,7 @@ This document provides development rules and commands for AI agents and contribu
 
 This is a monorepo with three independent git submodules:
 
-- **`comet-sdk/`** — Go library for provider-agnostic LLM I/O (streaming, retries, tool-call assembly)
+- **`comet-sdk/`** — Go library for provider-agnostic LLM I/O (streaming, retries, tool-call assembly, Anthropic/OpenAI/Codex adapters)
 - **`cometmind/`** — Go agent runtime (agent loop, SQLite persistence, HTTP/SSE API, Discord gateway)
 - **`cometline/`** — SvelteKit + Electron desktop shell (chat UI, settings, animations)
 
@@ -114,7 +114,8 @@ To add a new SSE event type:
 
 ### CometMind
 
-- **Config:** `~/.cometmind/config.toml` (created by `go run . init`)
+- **Settings:** `~/.cometmind/cometline-settings.json` (created by `go run . init` or Cometline; managed by Settings UI)
+- **Legacy config:** `~/.cometmind/config.toml` (read only when JSON settings are missing)
 - **Database:** `~/.cometmind/cometmind.db` (SQLite, pure Go via `modernc.org/sqlite`)
 - **API:** `http://127.0.0.1:7700` (localhost only)
 - **OpenAPI spec:** `cometmind/openapi.yaml`
@@ -144,7 +145,7 @@ Settings are synced to CometMind on save. If provider or runtime settings change
 
 ### Default model
 
-Users can set a default model in Settings → General. This model is used for new sessions unless explicitly changed.
+Users can set a default model in Settings → Providers → Model roles. This model is used for new sessions unless explicitly changed.
 
 **Implementation:**
 - `ProviderSettings` includes `defaultModelId` and `defaultProviderId`
@@ -172,21 +173,15 @@ Invoke with `/{skill-name}` in the composer.
 
 ### ACP delegation
 
-The `delegate_coding_task` tool spawns external coding agents (OpenCode, Claude Code) via ACP protocol.
+The `delegate_coding_task` tool spawns external coding agents (OpenCode, Claude Code, or any configured ACP agent) via ACP protocol.
 
-**Config:** `~/.cometmind/config.toml`
-```toml
-[acp]
-command = "opencode"
-args = ["acp"]
-timeout = "30m"
-```
+Configure this under Settings → CometMind → ACP, persisted in `~/.cometmind/cometline-settings.json`.
 
 ### Discord gateway
 
 Run CometMind as a Discord bot with the same agent runtime.
 
-**Config:** `~/.cometmind/config.toml`
+**Config:** Settings → CometMind → Discord, persisted in `~/.cometmind/cometline-settings.json`. Legacy `config.toml` is still accepted for migration.
 ```toml
 [gateway.discord]
 enabled = true
@@ -266,7 +261,7 @@ refactor(comet-sdk): extract retry logic into helper
 
 Cometline can improve itself using the same agent runtime:
 
-1. Register this repo as the workspace (`go run . init` from `cometline-release`)
+1. Register this repo as the workspace (`cd cometmind && go run . init --workspace ..`, or open the repo in Cometline)
 2. Ask CometMind to improve Cometline
 3. CometMind calls `delegate_coding_task` to hand coding to OpenCode
 4. Review test output in the parent session
@@ -278,17 +273,17 @@ Cometline can improve itself using the same agent runtime:
 ### Add a new LLM provider
 
 1. Implement `cometsdk.Provider` interface in `comet-sdk/provider/{name}/`
-2. Add provider method constant to `comet-sdk/sdk.go`
-3. Add provider config to `cometmind/internal/config/config.go`
-4. Add provider UI to `cometline/src/lib/components/SettingsPanel.svelte`
-5. Update `ProviderMethod` type in `cometline/src/lib/types.ts`
+2. Add provider method constants/config mapping where needed in `cometmind/internal/config/` and `cometmind/internal/provider/factory.go`
+3. Add provider defaults and validation in `cometline/src/lib/settings/schema.ts`
+4. Add provider UI behavior in `cometline/src/lib/components/SettingsPanel.svelte` if the method needs custom fields
+5. Update `ProviderMethod` types in `cometline/src/lib/types.ts` and `cometline/src/app.d.ts`
 
 ### Add a new built-in tool
 
-1. Define tool in `cometmind/internal/tools/registry.go`
-2. Implement `Tool` interface (Name, Description, Execute)
-3. Register in `init()` function
-4. Tool is automatically available to the agent loop
+1. Implement `cometmind/internal/tools.Tool` with `Spec() ToolSpec` and `Execute(ctx, input)`
+2. Register it in `cometmind/internal/tools/registry.go`
+3. Add unit tests for schema and execution behavior
+4. Tools registered by the runtime are automatically exposed to the agent loop
 
 ### Add a new SSE event type
 
@@ -310,7 +305,7 @@ Cometline can improve itself using the same agent runtime:
 
 ### Sidecar won't start
 
-- Check `~/.cometmind/cometmind.log` for errors
+- Check `~/.cometmind/cometline.log` for sidecar errors
 - Verify CometMind binary exists in `cometmind/dist/cometmind`
 - Run `make port` to see if port 7700 is already in use
 

@@ -24,7 +24,7 @@ Pick the companion personality that fits your workflow in Settings → About. Sw
 - **Agent Skills** — Reusable prompt templates invoked with slash commands (`/tdd`, `/create-skill`, or custom skills in your workspace)
 - **Discord bot** — Run the same agent runtime as a Discord bot with per-thread sessions, @mention gating, and skill invocation
 - **Native chat UI** — SvelteKit + Electron desktop app with streaming responses, reasoning blocks, syntax highlighting, and smooth animations
-- **Multi-provider** — Switch between Anthropic, OpenAI, and any OpenAI-compatible API
+- **Multi-provider** — Switch between Anthropic, OpenAI, OpenAI-compatible APIs, OpenCode Go, and ChatGPT Codex
 
 ## Quick Start
 
@@ -36,7 +36,7 @@ Pick the companion personality that fits your workflow in Settings → About. Sw
 
 Download the latest signed release from [GitHub Releases](https://github.com/cometline/cometline-release/releases). The app is notarized and includes auto-update support.
 
-The app will open and prompt you to configure a provider. Add your Anthropic or OpenAI API key in Settings → Providers.
+The app will open and prompt you to configure a provider. Add your API key, enable models, and choose default model roles in Settings → Providers.
 
 ## Features
 
@@ -55,7 +55,7 @@ Every project is a first-class workspace with its own boundary:
 
 - **Separate sessions** — chat history does not leak across projects
 - **Scoped tools** — `read_file`, `write_file`, `list_dir`, and `run_command` operate only inside the active workspace
-- **Per-workspace skills** — discover skills from `~/.cometmind/skills/` and `{workspace}/.agents/skills/`
+- **Per-workspace skills** — discover skills from `~/.cometmind/skills/`, `{workspace}/.agents/skills/`, `{workspace}/.claude/skills/`, OpenCode, and Claude Code skill roots
 
 ### Chat Interface
 
@@ -74,14 +74,7 @@ CometMind: I'll delegate this to OpenCode...
 OpenCode: I've refactored auth.go to use middleware...
 ```
 
-Configure in `~/.cometmind/config.toml`:
-
-```toml
-[acp]
-command = "opencode"
-args = ["acp"]
-timeout = "30m"
-```
+Configure ACP delegation in Settings → CometMind → ACP. The settings are persisted in `~/.cometmind/cometline-settings.json`.
 
 ### Discord Bot
 
@@ -108,11 +101,11 @@ CometMind includes tools for file operations, command execution, and web fetchin
 - `read_file`, `write_file`, `list_dir` — workspace-scoped file access
 - `run_command` — execute shell commands in the workspace
 - `web_fetch` — retrieve and parse web content
-- `load_skill`, `write_skill` — manage Agent Skills
+- `load_skill`, `read_skill_file`, `write_skill` — manage Agent Skills
 
 ### Agent Skills
 
-Skills are reusable prompt templates — built-in slash commands plus custom skills in `~/.cometmind/skills/` or your workspace's `.agents/skills/` directory:
+Skills are reusable prompt templates — built-in slash commands plus custom skills in `~/.cometmind/skills/`, workspace-local `.agents/skills/` / `.claude/skills/`, and optional OpenCode or Claude Code skill roots:
 
 ```
 /create-skill Build a skill for reviewing PRs
@@ -132,20 +125,27 @@ Skills are reusable prompt templates — built-in slash commands plus custom ski
 │               Discord gateway, HTTP/SSE API             │
 ├─────────────────────────────────────────────────────────┤
 │  comet-sdk    Go LLM I/O library                        │
-│               Anthropic + OpenAI + compatible APIs      │
+│               Anthropic + OpenAI + Codex + compatible   │
+│               APIs                                      │
 └─────────────────────────────────────────────────────────┘
 ```
 
 - **cometline** — Desktop renderer that talks to CometMind over HTTP/SSE
 - **cometmind** — Local agent runtime with SQLite persistence, serves the API on `127.0.0.1:7700`
-- **comet-sdk** — Provider-agnostic streaming LLM library with retry logic and tool-call assembly
+- **comet-sdk** — Provider-agnostic streaming LLM library with retry logic, tool-call assembly, and Anthropic/OpenAI/Codex adapters
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed system design.
 
 ## Development
 
 ```bash
-# Run all checks (typecheck, tests, build)
+# Install frontend dependencies
+make install
+
+# Regenerate OpenAPI clients after API changes
+make generate
+
+# Run all checks (codegen freshness, Go tests, Svelte checks)
 make check
 
 # Run frontend tests
@@ -165,26 +165,32 @@ See [AGENTS.md](./AGENTS.md) for development rules and commands.
 
 ## Configuration
 
-CometMind stores config in `~/.cometmind/config.toml`:
+Cometline and CometMind share settings in `~/.cometmind/cometline-settings.json`. CometMind still reads legacy `~/.cometmind/config.toml` only when the JSON settings file is missing.
 
-```toml
-provider = "anthropic"
-model = "claude-sonnet-4-5"
-max_tokens = 8192
-max_steps = 50
-
-[acp]
-command = "opencode"
-args = ["acp"]
-timeout = "30m"
-
-[gateway.discord]
-enabled = false
-bot_token_env = "DISCORD_BOT_TOKEN"
-require_mention = true
+```json
+{
+  "providers": [
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "method": "openai",
+      "enabled": true,
+      "baseURL": "https://api.openai.com/v1",
+      "apiKey": "...",
+      "selectedModel": "gpt-4o",
+      "models": ["gpt-4o"],
+      "enabledModels": ["gpt-4o"]
+    }
+  ],
+  "activeProviderId": "openai",
+  "cometmind": {
+    "maxTokens": 2048,
+    "acp": { "command": "opencode", "args": ["acp"], "timeout": "30m", "interactive": true }
+  }
+}
 ```
 
-Desktop settings are stored in `~/.cometmind/cometline-settings.json` and managed via the Settings UI.
+Manage this file through the Settings UI unless you are intentionally hand-editing local configuration.
 
 ## License
 
