@@ -61,8 +61,15 @@
 	// Tracks the most recently sent user message so we can scroll it near the
 	// top of the viewport once (revealing the assistant avatar/response below).
 	let lastScrolledUserId: string | null = null;
-	// Gap left above the freshly-sent user message when we pin it near the top.
+	// Gap left above the freshly-sent user message. The first turn pins close to
+	// the top; follow-up turns sit a little lower (upper-middle) so the message
+	// reads naturally and leaves the bulk of the screen for the reply below.
 	const USER_SEND_TOP_OFFSET = 16;
+	const USER_SEND_FOLLOWUP_OFFSET = 96;
+	// ChatGPT-style: reserve empty space below the latest turn so a freshly-sent
+	// user message can always scroll up to the top, leaving room for the
+	// assistant avatar/response to appear below it (never clipped).
+	let viewportHeight = $state(0);
 	let expandedToolOutput = $state(new Set<string>());
 	let thinkingOverrides = $state(new Map<string, boolean>());
 	let expandedMemoryInThinking = $state(new Set<string>());
@@ -88,6 +95,16 @@
 	});
 	let firstUserId = $derived(threadItems.find((item) => item.type === 'user')?.id ?? null);
 	let lastUserId = $derived(threadItems.findLast((item) => item.type === 'user')?.id ?? null);
+	let userMessageCount = $derived(
+		threadItems.reduce((count, item) => (item.type === 'user' ? count + 1 : count), 0)
+	);
+	// Reserve a viewport-tall gap below the conversation so the latest user
+	// message can scroll to the top. Only applies once a follow-up turn exists
+	// (the first turn keeps its natural layout). The 160px keeps a little of the
+	// previous turn visible while leaving the bulk of the screen for the reply.
+	let bottomSpacerHeight = $derived(
+		userMessageCount > 1 && viewportHeight > 0 ? Math.max(0, viewportHeight - 160) : 0
+	);
 	let showMessages = $derived(
 		threadItems.length > 0 || (isSessionSynced && awaitingFirstAssistant && !firstUserId)
 	);
@@ -601,6 +618,19 @@
 		};
 	});
 
+	// Track the scroller's visible height so the bottom spacer can reserve a
+	// viewport-tall gap below the latest turn.
+	$effect(() => {
+		if (!scroller) return;
+		viewportHeight = scroller.clientHeight;
+		if (typeof ResizeObserver === 'undefined') return;
+		const observer = new ResizeObserver(() => {
+			if (scroller) viewportHeight = scroller.clientHeight;
+		});
+		observer.observe(scroller);
+		return () => observer.disconnect();
+	});
+
 	// When the user sends a new message, scroll that message close to the top of
 	// the viewport so the assistant avatar and its incoming response are visible
 	// below it. This is the one deliberate auto-scroll in the thread.
@@ -610,10 +640,9 @@
 			`[data-user-item-id="${userId}"]`
 		);
 		if (!target) return;
-		const top = Math.max(
-			0,
-			target.offsetTop - scroller.offsetTop - USER_SEND_TOP_OFFSET
-		);
+		const offset =
+			userMessageCount > 1 ? USER_SEND_FOLLOWUP_OFFSET : USER_SEND_TOP_OFFSET;
+		const top = Math.max(0, target.offsetTop - scroller.offsetTop - offset);
 		scroller.scrollTo({ top, behavior: 'smooth' });
 		updateJumpToBottom();
 	}
@@ -1131,6 +1160,13 @@
 						</div>
 					{/if}
 				{/each}
+				{#if bottomSpacerHeight > 0}
+					<div
+						class="thread-bottom-spacer"
+						style:height="{bottomSpacerHeight}px"
+						aria-hidden="true"
+					></div>
+				{/if}
 			</div>
 		{/if}
 		</div>
@@ -1248,6 +1284,11 @@
 
 	.thread-messages.hydrating {
 		opacity: 0;
+		pointer-events: none;
+	}
+
+	.thread-bottom-spacer {
+		flex: 0 0 auto;
 		pointer-events: none;
 	}
 
