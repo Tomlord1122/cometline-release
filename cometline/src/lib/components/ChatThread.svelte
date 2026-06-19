@@ -53,7 +53,8 @@
 
 	let scroller: HTMLDivElement;
 	let scrollFrame = 0;
-	let followStream = $state(true);
+	let userScrolledUp = $state(false);
+	let showJumpToBottom = $derived(sessionStreaming && userScrolledUp);
 	let suppressScrollPin = false;
 	let wasStreaming = $state(false);
 	const SCROLL_PIN_THRESHOLD = 96;
@@ -263,7 +264,13 @@
 
 	function onThreadScroll() {
 		if (suppressScrollPin || !scroller) return;
-		followStream = isNearBottom(scroller);
+		const nearBottom = isNearBottom(scroller);
+		if (!sessionStreaming) return;
+		if (!nearBottom) {
+			userScrolledUp = true;
+		} else if (userScrolledUp) {
+			userScrolledUp = false;
+		}
 	}
 
 	function pinScrollTop(behavior: ScrollBehavior = 'auto') {
@@ -279,9 +286,14 @@
 		});
 	}
 
+	function jumpToBottom() {
+		userScrolledUp = false;
+		pinScrollTop('auto');
+	}
+
 	$effect(() => {
 		void sessionId;
-		followStream = true;
+		userScrolledUp = false;
 		if (sessionHasCachedTranscript(sessionId)) {
 			isInitialTranscriptPaint = false;
 			return;
@@ -291,11 +303,8 @@
 
 	$effect(() => {
 		const streaming = sessionStreaming;
-		if (streaming && !wasStreaming) {
-			followStream =
-				isInitialTranscriptPaint ||
-				chatStore.isLoading ||
-				(scroller ? isNearBottom(scroller) : followStream);
+		if (!streaming && wasStreaming) {
+			userScrolledUp = false;
 		}
 		wasStreaming = streaming;
 	});
@@ -558,10 +567,30 @@
 			void tick().then(() => {
 				scrollFrame = 0;
 				if (!scroller) return;
-				if (!followStream && !isInitialTranscriptPaint && !chatStore.isLoading) return;
 
-				const instant = isInitialTranscriptPaint || chatStore.isLoading || sessionStreaming;
-				pinScrollTop(instant ? 'auto' : 'smooth');
+				if (isInitialTranscriptPaint || chatStore.isLoading) {
+					pinScrollTop('auto');
+					return;
+				}
+
+				const nearBottom = isNearBottom(scroller);
+
+				if (sessionStreaming) {
+					if (userScrolledUp) {
+						if (nearBottom) userScrolledUp = false;
+						return;
+					}
+					if (nearBottom) {
+						pinScrollTop('auto');
+					} else {
+						userScrolledUp = true;
+					}
+					return;
+				}
+
+				if (nearBottom) {
+					pinScrollTop('smooth');
+				}
 			});
 		});
 		return () => {
@@ -1094,6 +1123,18 @@
 		{/if}
 	</div>
 </div>
+
+{#if showJumpToBottom}
+	<button
+		type="button"
+		class="jump-to-bottom"
+		onclick={jumpToBottom}
+		aria-label="Jump to bottom"
+	>
+		<ChevronDown size={16} />
+		<span>New response</span>
+	</button>
+{/if}
 
 <style>
 	.thinking-memories {
@@ -1854,5 +1895,35 @@
 	.subagent-summary p {
 		max-height: 220px;
 		overflow: auto;
+	}
+
+	.jump-to-bottom {
+		position: absolute;
+		bottom: 24px;
+		left: 50%;
+		transform: translateX(-50%);
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 8px 14px;
+		border: 1px solid var(--border-soft);
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.9);
+		color: var(--text-main);
+		font-size: 12px;
+		font-weight: 600;
+		box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+		cursor: pointer;
+		z-index: 10;
+	}
+
+	.jump-to-bottom:hover {
+		background: rgba(255, 255, 255, 1);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.jump-to-bottom {
+			transition: none;
+		}
 	}
 </style>
