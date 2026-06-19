@@ -274,7 +274,7 @@
 	}
 
 	$effect(() => {
-		sessionId;
+		void sessionId;
 		followStream = true;
 		if (sessionHasCachedTranscript(sessionId)) {
 			isInitialTranscriptPaint = false;

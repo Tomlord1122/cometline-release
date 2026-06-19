@@ -5,6 +5,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const http = require('http');
+// eslint-disable-next-line no-redeclare
 const crypto = require('crypto');
 const {
 	defaultSettings,

@@ -117,12 +117,12 @@
 	}
 
 	$effect(() => {
-		sessionStore.sessions;
+		void sessionStore.sessions;
 		syncSessionFromStore();
 	});
 
 	$effect(() => {
-		sessionId;
+		void sessionId;
 		firstTurnActive = false;
 		firstTurnFlightDone = false;
 		heroFrameExiting = false;

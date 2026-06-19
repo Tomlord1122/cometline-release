@@ -237,7 +237,7 @@
 
 	$effect(() => {
 		if (!autofocus) return;
-		sessionId;
+		void sessionId;
 		void focusInput();
 	});
 

@@ -293,12 +293,11 @@ describe('chatStore session switching', () => {
 		).toBe(false);
 	});
 
-	it('surfaces an error item when streamMessage throws before any output', async () => {
-		vi.mocked(streamMessage).mockImplementation(async function* () {
-			throw new Error('cometsdk: openai: authentication failed (HTTP 401)');
-			// eslint-disable-next-line no-unreachable
-			yield { type: 'done' };
-		});
+		it('surfaces an error item when streamMessage throws before any output', async () => {
+			vi.mocked(streamMessage).mockImplementation(async function* () {
+				throw new Error('cometsdk: openai: authentication failed (HTTP 401)');
+				yield { type: 'done' };
+			});
 
 		chatStore.bindSession('sess-a');
 		await chatStore.send('sess-a', 'hi');

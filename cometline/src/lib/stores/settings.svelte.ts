@@ -11,7 +11,6 @@ import {
 	parseAndNormalizeSettings,
 	runtimeProviders,
 	runtimeSlice,
-	validateSettings,
 	type CometMindSettings,
 	type RuntimeSettingsSlice
 } from '$lib/settings/schema';
@@ -19,7 +18,6 @@ import type { MemorySettings } from '$lib/client/cometmind';
 import type { ProviderConfig, ProviderSettings } from '$lib/types';
 import { defaultKeyboardShortcuts } from '$lib/keyboard-shortcuts';
 import { modelStore } from './model.svelte';
-import { connectionState } from './runtime.svelte';
 import { persistSettings } from '$lib/settings/persist';
 
 const LOCAL_SETTINGS_KEY = 'cometline-settings';

@@ -391,7 +391,7 @@
 		return chip;
 	}
 
-	const mentionQueryChars = /^[a-zA-Z0-9_/\.\-]*$/;
+	const mentionQueryChars = /^[a-zA-Z0-9_/.-]*$/;
 
 	interface ActiveMention {
 		query: string;
