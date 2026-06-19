@@ -43,7 +43,7 @@ type frontmatter struct {
 	} `yaml:"metadata"`
 }
 
-// DefaultRoots returns the CometMind/OpenCode/Claude roots plus workspace-local roots.
+// DefaultRoots returns configured, CometMind, workspace-local, OpenCode, and Claude roots.
 func DefaultRoots(workspaceRoot string, cfg Config) []string {
 	roots := make([]string, 0, 5+len(cfg.Roots))
 	roots = append(roots, cfg.Roots...)
@@ -68,7 +68,13 @@ func Discover(workspaceRoot string, cfg Config) Registry {
 	}
 	reg := Registry{byName: map[string]Skill{}}
 	seenRoot := map[string]bool{}
-	for _, root := range DefaultRoots(workspaceRoot, cfg) {
+	roots := DefaultRoots(workspaceRoot, cfg)
+	if builtinRoot, err := ensureBuiltinSkills(); err != nil {
+		reg.Errors = append(reg.Errors, err.Error())
+	} else if builtinRoot != "" {
+		roots = append(roots, builtinRoot)
+	}
+	for _, root := range roots {
 		expanded, err := expandPath(root)
 		if err != nil {
 			reg.Errors = append(reg.Errors, err.Error())

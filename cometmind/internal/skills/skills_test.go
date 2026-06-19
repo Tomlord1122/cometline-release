@@ -22,15 +22,45 @@ func TestDiscoverFindsSkillsAndDeduplicatesByRootOrder(t *testing.T) {
 
 	reg := Discover("", Config{Enabled: true, Roots: []string{rootA, rootB}})
 
-	if len(reg.Skills) != 2 {
-		t.Fatalf("len(Skills) = %d, want 2; errors=%v", len(reg.Skills), reg.Errors)
-	}
 	alpha, ok := reg.Find("alpha")
 	if !ok {
 		t.Fatal("alpha not found")
 	}
 	if alpha.Description != "first" {
 		t.Fatalf("alpha description = %q, want first", alpha.Description)
+	}
+}
+
+func TestDiscoverIncludesBundledSetupSkill(t *testing.T) {
+	isolatedSkillsHome(t)
+
+	reg := Discover("", Config{Enabled: true})
+
+	skill, ok := reg.Find("setup-cometline")
+	if !ok {
+		t.Fatalf("setup-cometline not found; errors=%v", reg.Errors)
+	}
+	if skill.Internal {
+		t.Fatal("setup-cometline should be visible to users")
+	}
+	if !strings.Contains(reg.PromptIndex(), "setup-cometline") {
+		t.Fatal("prompt index should include setup-cometline")
+	}
+}
+
+func TestDiscoverLetsUserSkillOverrideBundledSkill(t *testing.T) {
+	isolatedSkillsHome(t)
+	root := t.TempDir()
+	writeSkill(t, root, "setup-cometline", "custom setup guidance")
+
+	reg := Discover("", Config{Enabled: true, Roots: []string{root}})
+
+	skill, ok := reg.Find("setup-cometline")
+	if !ok {
+		t.Fatal("setup-cometline not found")
+	}
+	if skill.Description != "custom setup guidance" {
+		t.Fatalf("description = %q, want custom setup guidance", skill.Description)
 	}
 }
 
@@ -46,8 +76,8 @@ func TestDiscoverSkipsMalformedSkills(t *testing.T) {
 	}
 
 	reg := Discover("", Config{Enabled: true, Roots: []string{root}})
-	if len(reg.Skills) != 0 {
-		t.Fatalf("len(Skills) = %d, want 0", len(reg.Skills))
+	if _, ok := reg.Find("bad"); ok {
+		t.Fatal("malformed skill should not be discovered")
 	}
 	if len(reg.Errors) == 0 {
 		t.Fatal("expected parse error")
@@ -65,7 +95,7 @@ func TestSyncMirrorCreatesSymlinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(created) != 1 || created[0] != "alpha" || len(skipped) != 0 {
+	if !containsString(created, "alpha") || len(skipped) != 0 {
 		t.Fatalf("created=%v skipped=%v", created, skipped)
 	}
 	info, err := os.Lstat(filepath.Join(mirror, "alpha"))
@@ -75,6 +105,15 @@ func TestSyncMirrorCreatesSymlinks(t *testing.T) {
 	if info.Mode()&os.ModeSymlink == 0 {
 		t.Fatal("mirror entry is not a symlink")
 	}
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func writeSkill(t *testing.T, root, name, desc string) {
