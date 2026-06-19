@@ -168,6 +168,18 @@ function itemFromTranscript(item: TranscriptItem, index: number): ChatItem {
 			text: '',
 			reasoning: { text: item.text ?? '', pending: false }
 		};
+	if (item.type === 'memory')
+		return {
+			id: `history-${index}`,
+			type: 'memory',
+			memories: (item.memories ?? []).map((mem) => ({
+				id: mem.id,
+				content: mem.content,
+				kind: mem.kind,
+				similarity: mem.similarity,
+				effective_weight: mem.effective_weight
+			}))
+		};
 	return {
 		id: `history-${index}`,
 		type: 'tool',

@@ -182,7 +182,7 @@ export type TranscriptResponse = {
 };
 
 export type TranscriptItem = {
-    type: 'user' | 'reasoning' | 'assistant' | 'tool' | 'system';
+    type: 'user' | 'reasoning' | 'assistant' | 'tool' | 'system' | 'memory';
     text?: string;
     images?: Array<ImageAttachment>;
     tool_name?: string;
@@ -192,6 +192,10 @@ export type TranscriptItem = {
     tool_input?: unknown;
     tool_output?: string;
     tool_error?: boolean;
+    /**
+     * Injected memories surfaced for a memory transcript item.
+     */
+    memories?: Array<MemoryWire>;
 };
 
 export type TokenUsage = {
