@@ -684,7 +684,7 @@
 				/>
 			</div>
 			{#if item.id !== streamingAssistantId}
-				<div class="message-actions">
+				<div class="message-actions m-1">
 					{#if item.memoryUpdates?.length}
 						<span
 							class="message-action memory-hint"
@@ -696,7 +696,7 @@
 					{/if}
 					<button
 						type="button"
-						class="message-action mb-1"
+						class="message-action m-1"
 						class:copied={copiedId === item.id}
 						title="Copy message"
 						aria-label="Copy message"
@@ -764,26 +764,48 @@
 							class:continuation-row={!startsSpeakerRun(index, 'user')}
 							data-user-item-id={item.id}
 						>
-							<div
-								class="bubble user-bubble"
-								class:flight-hidden={item.reveal === false}
-								data-flight-target={item.reveal === false ? 'user' : undefined}
-							>
-								{#if item.images?.length}
-									<div
-										class="user-images"
-										class:text-following={Boolean(item.text)}
-									>
-										{#each item.images as image, imageIndex (`${item.id}-image-${image.id ?? imageIndex}`)}
-											<img
-												src={imageDataURL(image)}
-												alt={image.name ?? 'Attached image'}
-											/>
-										{/each}
-									</div>
-								{/if}
+							<div class="user-stack">
+								<div
+									class="bubble user-bubble"
+									class:flight-hidden={item.reveal === false}
+									data-flight-target={item.reveal === false ? 'user' : undefined}
+								>
+									{#if item.images?.length}
+										<div
+											class="user-images"
+											class:text-following={Boolean(item.text)}
+										>
+											{#each item.images as image, imageIndex (`${item.id}-image-${image.id ?? imageIndex}`)}
+												<img
+													src={imageDataURL(image)}
+													alt={image.name ?? 'Attached image'}
+												/>
+											{/each}
+										</div>
+									{/if}
+									{#if item.text?.trim()}
+										<AssistantMarkdown source={item.text.trim()} mode="user" />
+									{/if}
+								</div>
 								{#if item.text?.trim()}
-									<AssistantMarkdown source={item.text.trim()} mode="user" />
+									<div class="message-actions user-message-actions">
+										<button
+											type="button"
+											class="message-action m-1"
+											class:copied={copiedId === item.id}
+											title="Copy message"
+											aria-label="Copy message"
+											onclick={() => copyMessage(item.id, item.text.trim())}
+										>
+											{#if copiedId === item.id}
+												<Check size={13} />
+												<span>Copied</span>
+											{:else}
+												<Copy size={13} />
+												<span>Copy</span>
+											{/if}
+										</button>
+									</div>
 								{/if}
 							</div>
 						</div>
@@ -947,7 +969,7 @@
 									{#if subagentExpanded(item.id)}
 										{@const visibleProgress = subagentVisibleProgress(item)}
 										<div
-											class="fold-body subagent-body mt-1 mb-1"
+											class="fold-body subagent-body m-1"
 											transition:slide={FOLD_IN}
 										>
 											<p class="subagent-purpose">{item.purpose}</p>
@@ -1221,6 +1243,14 @@
 
 	.user-row {
 		justify-content: flex-end;
+	}
+
+	.user-stack {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		max-width: var(--chat-content-column);
+		min-width: 0;
 	}
 
 	.assistant-row,
@@ -1508,10 +1538,15 @@
 		transition: opacity var(--duration-fast) var(--ease-smooth);
 	}
 
-	/* Reveal on hover/focus of the surrounding assistant stack. */
+	/* Reveal on hover/focus of the surrounding message stack. */
 	.assistant-stack:hover .message-actions,
+	.user-stack:hover .message-actions,
 	.message-actions:focus-within {
 		opacity: 1;
+	}
+
+	.user-message-actions {
+		justify-content: flex-end;
 	}
 
 	.message-action {
