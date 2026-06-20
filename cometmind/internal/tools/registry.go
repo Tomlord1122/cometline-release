@@ -31,6 +31,8 @@ func NewRegistry(workspaceRoot string, opts ...RegistryOptions) *Registry {
 	add(ReadFile{Workspace: ws})
 	add(WriteFile{Workspace: ws})
 	add(ListDir{Workspace: ws})
+	add(Glob{Workspace: ws})
+	add(Grep{Workspace: ws})
 	add(RunCommand{Workspace: ws})
 	add(WebFetch{})
 	if opt.Skills != nil {

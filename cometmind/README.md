@@ -73,6 +73,8 @@ Registered per workspace in `internal/tools/registry.go`:
 | `read_file` | Read UTF-8 text under the workspace root |
 | `write_file` | Create or overwrite a file; mkdir parents |
 | `list_dir` | Non-recursive directory listing |
+| `glob` | Find files by glob pattern (`**` supported); gitignore-aware, capped at 100 |
+| `grep` | Search file contents (ripgrep when available); gitignore-aware |
 | `run_command` | Shell in workspace cwd (120s timeout, denylist for dangerous commands) |
 | `web_fetch` | HTTP(S) fetch with HTML→text; SSRF protection |
 | `load_skill` | Load full `SKILL.md` for a discovered skill |
