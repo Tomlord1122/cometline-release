@@ -34,7 +34,6 @@
 <div
 	class="session-row-wrap"
 	class:selected
-	class:pinned={session.pinned}
 	role="group"
 	oncontextmenu={handleContextMenu}
 >
@@ -145,14 +144,12 @@
 		cursor: pointer;
 	}
 
-	.session-row-wrap.pinned .pin-session,
 	.session-row-wrap:hover .session-actions button,
 	.session-row-wrap:focus-within .session-actions button {
 		opacity: 1;
 	}
 
 	.pin-session.active {
-		opacity: 1;
 		color: var(--pinned-group-color, #b45309);
 	}
 
