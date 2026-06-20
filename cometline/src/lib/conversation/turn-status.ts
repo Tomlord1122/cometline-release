@@ -9,7 +9,7 @@ export type TurnStatusPhase =
 export const TURN_STATUS_LABELS: Record<TurnStatusPhase, string> = {
 	retrieving_memories: 'Retrieving relevant memories…',
 	compacting_context: 'Summarizing earlier context…',
-	contacting_model: 'Contacting model…',
+	contacting_model: 'Thinking…',
 	composing_response: 'Composing response…',
 	running_tools: 'Running tools…',
 	continuing: 'Continuing…'

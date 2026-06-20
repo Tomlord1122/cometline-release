@@ -511,7 +511,13 @@
 		{/if}
 	</div>
 
-	<SettingsMCPPanel bind:this={mcpPanel} bind:cometmind />
+	<SettingsMCPPanel
+		bind:this={mcpPanel}
+		mcp={cometmind.mcp}
+		onMcpChange={(next) => {
+			cometmind = { ...cometmind, mcp: next };
+		}}
+	/>
 
 	<div class="settings-section">
 		<div class="settings-section-heading">

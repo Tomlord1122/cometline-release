@@ -257,12 +257,12 @@ export function syncSkills(workspacePath = ''): Promise<SyncSkillsResponse> {
 
 export async function listMcpServers(): Promise<McpServerStatus[]> {
 	const { data } = await listMcpServersApi({ throwOnError: true });
-	return data.servers;
+	return data.servers ?? [];
 }
 
 export async function listMcpTools(): Promise<McpToolInfo[]> {
 	const { data } = await listMcpToolsApi({ throwOnError: true });
-	return data.tools;
+	return data.tools ?? [];
 }
 
 export async function testMcpServer(serverId: string): Promise<McpTestResult> {

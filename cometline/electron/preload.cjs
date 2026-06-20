@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 	startCodexLogin: () => ipcRenderer.invoke('cometline:start-codex-login'),
 	getMcpOAuthStatus: (serverId) => ipcRenderer.invoke('cometline:get-mcp-oauth-status', serverId),
 	startMcpOAuth: (payload) => ipcRenderer.invoke('cometline:start-mcp-oauth', payload),
+	readCursorMcpConfig: () => ipcRenderer.invoke('cometline:read-cursor-mcp-config'),
 	getDiscordGatewayStatus: () => ipcRenderer.invoke('cometline:get-discord-gateway-status'),
 	setDiscordGatewayEnabled: (enabled) =>
 		ipcRenderer.invoke('cometline:set-discord-gateway-enabled', enabled),

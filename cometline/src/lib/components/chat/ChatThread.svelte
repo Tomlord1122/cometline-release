@@ -6,7 +6,8 @@
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { chatDebug, chatDebugEnabled, summarizeChatItem } from '$lib/debug/chat';
 	import AssistantMarkdown from '$lib/components/AssistantMarkdown.svelte';
-	import ThinkingIndicator from '$lib/components/ThinkingIndicator.svelte';
+	import { assistantThinkingWaitStatus } from '$lib/conversation/assistant-wait-status';
+	import AssistantThinkingWait from '$lib/components/chat/AssistantThinkingWait.svelte';
 	import ThinkingBlock from '$lib/components/chat/ThinkingBlock.svelte';
 	import ToolFoldPanel from '$lib/components/chat/ToolFoldPanel.svelte';
 	import SubagentPanel from '$lib/components/chat/SubagentPanel.svelte';
@@ -23,7 +24,6 @@
 		type InjectedMemory,
 		type TimelineEntry
 	} from '$lib/conversation/thinking-attribution';
-	import { turnStatusLabel } from '$lib/conversation/turn-status';
 	import {
 		anyReasoningPending,
 		hasReasoning,
@@ -290,7 +290,11 @@
 		const hasTimedPending = chatStore.items.some(
 			(item) =>
 				(item.type === 'tool' && item.pending) ||
-				(item.type === 'assistant' && item.pending && item.pendingStartedAt != null)
+				(item.type === 'assistant' &&
+					item.pendingStartedAt != null &&
+					sessionStreaming &&
+					item.id === streamingAssistantId &&
+					!item.text?.trim())
 		);
 		if (!hasTimedPending) return;
 		const timer = setInterval(() => {
@@ -340,31 +344,17 @@
 			: `${item.toolName} → ${status}`;
 	}
 
-	let heroGlowColor = $derived(settingsStore.settings.appearance.heroComposer.glowColor);
-
 	function showAssistantActivitySpinner(item: Extract<ChatItem, { type: 'assistant' }>) {
-		return sessionStreaming && item.id === streamingAssistantId;
+		return showAssistantPending(item);
 	}
 
-	function assistantWaitSeconds(item: Extract<ChatItem, { type: 'assistant' }>) {
-		if (item.pendingStartedAt == null) return 0;
+	function assistantWaitSeconds(item: Extract<ChatItem, { type: 'assistant' }> | undefined) {
+		if (!item || item.pendingStartedAt == null) return 0;
 		return Math.max(0, Math.floor((now - item.pendingStartedAt) / 1000));
 	}
 
-	function assistantActivityMessage(item: Extract<ChatItem, { type: 'assistant' }> | undefined) {
-		const status = turnStatusLabel(item?.activityPhase, item?.activityMessage);
-		if (status) return status;
-		const seconds = item ? assistantWaitSeconds(item) : 0;
-		if (seconds >= 90) {
-			return `Still waiting for the provider after ${seconds}s. This request may time out soon.`;
-		}
-		if (seconds >= 30) {
-			return `The model has not started streaming after ${seconds}s. The provider may be queued or slow.`;
-		}
-		if (seconds >= 8) {
-			return `Still waiting for the model (${seconds}s).`;
-		}
-		return 'Contacting model...';
+	function assistantThinkingWait(item: Extract<ChatItem, { type: 'assistant' }> | undefined) {
+		return assistantThinkingWaitStatus(item?.activityPhase, item?.activityMessage, assistantWaitSeconds(item));
 	}
 
 	function hasVisibleThinkingBlock(itemId: string) {
@@ -578,10 +568,8 @@
 </script>
 
 {#snippet assistantActivitySpinner(item?: Extract<ChatItem, { type: 'assistant' }>)}
-	<div class="assistant-activity-spinner">
-		<ThinkingIndicator color={heroGlowColor} size={24} label="Assistant is responding" />
-		<span>{assistantActivityMessage(item)}</span>
-	</div>
+	{@const wait = assistantThinkingWait(item)}
+	<AssistantThinkingWait label={wait.label} detail={wait.detail} />
 {/snippet}
 
 {#snippet assistantStack(item: Extract<ChatItem, { type: 'assistant' }>)}
@@ -1028,18 +1016,6 @@
 		min-width: 0;
 		flex: 0 1 auto;
 		align-items: flex-start;
-	}
-
-	.assistant-activity-spinner {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		padding: 8px 2px 2px;
-	}
-
-	.assistant-activity-spinner span {
-		font-size: 12px;
-		color: var(--text-soft, rgba(0, 0, 0, 0.55));
 	}
 
 	.message-actions {

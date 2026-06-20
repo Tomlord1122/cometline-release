@@ -6,10 +6,10 @@
 		formatIdList,
 		parseIdList,
 		type CometMindMCPSettings,
-		type CometMindSettings,
 		type MCPServerConfig,
 		type MCPTransport
 	} from '$lib/cometmind-settings';
+	import { mergeImportedMcpServers, parseCursorMcpJson } from '$lib/settings/cursor-mcp-import';
 	import {
 		listMcpServers,
 		listMcpTools,
@@ -18,10 +18,16 @@
 		type McpServerStatus,
 		type McpToolInfo
 	} from '$lib/client/cometmind';
-	import { ChevronDown, ChevronRight, Plus, RefreshCw, Trash2 } from '@lucide/svelte';
+	import { ChevronDown, ChevronRight, Download, Plus, RefreshCw, Trash2 } from '@lucide/svelte';
 	import { onMount } from 'svelte';
 
-	let { cometmind = $bindable() }: { cometmind: CometMindSettings } = $props();
+	let {
+		mcp,
+		onMcpChange
+	}: {
+		mcp: CometMindMCPSettings;
+		onMcpChange: (mcp: CometMindMCPSettings) => void;
+	} = $props();
 
 	const transportOptions: { value: MCPTransport; label: string; hint: string }[] = [
 		{ value: 'stdio', label: 'Local command', hint: 'Run npx, node, uvx, or another CLI on this machine.' },
@@ -42,13 +48,17 @@
 	let expandedServerId = $state<string | null>(null);
 	let advancedOpen = $state<Record<string, boolean>>({});
 
+	function setTextField(map: Record<string, string>, id: string, value: string) {
+		return { ...map, [id]: value };
+	}
+
 	function syncTextFieldsFromSettings() {
 		const nextEnv: Record<string, string> = {};
 		const nextHeaders: Record<string, string> = {};
 		const nextArgs: Record<string, string> = {};
 		const nextAllowed: Record<string, string> = {};
 		const nextScopes: Record<string, string> = {};
-		for (const server of cometmind.mcp.servers) {
+		for (const server of mcp.servers ?? []) {
 			nextEnv[server.id] = formatEnv(server.env);
 			nextHeaders[server.id] = formatEnv(server.headers);
 			nextArgs[server.id] = (server.args ?? []).join(' ');
@@ -62,8 +72,12 @@
 		scopesTexts = nextScopes;
 	}
 
-	onMount(() => {
+	$effect(() => {
+		(mcp.servers ?? []).map((server) => server.id).join('\0');
 		syncTextFieldsFromSettings();
+	});
+
+	onMount(() => {
 		void refreshMcpRuntime();
 	});
 
@@ -89,28 +103,22 @@
 	}
 
 	function updateMcp(patch: Partial<CometMindMCPSettings>) {
-		cometmind = {
-			...cometmind,
-			mcp: {
-				...cometmind.mcp,
-				...patch
-			}
-		};
+		onMcpChange({ ...mcp, ...patch });
 	}
 
 	function updateServer(serverId: string, patch: Partial<MCPServerConfig>) {
 		updateMcp({
-			servers: cometmind.mcp.servers.map((server) =>
+			servers: mcp.servers.map((server) =>
 				server.id === serverId ? { ...server, ...patch } : server
 			)
 		});
 	}
 
 	function addServer() {
-		const id = `server-${cometmind.mcp.servers.length + 1}`;
+		const id = `server-${mcp.servers.length + 1}`;
 		const server: MCPServerConfig = {
 			id,
-			name: `MCP Server ${cometmind.mcp.servers.length + 1}`,
+			name: `MCP Server ${mcp.servers.length + 1}`,
 			enabled: true,
 			transport: 'stdio',
 			command: '',
@@ -119,15 +127,48 @@
 			url: '',
 			headers: {}
 		};
-		updateMcp({ enabled: true, servers: [...cometmind.mcp.servers, server] });
-		syncTextFieldsFromSettings();
+		updateMcp({ enabled: true, servers: [...mcp.servers, server] });
 		expandedServerId = id;
 	}
 
+	async function importFromCursor() {
+		if (!window.electronAPI?.readCursorMcpConfig) {
+			mcpStatus = 'Import from Cursor is only available in the desktop app.';
+			return;
+		}
+		mcpBusy = true;
+		mcpStatus = '';
+		try {
+			const result = await window.electronAPI.readCursorMcpConfig();
+			if (!result.ok) {
+				mcpStatus = result.error;
+				return;
+			}
+			const existing = mcp.servers ?? [];
+			const imported = parseCursorMcpJson(
+				result.config,
+				existing.map((server) => server.id)
+			);
+			if (imported.length === 0) {
+				mcpStatus = 'No MCP servers found in Cursor config.';
+				return;
+			}
+			updateMcp({
+				enabled: true,
+				servers: mergeImportedMcpServers(existing, imported)
+			});
+			expandedServerId = imported[0]?.id ?? expandedServerId;
+			mcpStatus = `Imported ${imported.length} server(s) from Cursor. Save settings to apply.`;
+		} catch (err) {
+			mcpStatus = err instanceof Error ? err.message : 'Failed to import from Cursor';
+		} finally {
+			mcpBusy = false;
+		}
+	}
+
 	function removeServer(serverId: string) {
-		updateMcp({ servers: cometmind.mcp.servers.filter((server) => server.id !== serverId) });
+		updateMcp({ servers: mcp.servers.filter((server) => server.id !== serverId) });
 		if (expandedServerId === serverId) expandedServerId = null;
-		syncTextFieldsFromSettings();
 	}
 
 	function toggleExpanded(serverId: string) {
@@ -143,11 +184,11 @@
 	}
 
 	function toolsForServer(serverId: string): McpToolInfo[] {
-		return toolPreview.filter((tool) => tool.server_id === serverId);
+		return (toolPreview ?? []).filter((tool) => tool.server_id === serverId);
 	}
 
 	function statusLabel(status: McpServerStatus | undefined, server: MCPServerConfig): string {
-		if (!cometmind.mcp.enabled) return 'Off';
+		if (!mcp.enabled) return 'Off';
 		if (!server.enabled) return 'Disabled';
 		if (!status) return 'Unknown';
 		return status.status;
@@ -179,10 +220,10 @@
 		mcpStatus = '';
 		try {
 			const [servers, tools] = await Promise.all([listMcpServers(), listMcpTools()]);
-			serverStatuses = servers;
-			toolPreview = tools;
+			serverStatuses = servers ?? [];
+			toolPreview = tools ?? [];
 			const oauthEntries = await Promise.all(
-				cometmind.mcp.servers.map(async (server) => {
+				mcp.servers.map(async (server) => {
 					const status = await window.electronAPI?.getMcpOAuthStatus?.(server.id);
 					return [server.id, Boolean(status?.authenticated)] as const;
 				})
@@ -256,32 +297,29 @@
 	}
 
 	export function syncFields() {
-		cometmind = {
-			...cometmind,
-			mcp: {
-				...cometmind.mcp,
-				servers: cometmind.mcp.servers.map((server) => ({
-					...server,
-					args: (argsTexts[server.id] ?? '')
-						.split(/\s+/)
-						.map((part) => part.trim())
-						.filter(Boolean),
-					env: parseEnv(envTexts[server.id] ?? ''),
-					headers: parseEnv(headerTexts[server.id] ?? ''),
-					allowedTools: parseIdList(allowedToolsTexts[server.id] ?? ''),
-					oauth: server.oauth
-						? {
-								...server.oauth,
-								scopes: parseIdList(scopesTexts[server.id] ?? '')
-							}
-						: undefined
-				}))
-			}
-		};
+		onMcpChange({
+			...mcp,
+			servers: mcp.servers.map((server) => ({
+				...server,
+				args: (argsTexts[server.id] ?? '')
+					.split(/\s+/)
+					.map((part) => part.trim())
+					.filter(Boolean),
+				env: parseEnv(envTexts[server.id] ?? ''),
+				headers: parseEnv(headerTexts[server.id] ?? ''),
+				allowedTools: parseIdList(allowedToolsTexts[server.id] ?? ''),
+				oauth: server.oauth
+					? {
+							...server.oauth,
+							scopes: parseIdList(scopesTexts[server.id] ?? '')
+						}
+					: undefined
+			}))
+		});
 	}
 
 	function syncServerLists(serverId: string) {
-		const current = cometmind.mcp.servers.find((s) => s.id === serverId);
+		const current = mcp.servers.find((s) => s.id === serverId);
 		updateServer(serverId, {
 			args: (argsTexts[serverId] ?? '')
 				.split(/\s+/)
@@ -313,7 +351,8 @@
 	<SettingsToggle
 		label="Use MCP tools in chat"
 		description="Discover tools from configured servers when the sidecar starts."
-		bind:checked={cometmind.mcp.enabled}
+		checked={mcp.enabled}
+		onchange={(enabled) => updateMcp({ enabled })}
 	/>
 
 	{#if mcpStatus}
@@ -327,6 +366,10 @@
 			<Plus size={14} strokeWidth={2} />
 			Add server
 		</SettingsButton>
+		<SettingsButton variant="secondary" disabled={mcpBusy} onclick={importFromCursor}>
+			<Download size={14} strokeWidth={2} />
+			Import from Cursor
+		</SettingsButton>
 		<SettingsButton variant="secondary" disabled={mcpBusy} onclick={refreshMcpRuntime}>
 			<RefreshCw size={14} strokeWidth={2} class={mcpBusy ? 'spin' : ''} />
 			{mcpBusy ? 'Refreshing…' : 'Refresh status'}
@@ -336,13 +379,13 @@
 	<div class="mcp-server-list">
 		<div class="mcp-server-list-header">
 			<span>Configured servers</span>
-			<strong>{cometmind.mcp.servers.length}</strong>
+			<strong>{mcp.servers.length}</strong>
 		</div>
 
-		{#if cometmind.mcp.servers.length === 0}
+		{#if mcp.servers.length === 0}
 			<p class="settings-field-hint mcp-list-empty">No servers configured yet.</p>
 		{:else}
-			{#each cometmind.mcp.servers as server (server.id)}
+			{#each mcp.servers as server (server.id)}
 				{@const status = statusFor(server.id)}
 				{@const expanded = expandedServerId === server.id}
 				<div class="mcp-server-item" class:expanded>
@@ -442,7 +485,10 @@
 								<SettingsField label="Arguments" note="Space-separated command arguments.">
 									<input
 										type="text"
-										bind:value={argsTexts[server.id]}
+										value={argsTexts[server.id] ?? ''}
+										oninput={(e) => {
+											argsTexts = setTextField(argsTexts, server.id, e.currentTarget.value);
+										}}
 										onchange={() => syncServerLists(server.id)}
 										onblur={() => syncServerLists(server.id)}
 										placeholder="-y @modelcontextprotocol/server-filesystem /path/to/dir"
@@ -521,7 +567,10 @@
 									{#if server.transport === 'stdio'}
 										<SettingsField label="Environment variables" note="One KEY=value per line.">
 											<textarea
-												bind:value={envTexts[server.id]}
+												value={envTexts[server.id] ?? ''}
+												oninput={(e) => {
+													envTexts = setTextField(envTexts, server.id, e.currentTarget.value);
+												}}
 												onchange={() => syncServerLists(server.id)}
 												onblur={() => syncServerLists(server.id)}
 												rows="3"
@@ -531,7 +580,10 @@
 									{:else}
 										<SettingsField label="Headers" note="One KEY=value per line. Use for API keys or Bearer tokens.">
 											<textarea
-												bind:value={headerTexts[server.id]}
+												value={headerTexts[server.id] ?? ''}
+												oninput={(e) => {
+													headerTexts = setTextField(headerTexts, server.id, e.currentTarget.value);
+												}}
 												onchange={() => syncServerLists(server.id)}
 												onblur={() => syncServerLists(server.id)}
 												rows="3"
@@ -588,7 +640,10 @@
 											</SettingsField>
 											<SettingsField label="Scopes" note="One scope per line.">
 												<textarea
-													bind:value={scopesTexts[server.id]}
+													value={scopesTexts[server.id] ?? ''}
+													oninput={(e) => {
+														scopesTexts = setTextField(scopesTexts, server.id, e.currentTarget.value);
+													}}
 													onchange={() => syncServerLists(server.id)}
 													onblur={() => syncServerLists(server.id)}
 													rows="2"
@@ -615,7 +670,14 @@
 										note="Optional filter. Leave empty to expose every tool from this server."
 									>
 										<textarea
-											bind:value={allowedToolsTexts[server.id]}
+											value={allowedToolsTexts[server.id] ?? ''}
+											oninput={(e) => {
+												allowedToolsTexts = setTextField(
+													allowedToolsTexts,
+													server.id,
+													e.currentTarget.value
+												);
+											}}
 											onchange={() => syncServerLists(server.id)}
 											onblur={() => syncServerLists(server.id)}
 											rows="2"
@@ -632,9 +694,9 @@
 		{/if}
 	</div>
 
-	{#if toolPreview.length > 0}
+	{#if (toolPreview ?? []).length > 0}
 		<p class="settings-field-hint mcp-footnote">
-			{toolPreview.length} tool(s) registered across all servers. Save settings to apply changes.
+			{(toolPreview ?? []).length} tool(s) registered across all servers. Save settings to apply changes.
 		</p>
 	{/if}
 </div>

@@ -225,6 +225,10 @@ declare global {
 					tokenUrl: string;
 				};
 			}) => Promise<{ started: boolean; message: string }>;
+			readCursorMcpConfig?: () => Promise<
+				| { ok: true; path: string; config: unknown }
+				| { ok: false; error: string }
+			>;
 			getDiscordGatewayStatus?: () => Promise<{ running: boolean; enabled: boolean }>;
 			setDiscordGatewayEnabled?: (
 				enabled: boolean

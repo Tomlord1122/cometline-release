@@ -1847,6 +1847,25 @@ function getMcpOAuthStatus(serverId) {
 	}
 }
 
+function readCursorMcpConfig() {
+	const filePath = path.join(os.homedir(), '.cursor', 'mcp.json');
+	if (!fs.existsSync(filePath)) {
+		return {
+			ok: false,
+			error: 'Cursor MCP config not found at ~/.cursor/mcp.json'
+		};
+	}
+	try {
+		const raw = fs.readFileSync(filePath, 'utf8');
+		return { ok: true, path: filePath, config: JSON.parse(raw) };
+	} catch (err) {
+		return {
+			ok: false,
+			error: err instanceof Error ? err.message : 'Failed to read Cursor MCP config'
+		};
+	}
+}
+
 function writeMcpOAuthToken(serverId, tokens) {
 	const authPath = mcpOAuthTokenPath(serverId);
 	fs.mkdirSync(path.dirname(authPath), { recursive: true, mode: 0o700 });
@@ -2226,6 +2245,8 @@ ipcMain.handle('cometline:get-mcp-oauth-status', (_event, serverId) =>
 );
 
 ipcMain.handle('cometline:start-mcp-oauth', (_event, payload) => startMcpOAuth(payload));
+
+ipcMain.handle('cometline:read-cursor-mcp-config', () => readCursorMcpConfig());
 
 ipcMain.handle('cometline:fetch-provider-models', async (_event, config) => {
 	return fetchProviderModels(config);
