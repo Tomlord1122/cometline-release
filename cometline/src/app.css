@@ -104,6 +104,10 @@
 	--color-text-soft: var(--text-soft);
 	--color-border-soft: var(--border-soft);
 	--color-accent: var(--accent);
+	--color-pane-focus-border: var(--pane-focus-border);
+	--color-intro-bg: var(--intro-bg);
+	--color-intro-ink: var(--intro-ink);
+	--color-intro-blue: var(--intro-blue);
 
 	/* Effects */
 	--shadow-card: var(--shadow-card);
@@ -115,12 +119,19 @@
 	--spacing-composer: var(--composer-width);
 	--spacing-titlebar: var(--titlebar-height);
 	--spacing-traffic-light-gutter: var(--traffic-light-gutter);
+	--spacing-chat-gutter: var(--chat-gutter);
+	--spacing-chat-thread: var(--chat-thread-width);
+	--spacing-chat-content-max: var(--chat-content-max);
+	--spacing-chat-avatar: var(--chat-avatar-size);
+	--spacing-chat-row-gap: var(--chat-row-gap);
 
 	/* Motion */
 	--ease-smooth: var(--ease-smooth);
+	--ease-intro: var(--ease-intro);
 	--duration-flight: var(--duration-flight);
 	--duration-fast: var(--duration-fast);
 	--duration-medium: var(--duration-medium);
+	--duration-session-switch: var(--duration-session-switch);
 }
 
 html,
@@ -175,7 +186,14 @@ select {
 
 /* Shared spinner (replaces duplicated per-component definitions). */
 .spin {
+	display: inline-grid;
+	place-items: center;
 	animation: spin 0.8s linear infinite;
+}
+
+.spin.small {
+	width: 14px;
+	height: 14px;
 }
 
 @keyframes spin {
