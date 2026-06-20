@@ -52,8 +52,37 @@ export function translateStyle(from: DOMRect, to: DOMRect): string {
 		`--flight-y:${dy}px`,
 		`left:${from.left}px`,
 		`top:${from.top}px`,
-		`width:${to.width}px`
+		`width:${to.width}px`,
+		`height:${to.height}px`,
+		`box-sizing:border-box`
 	].join(';');
+}
+
+const LAYOUT_STABLE_FRAMES = 2;
+const MAX_LAYOUT_WAIT_FRAMES = 24;
+
+/** Wait until `.user-stack` width stops changing, then measure the hidden bubble. */
+export async function measureStableUserBubble(target: HTMLElement): Promise<DOMRect> {
+	const stack = target.closest('.user-stack');
+	let prevWidth = -1;
+	let stableFrames = 0;
+
+	for (let frame = 0; frame < MAX_LAYOUT_WAIT_FRAMES; frame++) {
+		await afterPaint();
+		const stackWidth =
+			stack instanceof HTMLElement ? stack.getBoundingClientRect().width : 0;
+		if (stackWidth > 0 && stackWidth === prevWidth) {
+			stableFrames++;
+			if (stableFrames >= LAYOUT_STABLE_FRAMES) {
+				return target.getBoundingClientRect();
+			}
+		} else {
+			stableFrames = 0;
+			prevWidth = stackWidth;
+		}
+	}
+
+	return target.getBoundingClientRect();
 }
 
 /** Pull the flight origin closer to the target so the bubble does not slide as far. */
@@ -195,7 +224,7 @@ export async function flyUserBubble(params: FlyUserBubbleParams): Promise<boolea
 		return false;
 	}
 
-	const userTo = userTarget.getBoundingClientRect();
+	const userTo = await measureStableUserBubble(userTarget);
 	let fromRect: DOMRect | null = null;
 
 	if (origin === 'above-composer') {

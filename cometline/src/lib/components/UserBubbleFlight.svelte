@@ -93,9 +93,9 @@
 </script>
 
 {#if showUserFlight}
-	<div class="flight-particle user-flight" style={userFlightStyle}>
+	<div class="flight-particle bubble user-bubble" style={userFlightStyle}>
 		{#if userFlightImages?.length}
-			<div class="flight-images" class:text-following={Boolean(userFlightText)}>
+			<div class="user-images" class:text-following={Boolean(userFlightText)}>
 				{#each userFlightImages as image, index (`${image.id ?? index}`)}
 					<img src={imageDataURL(image)} alt={image.name ?? 'Attached image'} />
 				{/each}
@@ -113,45 +113,9 @@
 		z-index: 40;
 		pointer-events: none;
 		transform-origin: top left;
-	}
-
-	.user-flight {
-		width: fit-content;
-		max-width: var(--chat-content-column, min(360px, 72vw));
-		padding: 11px 14px;
-		border-radius: 18px 18px 6px 18px;
-		background: var(--user-bubble-bg);
-		color: white;
-		font-size: 14px;
-		line-height: 1.55;
-		/* The inner AssistantMarkdown renders chips + preserves text newlines via
-		 * `.markdown.user-text { white-space: pre-wrap }`. Keep the wrapper at
-		 * `normal` so template whitespace doesn't inflate the particle (matches
-		 * the final `.user-bubble`), so there's no visible swap on handoff. */
-		white-space: normal;
-		word-break: normal;
+		overflow: hidden;
 		box-shadow: 0 16px 40px var(--user-bubble-shadow);
 		animation: user-bubble-flight var(--duration-flight) var(--ease-smooth) forwards;
-	}
-
-	.flight-images {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
-		gap: 8px;
-		max-width: min(360px, 72vw);
-	}
-
-	.flight-images.text-following {
-		margin-bottom: 8px;
-	}
-
-	.flight-images img {
-		width: 100%;
-		max-height: 220px;
-		object-fit: cover;
-		border-radius: 12px;
-		border: 1px solid rgba(255, 255, 255, 0.35);
-		display: block;
 	}
 
 	@keyframes user-bubble-flight {

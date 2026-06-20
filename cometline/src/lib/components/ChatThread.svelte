@@ -1190,10 +1190,6 @@
 		.thread-inner {
 			gap: 16px;
 		}
-
-		.bubble {
-			font-size: 15px;
-		}
 	}
 
 	@media (min-width: 1024px) {
@@ -1203,11 +1199,6 @@
 
 		.thread-inner {
 			gap: 18px;
-		}
-
-		.bubble {
-			font-size: 15px;
-			padding: 12px 16px;
 		}
 	}
 
@@ -1441,62 +1432,6 @@
 		object-fit: cover;
 		border-radius: 50%;
 		display: block;
-	}
-
-	.bubble {
-		max-width: 100%;
-		border-radius: 18px;
-		padding: 11px 14px;
-		font-size: 14px;
-		line-height: 1.55;
-		white-space: pre-wrap;
-		word-break: break-word;
-	}
-
-	.user-bubble {
-		width: fit-content;
-		max-width: 100%;
-		word-break: normal;
-		background: var(--user-bubble-bg);
-		color: white;
-		border-bottom-right-radius: 6px;
-		box-shadow: 0 8px 20px var(--user-bubble-shadow);
-		/* The bubble wraps optional image + text children, so the template
-		 * introduces whitespace-only text nodes between them. Collapse that
-		 * whitespace here; the actual user text keeps its newlines via
-		 * `.markdown.user-text { white-space: pre-wrap }` inside AssistantMarkdown.
-		 * Without this, `pre-wrap` would render the template indentation as
-		 * blank lines and inflate short bubbles (e.g. "hi"). */
-		white-space: normal;
-	}
-
-	.user-images {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
-		gap: 8px;
-		max-width: min(360px, 72vw);
-	}
-
-	.user-images.text-following {
-		margin-bottom: 8px;
-	}
-
-	.user-images img {
-		width: 100%;
-		max-height: 220px;
-		object-fit: cover;
-		border-radius: 12px;
-		border: 1px solid rgba(255, 255, 255, 0.35);
-		display: block;
-	}
-
-	.assistant-bubble {
-		width: fit-content;
-		max-width: 100%;
-		background: rgba(255, 255, 255, 0.82);
-		border: 1px solid var(--border-soft);
-		border-bottom-left-radius: 6px;
-		color: var(--text-main);
 	}
 
 	.assistant-activity-spinner {
