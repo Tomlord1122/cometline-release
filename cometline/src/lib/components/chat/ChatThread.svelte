@@ -598,7 +598,8 @@
 				{memoryInThinkingExpanded}
 				{toggleMemoryInThinking}
 				{thinkingActive}
-				showThinkingSpinner={!(item.id === streamingAssistantId && sessionStreaming)}
+				showThinkingSpinner={!item.text.trim() &&
+					!(item.id === streamingAssistantId && sessionStreaming)}
 				{toolOutputExpanded}
 				{toggleToolOutput}
 				{subagentExpanded}
@@ -615,6 +616,7 @@
 						expanded={thinkingExpanded(segmentKey, entry.pending)}
 						memoryExpanded={memoryInThinkingExpanded(segmentKey)}
 						showSpinner={thinkingActive(entry.pending) &&
+							!item.text.trim() &&
 							!(item.id === streamingAssistantId && sessionStreaming)}
 						onToggle={() => toggleThinking(segmentKey, entry.pending)}
 						onToggleMemory={() => toggleMemoryInThinking(segmentKey)}

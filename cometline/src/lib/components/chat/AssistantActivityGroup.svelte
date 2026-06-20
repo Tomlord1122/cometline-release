@@ -100,7 +100,7 @@
 				<Terminal size={13} />
 			{/if}
 			<span>{parentLabel(firstEntry)}</span>
-			{#if firstEntry.kind === 'reasoning' && showThinkingSpinner}
+			{#if firstEntry.kind === 'reasoning' && showThinkingSpinner && thinkingActive(firstEntry.pending)}
 				<LoaderCircle size={12} class="spin" />
 			{:else if firstEntry.kind === 'tool'}
 				{#if firstEntry.tool.pending}
