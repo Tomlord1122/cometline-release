@@ -609,13 +609,16 @@ function createChatStore() {
 		addUserToSession(sessionID, text, images, reveal);
 	}
 
-	function stageUser(text: string, images?: ImageAttachment[]) {
-		addUser(text, images, false);
+	function stageUserForSession(
+		targetSessionID: string,
+		text: string,
+		images?: ImageAttachment[]
+	) {
+		addUserToSession(targetSessionID, text, images, false);
 	}
 
-	function revealStagedUser() {
-		if (!sessionID) return;
-		const current = getCachedItems(sessionID);
+	function revealStagedUserForSession(targetSessionID: string) {
+		const current = getCachedItems(targetSessionID);
 		let revealIndex = -1;
 		for (let i = current.length - 1; i >= 0; i--) {
 			const item = current[i];
@@ -626,11 +629,21 @@ function createChatStore() {
 		}
 		if (revealIndex < 0) return;
 		writeSessionItems(
-			sessionID,
+			targetSessionID,
 			current.map((item, i) =>
 				i === revealIndex && item.type === 'user' ? { ...item, reveal: true } : item
 			)
 		);
+	}
+
+	function stageUser(text: string, images?: ImageAttachment[]) {
+		if (!sessionID) return;
+		stageUserForSession(sessionID, text, images);
+	}
+
+	function revealStagedUser() {
+		if (!sessionID) return;
+		revealStagedUserForSession(sessionID);
 	}
 
 	function applyEventToSession(targetSessionID: string, event: StreamEvent, ctx: StreamCtx) {
@@ -906,6 +919,8 @@ function createChatStore() {
 		detachActiveSession,
 		bindSession,
 		loadTranscript,
+		stageUserForSession,
+		revealStagedUserForSession,
 		stageUser,
 		revealStagedUser,
 		send,

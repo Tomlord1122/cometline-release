@@ -2,6 +2,7 @@
 	import { Pin, PinOff, Trash2 } from '@lucide/svelte';
 	import type { Session } from '$lib/types';
 	import { workspaceLabel, gatewaySessionLabel } from '$lib/sessions/group-by-workspace';
+	import { chatStore } from '$lib/stores/chat.svelte';
 
 	let {
 		session,
@@ -29,6 +30,10 @@
 		onContextMenu: (event: MouseEvent) => void;
 	} = $props();
 
+	let streaming = $derived(
+		chatStore.isStreamingFor(session.id) || chatStore.hasInFlightTurn(session.id)
+	);
+
 	function handleContextMenu(event: MouseEvent) {
 		event.preventDefault();
 		onContextMenu(event);
@@ -42,7 +47,16 @@
 	oncontextmenu={handleContextMenu}
 >
 	<button class="session-row" onclick={onSelect}>
-		<span class="session-title">{session.title || 'Untitled'}</span>
+		<span class="session-title-row">
+			<span
+				class="session-streaming"
+				class:active={streaming}
+				aria-hidden={!streaming}
+				aria-label={streaming ? 'Responding' : undefined}
+				title={streaming ? 'Responding' : undefined}
+			></span>
+			<span class="session-title">{session.title || 'Untitled'}</span>
+		</span>
 		{#if showGatewayLabel}
 			<span class="session-workspace session-gateway">{gatewaySessionLabel(session)}</span>
 		{:else if showWorkspaceLabel}
@@ -109,11 +123,47 @@
 		cursor: pointer;
 	}
 
+	.session-title-row {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		min-width: 0;
+	}
+
 	.session-title {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 		display: block;
+		flex: 1;
+		min-width: 0;
+	}
+
+	.session-streaming {
+		flex-shrink: 0;
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: var(--text-soft);
+		opacity: 0.45;
+	}
+
+	.session-streaming.active {
+		background: var(--accent, #2563eb);
+		opacity: 1;
+		animation: session-streaming-pulse 1.2s ease-in-out infinite;
+	}
+
+	@keyframes session-streaming-pulse {
+		0%,
+		100% {
+			opacity: 0.35;
+			transform: scale(0.85);
+		}
+		50% {
+			opacity: 1;
+			transform: scale(1);
+		}
 	}
 
 	.session-workspace {

@@ -25,7 +25,12 @@ export type { QueuedMessage } from '$lib/actions/chat-turn-queue';
 export interface ConversationFlightAdapter {
 	onUserMessageFlight(
 		payload: ChatTurnPayload | string,
-		ctx: { firstTurn: boolean }
+		ctx: {
+			firstTurn: boolean;
+			sessionId: string;
+			stageUser: (text: string, images?: ImageAttachment[]) => void;
+			revealStagedUser: () => void;
+		}
 	): void | Promise<void>;
 	onFirstTurnComplete?(): void;
 }
@@ -63,6 +68,8 @@ export interface ConversationController {
 	cancel(): void;
 }
 
+const turnQueues = new Map<string, ChatTurnQueue>();
+
 async function runTurn(
 	deps: ConversationControllerDeps,
 	turnSessionId: string,
@@ -70,21 +77,64 @@ async function runTurn(
 	getHasVisibleConversation: () => boolean
 ): Promise<void> {
 	const payload = typeof payloadOrText === 'string' ? { text: payloadOrText } : payloadOrText;
-	const firstTurn = !getHasVisibleConversation();
 	const usesFlight = Boolean(deps.flight?.onUserMessageFlight);
+	const isViewing = deps.getSessionId() === turnSessionId;
+	const firstTurn = usesFlight && !isViewing
+		? chatStore.getCachedItemCount(turnSessionId) === 0
+		: !getHasVisibleConversation();
+	const flightPayload = payload.images?.length ? payload : payload.text;
+	const stageUser = (text: string, images?: ImageAttachment[]) => {
+		chatStore.stageUserForSession(turnSessionId, text, images);
+	};
+	const revealStagedUser = () => {
+		chatStore.revealStagedUserForSession(turnSessionId);
+	};
+	let flightPromise: Promise<void> | undefined;
+	let sendPromise: Promise<void> | undefined;
+	const startSend = () => {
+		if (!sendPromise) {
+			sendPromise = deps.send(turnSessionId, payloadOrText, {
+				skipUser: usesFlight ? true : firstTurn
+			});
+			void sendPromise.catch(() => undefined);
+		}
+		return sendPromise;
+	};
 
 	commitSidebarWorkspaceForSession(
 		sessionStore.sessions.find((session) => session.id === turnSessionId) ??
 			sessionStore.current
 	);
 
-	if (usesFlight) {
-		await deps.flight!.onUserMessageFlight!(payload.images?.length ? payload : payload.text, {
-			firstTurn
+	if (usesFlight && isViewing && firstTurn) {
+		await deps.flight!.onUserMessageFlight!(flightPayload, {
+			firstTurn,
+			sessionId: turnSessionId,
+			stageUser: (text, images) => {
+				stageUser(text, images);
+				void startSend();
+			},
+			revealStagedUser
 		});
+	} else if (usesFlight && isViewing) {
+		stageUser(payload.text, payload.images);
+		flightPromise = Promise.resolve(
+			deps.flight!.onUserMessageFlight!(flightPayload, {
+				firstTurn,
+				sessionId: turnSessionId,
+				stageUser,
+				revealStagedUser
+			})
+		)
+			.catch(() => undefined)
+			.finally(revealStagedUser);
+	} else if (usesFlight) {
+		stageUser(payload.text, payload.images);
+		revealStagedUser();
 	}
 
-	await deps.send(turnSessionId, payloadOrText, { skipUser: usesFlight ? true : firstTurn });
+	await startSend();
+	if (flightPromise) await flightPromise;
 
 	if (firstTurn) {
 		deps.onAwaitingFirstAssistantChange?.(false);
@@ -94,38 +144,43 @@ async function runTurn(
 	void deps.refreshSession(turnSessionId);
 }
 
+function ensureQueue(
+	sessionId: string,
+	deps: ConversationControllerDeps,
+	getHasVisibleConversation: () => boolean
+): ChatTurnQueue {
+	let queue = turnQueues.get(sessionId);
+	if (!queue) {
+		const queueForSessionId = sessionId;
+		queue = createChatTurnQueue(async (text, images, filePaths) => {
+			if (images === undefined && filePaths === undefined) {
+				await runTurn(deps, queueForSessionId, text, getHasVisibleConversation);
+			} else if (filePaths === undefined) {
+				await runTurn(
+					deps,
+					queueForSessionId,
+					{ text, images },
+					getHasVisibleConversation
+				);
+			} else {
+				await runTurn(
+					deps,
+					queueForSessionId,
+					{ text, images, filePaths },
+					getHasVisibleConversation
+				);
+			}
+		}, deps.onQueueChange);
+		turnQueues.set(sessionId, queue);
+	}
+	return queue;
+}
+
 export function createConversationController(
 	deps: ConversationControllerDeps
 ): ConversationController {
-	let turnQueue: ChatTurnQueue | undefined;
-	let queueSessionId: string | null = null;
-
-	function ensureQueue(): ChatTurnQueue {
-		const sessionId = deps.getSessionId();
-		if (!turnQueue || queueSessionId !== sessionId) {
-			const queueForSessionId = sessionId;
-			queueSessionId = sessionId;
-			turnQueue = createChatTurnQueue(async (text, images, filePaths) => {
-				if (images === undefined && filePaths === undefined) {
-					await runTurn(deps, queueForSessionId, text, deps.getHasVisibleConversation);
-				} else if (filePaths === undefined) {
-					await runTurn(
-						deps,
-						queueForSessionId,
-						{ text, images },
-						deps.getHasVisibleConversation
-					);
-				} else {
-					await runTurn(
-						deps,
-						queueForSessionId,
-						{ text, images, filePaths },
-						deps.getHasVisibleConversation
-					);
-				}
-			}, deps.onQueueChange);
-		}
-		return turnQueue;
+	function queueForCurrentSession(): ChatTurnQueue {
+		return ensureQueue(deps.getSessionId(), deps, deps.getHasVisibleConversation);
 	}
 
 	return {
@@ -134,13 +189,13 @@ export function createConversationController(
 		},
 
 		get pendingCount() {
-			return ensureQueue().pendingCount;
+			return queueForCurrentSession().pendingCount;
 		},
 		get pendingMessages() {
-			return ensureQueue().pendingMessages;
+			return queueForCurrentSession().pendingMessages;
 		},
 		get processing() {
-			return ensureQueue().processing;
+			return queueForCurrentSession().processing;
 		},
 
 		bindSession() {
@@ -154,7 +209,7 @@ export function createConversationController(
 			const sessionId = deps.getSessionId();
 			if (sessionStore.hasPendingMessage(sessionId)) return true;
 			if (chatStore.hasInFlightTurn(sessionId)) return true;
-			if (chatStore.sessionID === sessionId && chatStore.items.length > 0) return true;
+			if (chatStore.getCachedItemCount(sessionId) > 0) return true;
 			return false;
 		},
 
@@ -162,7 +217,11 @@ export function createConversationController(
 			const sessionId = deps.getSessionId();
 			const pending = sessionStore.takePendingMessage(sessionId);
 			if (pending) {
-				void ensureQueue().enqueue(pending.text, pending.images, pending.filePaths);
+				void ensureQueue(sessionId, deps, deps.getHasVisibleConversation).enqueue(
+					pending.text,
+					pending.images,
+					pending.filePaths
+				);
 				return;
 			}
 			if (!this.shouldSkipTranscriptLoad()) {
@@ -183,15 +242,19 @@ export function createConversationController(
 		},
 
 		enqueue(text: string, images?: ImageAttachment[], filePaths?: string[]) {
-			return ensureQueue().enqueue(text, images, filePaths);
+			return ensureQueue(deps.getSessionId(), deps, deps.getHasVisibleConversation).enqueue(
+				text,
+				images,
+				filePaths
+			);
 		},
 
 		removeQueued(id: string) {
-			return ensureQueue().remove(id);
+			return queueForCurrentSession().remove(id);
 		},
 
 		clearQueue() {
-			ensureQueue().clear();
+			queueForCurrentSession().clear();
 		},
 
 		cancel() {
@@ -207,4 +270,9 @@ export async function refreshConversationSession(sessionId: string): Promise<voi
 	} catch {
 		// Transcript is source of truth; title refresh is best effort.
 	}
+}
+
+/** @internal Test helper — reset module-level turn queues between tests. */
+export function resetConversationTurnQueuesForTests() {
+	turnQueues.clear();
 }

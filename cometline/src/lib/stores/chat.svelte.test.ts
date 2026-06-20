@@ -318,6 +318,19 @@ describe('chatStore session switching', () => {
 		expect(errorItem.text).toContain('API key is invalid or missing');
 	});
 
+	it('stageUserForSession writes to target session when active session differs', () => {
+		chatStore.bindSession('sess-a');
+		chatStore.stageUserForSession('sess-b', 'message for B');
+		chatStore.bindSession('sess-b');
+		expect(
+			chatStore.items.some((item) => item.type === 'user' && item.text === 'message for B')
+		).toBe(true);
+		chatStore.bindSession('sess-a');
+		expect(
+			chatStore.items.some((item) => item.type === 'user' && item.text === 'message for B')
+		).toBe(false);
+	});
+
 	it('blocks duplicate send in the same session', async () => {
 		let releaseA: (() => void) | undefined;
 		const aGate = new Promise<void>((resolve) => {

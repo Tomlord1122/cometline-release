@@ -20,6 +20,7 @@
 		class="avatar-mini"
 		class:avatar-flight-hidden={flightHidden}
 		data-flight-target={flightTarget}
+		style:visibility={flightHidden ? 'hidden' : undefined}
 	>
 		<img
 			src={projectAvatarSrc(iconVariant, 96)}

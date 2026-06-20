@@ -2,12 +2,16 @@ import { describe, expect, it, vi, beforeEach, type Mock } from 'vitest';
 import {
 	createConversationController,
 	refreshConversationSession,
+	resetConversationTurnQueuesForTests,
 	type ConversationControllerDeps,
 	type ConversationFlightAdapter
 } from './conversation-controller';
 import { chatStore } from '$lib/stores/chat.svelte';
 import { sessionStore } from '$lib/stores/session.svelte';
 import { shellStore } from '$lib/stores/shell.svelte';
+
+type FlightPayload = Parameters<ConversationFlightAdapter['onUserMessageFlight']>[0];
+type FlightContext = Parameters<ConversationFlightAdapter['onUserMessageFlight']>[1];
 
 vi.mock('$lib/client/cometmind', () => ({
 	getSession: vi.fn().mockResolvedValue({ id: 'sess-1', title: 'Updated' })
@@ -16,6 +20,7 @@ vi.mock('$lib/client/cometmind', () => ({
 describe('createConversationController', () => {
 	beforeEach(() => {
 		chatStore.clear();
+		resetConversationTurnQueuesForTests();
 		shellStore.centerComposer();
 	});
 
@@ -58,20 +63,132 @@ describe('createConversationController', () => {
 		};
 	}
 
-	it('sends a first-turn message with skipUser when flight is enabled', async () => {
+	it('lets active first-turn flight own staging before sending with skipUser', async () => {
+		chatStore.bindSession('sess-1');
 		const onUserMessageFlight = vi.fn().mockResolvedValue(undefined);
+		const stageSpy = vi.spyOn(chatStore, 'stageUserForSession');
+		const revealSpy = vi.spyOn(chatStore, 'revealStagedUserForSession');
 		const { controller, send, refreshSession } = createDeps({
 			flight: { onUserMessageFlight }
 		});
 
 		await controller.enqueue('hello');
 
-		expect(onUserMessageFlight).toHaveBeenCalledWith('hello', { firstTurn: true });
+		expect(stageSpy).not.toHaveBeenCalled();
+		expect(onUserMessageFlight).toHaveBeenCalledWith(
+			'hello',
+			expect.objectContaining({ firstTurn: true, sessionId: 'sess-1' })
+		);
+		expect(revealSpy).not.toHaveBeenCalled();
 		expect(send).toHaveBeenCalledWith('sess-1', 'hello', { skipUser: true });
 		expect(refreshSession).toHaveBeenCalledWith('sess-1');
+		stageSpy.mockRestore();
+		revealSpy.mockRestore();
+	});
+
+	it('runs active first-turn flight even before the chat store binds the session', async () => {
+		chatStore.bindSession('previous-session');
+		const onUserMessageFlight = vi.fn().mockImplementation((_, ctx: FlightContext) => {
+			ctx.stageUser('hello', undefined);
+			ctx.revealStagedUser();
+		});
+		const stageSpy = vi.spyOn(chatStore, 'stageUserForSession');
+		const revealSpy = vi.spyOn(chatStore, 'revealStagedUserForSession');
+		const { controller, send } = createDeps({
+			flight: { onUserMessageFlight }
+		});
+
+		await controller.enqueue('hello');
+
+		expect(onUserMessageFlight).toHaveBeenCalledWith(
+			'hello',
+			expect.objectContaining({ firstTurn: true, sessionId: 'sess-1' })
+		);
+		expect(stageSpy).toHaveBeenCalledWith('sess-1', 'hello', undefined);
+		expect(revealSpy).toHaveBeenCalledWith('sess-1');
+		expect(send).toHaveBeenCalledWith('sess-1', 'hello', { skipUser: true });
+		stageSpy.mockRestore();
+		revealSpy.mockRestore();
+	});
+
+	it('starts active first-turn send as soon as the flight stages the user', async () => {
+		chatStore.bindSession('sess-1');
+		let releaseFlight: (() => void) | undefined;
+		const flightGate = new Promise<void>((resolve) => {
+			releaseFlight = resolve;
+		});
+		const onUserMessageFlight = vi.fn().mockImplementation(async (_, ctx: FlightContext) => {
+			ctx.stageUser('hello', undefined);
+			await flightGate;
+			ctx.revealStagedUser();
+		});
+		const revealSpy = vi.spyOn(chatStore, 'revealStagedUserForSession');
+		const { controller, send } = createDeps({
+			flight: { onUserMessageFlight }
+		});
+
+		const turn = controller.enqueue('hello');
+
+		await vi.waitFor(() =>
+			expect(send).toHaveBeenCalledWith('sess-1', 'hello', { skipUser: true })
+		);
+		expect(revealSpy).not.toHaveBeenCalled();
+
+		releaseFlight!();
+		await turn;
+
+		expect(revealSpy).toHaveBeenCalledWith('sess-1');
+		revealSpy.mockRestore();
+	});
+
+	it('stages and reveals a queued background turn without running DOM flight', async () => {
+		let currentSessionId = 'sess-a';
+		let releaseFirstSend: (() => void) | undefined;
+		const firstSendGate = new Promise<void>((resolve) => {
+			releaseFirstSend = resolve;
+		});
+		const send = vi.fn().mockImplementation(async (_sessionId: string, payload: FlightPayload) => {
+			const text = typeof payload === 'string' ? payload : payload.text;
+			if (text === 'first') await firstSendGate;
+		});
+		const onUserMessageFlight = vi.fn().mockImplementation(
+			(payload: FlightPayload, ctx: FlightContext) => {
+				const text = typeof payload === 'string' ? payload : payload.text;
+				ctx.stageUser(text, typeof payload === 'string' ? undefined : payload.images);
+				ctx.revealStagedUser();
+			}
+		);
+		const stageSpy = vi.spyOn(chatStore, 'stageUserForSession');
+		const revealSpy = vi.spyOn(chatStore, 'revealStagedUserForSession');
+		chatStore.bindSession('sess-a');
+		const controller = createConversationController({
+			getSessionId: () => currentSessionId,
+			getHasVisibleConversation: () => false,
+			send,
+			refreshSession: vi.fn().mockResolvedValue(undefined),
+			flight: { onUserMessageFlight }
+		});
+
+		const first = controller.enqueue('first');
+		await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+		await controller.enqueue('background hello');
+		currentSessionId = 'sess-b';
+		chatStore.bindSession('sess-b');
+
+		releaseFirstSend!();
+		await first;
+		await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+
+		expect(onUserMessageFlight).toHaveBeenCalledTimes(1);
+		expect(stageSpy).toHaveBeenCalledWith('sess-a', 'background hello', undefined);
+		expect(revealSpy).toHaveBeenCalledWith('sess-a');
+		expect(send).toHaveBeenCalledWith('sess-a', 'background hello', { skipUser: true });
+		stageSpy.mockRestore();
+		revealSpy.mockRestore();
 	});
 
 	it('skips user item on subsequent turns when flight is enabled', async () => {
+		chatStore.bindSession('sess-1');
 		const onUserMessageFlight = vi.fn().mockResolvedValue(undefined);
 		const { controller, send } = createDeps({
 			hasVisibleConversation: true,
@@ -80,8 +197,39 @@ describe('createConversationController', () => {
 
 		await controller.enqueue('hello again');
 
-		expect(onUserMessageFlight).toHaveBeenCalledWith('hello again', { firstTurn: false });
+		expect(onUserMessageFlight).toHaveBeenCalledWith(
+			'hello again',
+			expect.objectContaining({ firstTurn: false, sessionId: 'sess-1' })
+		);
 		expect(send).toHaveBeenCalledWith('sess-1', 'hello again', { skipUser: true });
+	});
+
+	it('starts active follow-up send before the bubble flight resolves', async () => {
+		chatStore.bindSession('sess-1');
+		let releaseFlight: (() => void) | undefined;
+		const flightGate = new Promise<void>((resolve) => {
+			releaseFlight = resolve;
+		});
+		const onUserMessageFlight = vi.fn().mockReturnValue(flightGate);
+		const revealSpy = vi.spyOn(chatStore, 'revealStagedUserForSession');
+		const { controller, send } = createDeps({
+			hasVisibleConversation: true,
+			flight: { onUserMessageFlight }
+		});
+
+		const turn = controller.enqueue('hello again');
+
+		await vi.waitFor(() => expect(onUserMessageFlight).toHaveBeenCalled());
+		await vi.waitFor(() =>
+			expect(send).toHaveBeenCalledWith('sess-1', 'hello again', { skipUser: true })
+		);
+		expect(revealSpy).not.toHaveBeenCalled();
+
+		releaseFlight!();
+		await turn;
+
+		expect(revealSpy).toHaveBeenCalledWith('sess-1');
+		revealSpy.mockRestore();
 	});
 
 	it('does not skip user on subsequent turns without flight', async () => {
@@ -106,6 +254,7 @@ describe('createConversationController', () => {
 	});
 
 	it('calls onFirstTurnComplete and clears awaiting state after first turn', async () => {
+		chatStore.bindSession('sess-1');
 		const onFirstTurnComplete = vi.fn();
 		const onAwaitingFirstAssistantChange = vi.fn();
 		const { controller } = createDeps({
@@ -206,35 +355,93 @@ describe('createConversationController', () => {
 		loadSpy.mockRestore();
 	});
 
-	it('sends to the session that enqueued the turn even if getSessionId changes during flight', async () => {
+	it('uses the enqueued session callbacks if getSessionId changes during active first-turn flight', async () => {
 		let currentSessionId = 'sess-a';
 		let releaseFlight: (() => void) | undefined;
 		const flightGate = new Promise<void>((resolve) => {
 			releaseFlight = resolve;
 		});
 		const send = vi.fn().mockResolvedValue(undefined);
-		const onUserMessageFlight = vi.fn().mockImplementation(async () => {
+		const onUserMessageFlight = vi.fn().mockImplementation(async (_payload: unknown, ctx: FlightContext) => {
+			ctx.stageUser('question A', undefined);
 			currentSessionId = 'sess-b';
+			chatStore.bindSession('sess-b');
 			await flightGate;
+			ctx.revealStagedUser();
 		});
+		const stageSpy = vi.spyOn(chatStore, 'stageUserForSession');
+		const revealSpy = vi.spyOn(chatStore, 'revealStagedUserForSession');
+		chatStore.bindSession('sess-a');
 
 		const controller = createConversationController({
 			getSessionId: () => currentSessionId,
-			getHasVisibleConversation: () => true,
+			getHasVisibleConversation: () => false,
 			send,
 			refreshSession: vi.fn().mockResolvedValue(undefined),
 			flight: { onUserMessageFlight }
 		});
 
 		const turn = controller.enqueue('question A');
+		await vi.waitFor(() => expect(stageSpy).toHaveBeenCalledWith('sess-a', 'question A', undefined));
 		await vi.waitFor(() => expect(onUserMessageFlight).toHaveBeenCalled());
 		expect(currentSessionId).toBe('sess-b');
-		expect(send).not.toHaveBeenCalled();
+		expect(send).toHaveBeenCalledWith('sess-a', 'question A', { skipUser: true });
+		expect(revealSpy).not.toHaveBeenCalled();
 
 		releaseFlight!();
 		await turn;
 
-		expect(send).toHaveBeenCalledWith('sess-a', 'question A', { skipUser: true });
+		expect(revealSpy).toHaveBeenCalledWith('sess-a');
+		stageSpy.mockRestore();
+		revealSpy.mockRestore();
+	});
+
+	it('preserves session A turn queue when session B controller enqueues', async () => {
+		let releaseA: (() => void) | undefined;
+		const gateA = new Promise<void>((resolve) => {
+			releaseA = resolve;
+		});
+		const send = vi.fn().mockImplementation(async (_sessionId: string, payload: string | { text: string }) => {
+			const text = typeof payload === 'string' ? payload : payload.text;
+			if (text === 'msg-a-1') await gateA;
+		});
+		const flight = { onUserMessageFlight: vi.fn().mockResolvedValue(undefined) };
+
+		const ctrlA = createDeps({
+			sessionId: 'sess-a',
+			send,
+			hasVisibleConversation: true,
+			flight
+		}).controller;
+		const ctrlB = createDeps({
+			sessionId: 'sess-b',
+			send,
+			hasVisibleConversation: true,
+			flight
+		}).controller;
+
+		void ctrlA.enqueue('msg-a-1');
+		await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+		void ctrlA.enqueue('msg-a-2');
+		expect(ctrlA.pendingCount).toBe(1);
+
+		await ctrlB.enqueue('msg-b-1');
+		expect(send).toHaveBeenCalledWith('sess-b', 'msg-b-1', { skipUser: true });
+		expect(ctrlA.pendingCount).toBe(1);
+
+		releaseA!();
+		await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(3));
+		expect(send).toHaveBeenNthCalledWith(3, 'sess-a', 'msg-a-2', { skipUser: true });
+	});
+
+	it('shouldSkipTranscriptLoad when cached items exist for inactive session', () => {
+		chatStore.bindSession('sess-a');
+		chatStore.stageUserForSession('sess-a', 'cached', undefined);
+		chatStore.revealStagedUserForSession('sess-a');
+		chatStore.bindSession('sess-b');
+		const { controller } = createDeps({ sessionId: 'sess-a' });
+
+		expect(controller.shouldSkipTranscriptLoad()).toBe(true);
 	});
 
 	it('shouldSkipTranscriptLoad when pending message exists', () => {

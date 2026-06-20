@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { fade } from 'svelte/transition';
-	import { tick } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import EmptyChatState from '$lib/components/EmptyChatState.svelte';
 	import Composer from '$lib/components/composer/Composer.svelte';
 	import HeroComposerFrame from '$lib/components/HeroComposerFrame.svelte';
@@ -37,17 +37,34 @@
 			awaitingFirstAssistant = value;
 		},
 		flight: {
-			onUserMessageFlight: (payloadOrText, { firstTurn }) => {
+			onUserMessageFlight: (payloadOrText, { firstTurn, stageUser, revealStagedUser }) => {
 				const payload =
 					typeof payloadOrText === 'string' ? { text: payloadOrText } : payloadOrText;
 				if (firstTurn) {
 					awaitingFirstAssistant = true;
-					firstTurnFlight?.run(payload.text, payload.images);
-					return;
+					firstTurnFlightDone = false;
+					firstTurnHandoffPending = true;
+					if (!firstTurnFlight) {
+						firstTurnFlightDone = true;
+						firstTurnHandoffPending = false;
+						return;
+					}
+					return firstTurnFlight?.runAsync(payload.text, payload.images, {
+						stageUser,
+						revealStagedUser
+					}).catch((error) => {
+						firstTurnFlightDone = true;
+						firstTurnHandoffPending = false;
+						throw error;
+					});
 				}
-				userBubbleFlight?.run(payload.text, payload.images, {
-					origin: 'above-composer'
-				});
+				return userBubbleFlight
+					?.runAsync(payload.text, payload.images, {
+						origin: 'above-composer',
+						skipStage: true,
+						skipReveal: true
+					})
+					.then(() => undefined);
 			}
 		}
 	});
@@ -58,6 +75,7 @@
 	let awaitingFirstAssistant = $state(false);
 	let firstTurnActive = $state(false);
 	let firstTurnFlightDone = $state(false);
+	let firstTurnHandoffPending = $state(false);
 	let queuedCount = $state(0);
 	let queuedMessages = $state<QueuedMessage[]>([]);
 	let turnBusy = $state(false);
@@ -119,15 +137,26 @@
 		syncSessionFromStore();
 	});
 
+	// Reset per-session view state ONLY when the active session changes. The chat
+	// store reads below must be untracked: otherwise staging the user message and
+	// adding the pending assistant row during a first-turn flight re-runs this
+	// effect, which would reset firstTurnHandoffPending mid-flight and let the
+	// destination avatar/thinking indicator appear before the overlay arrives.
 	$effect(() => {
 		void sessionId;
-		firstTurnActive = false;
-		firstTurnFlightDone = false;
-		heroFrameExiting = false;
-		snapshotSynced = false;
-		snapshotLoading = true;
-		awaitingFirstAssistant = chatStore.isAwaitingFirstAssistant(sessionId);
-		syncQueueState();
+		untrack(() => {
+			firstTurnActive = false;
+			firstTurnHandoffPending = false;
+			heroFrameExiting = false;
+			snapshotSynced = false;
+			snapshotLoading = true;
+			awaitingFirstAssistant = chatStore.isAwaitingFirstAssistant(sessionId);
+			// Returning to a session with cached transcript should show avatars
+			// immediately; only a live empty-state first-turn flight hides them.
+			firstTurnFlightDone =
+				chatStore.getCachedItemCount(sessionId) > 0 || !awaitingFirstAssistant;
+			syncQueueState();
+		});
 	});
 
 	let activatedSessionId = $state<string | null>(null);
@@ -226,23 +255,28 @@
 			class:docked={!heroLayout}
 			in:fade={firstTurnActive ? { duration: 0 } : THREAD_IN}
 		>
-			<ChatThread {sessionId} {awaitingFirstAssistant} {firstTurnFlightDone} />
+			<ChatThread
+				{sessionId}
+				{awaitingFirstAssistant}
+				{firstTurnFlightDone}
+				{firstTurnHandoffPending}
+			/>
 		</div>
 	{/if}
 
 	<UserBubbleFlight
 		bind:this={userBubbleFlight}
 		root={chatHome}
-		stageUser={(text, images) => chatStore.stageUser(text, images)}
-		revealStagedUser={() => chatStore.revealStagedUser()}
+		stageUser={(text, images) => chatStore.stageUserForSession(sessionId, text, images)}
+		revealStagedUser={() => chatStore.revealStagedUserForSession(sessionId)}
 	/>
 
 	<FirstTurnFlight
 		bind:this={firstTurnFlight}
 		root={chatHome}
 		{userBubbleFlight}
-		stageUser={(text, images) => chatStore.stageUser(text, images)}
-		revealStagedUser={() => chatStore.revealStagedUser()}
+		stageUser={(text, images) => chatStore.stageUserForSession(sessionId, text, images)}
+		revealStagedUser={() => chatStore.revealStagedUserForSession(sessionId)}
 		onActiveChange={(active) => (firstTurnActive = active)}
 		onPrepareFlight={() => {
 			if (composerVariant === 'hero') heroFrameExiting = true;
@@ -250,6 +284,7 @@
 		}}
 		onFlightDoneChange={(done) => {
 			firstTurnFlightDone = done;
+			firstTurnHandoffPending = !done;
 		}}
 	/>
 

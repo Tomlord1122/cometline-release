@@ -15,6 +15,7 @@
 		deferReveal?: boolean;
 		deferHideParticle?: boolean;
 		skipStage?: boolean;
+		skipReveal?: boolean;
 		origin?: UserBubbleFlightOrigin;
 	}
 
@@ -67,6 +68,7 @@
 			deferReveal: opts.deferReveal,
 			deferHideParticle: opts.deferHideParticle,
 			skipStage: opts.skipStage,
+			skipReveal: opts.skipReveal,
 			origin: opts.origin,
 			onShowParticle: showParticle,
 			onHideParticle: hideParticle
@@ -84,8 +86,8 @@
 	): Promise<boolean> {
 		const params = flightParams(text, images, opts);
 		if (!params) {
-			stageUser(text, images);
-			revealStagedUser();
+			if (!opts.skipStage) stageUser(text, images);
+			if (!opts.skipReveal) revealStagedUser();
 			return false;
 		}
 		return flyUserBubble(params);

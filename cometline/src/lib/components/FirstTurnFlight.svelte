@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import UserBubbleFlight from '$lib/components/UserBubbleFlight.svelte';
-	import { afterPaint, rectStyle, waitForSelector } from '$lib/first-turn-flight';
+	import { afterPaint, FLIGHT_MS, rectStyle, waitForSelector } from '$lib/first-turn-flight';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { projectAvatarSrc, projectAvatarSrcset } from '$lib/project-icon';
 	import type { ImageAttachment } from '$lib/types';
@@ -17,6 +17,12 @@
 		onComplete?: () => void;
 	}
 
+	interface RunOptions {
+		visualOnly?: boolean;
+		stageUser?: (text: string, images?: ImageAttachment[]) => void;
+		revealStagedUser?: () => void;
+	}
+
 	let {
 		root,
 		userBubbleFlight,
@@ -29,13 +35,27 @@
 	}: Props = $props();
 
 	let active = $state(false);
+	let avatarFlightElement = $state<HTMLDivElement | null>(null);
 	let avatarFlightStyle = $state('');
 	let iconVariant = $derived(settingsStore.settings.app.iconVariant);
 	let showAvatarFlight = $state(false);
 
-	export function run(text: string, images?: ImageAttachment[]): void {
+	export function run(
+		text: string,
+		images?: ImageAttachment[],
+		opts: RunOptions = {}
+	): void {
 		if (active) return;
-		void animate(text, images);
+		void animate(text, images, opts);
+	}
+
+	export async function runAsync(
+		text: string,
+		images?: ImageAttachment[],
+		opts: RunOptions = {}
+	): Promise<void> {
+		if (active) return;
+		await animate(text, images, opts);
 	}
 
 	function setActive(value: boolean) {
@@ -49,13 +69,65 @@
 
 	function hideAvatarParticle() {
 		showAvatarFlight = false;
+		avatarFlightElement = null;
 		avatarFlightStyle = '';
 	}
 
-	async function animate(text: string, images?: ImageAttachment[]): Promise<void> {
+	async function waitForAvatarFlightEnd(): Promise<void> {
+		await tick();
+		const element = avatarFlightElement;
+		if (!element) return;
+
+		await new Promise<void>((resolve) => {
+			let done = false;
+			const finish = () => {
+				if (done) return;
+				done = true;
+				element.removeEventListener('animationend', finish);
+				window.clearTimeout(timeout);
+				resolve();
+			};
+			const timeout = window.setTimeout(finish, FLIGHT_MS + 160);
+			element.addEventListener('animationend', finish, { once: true });
+		});
+	}
+
+	async function waitForStableRect(element: HTMLElement): Promise<DOMRect> {
+		let rect = element.getBoundingClientRect();
+		let stableFrames = 0;
+
+		for (let frame = 0; frame < 40; frame++) {
+			await afterPaint();
+			const next = element.getBoundingClientRect();
+			const stable =
+				Math.abs(next.left - rect.left) < 0.5 &&
+				Math.abs(next.top - rect.top) < 0.5 &&
+				Math.abs(next.width - rect.width) < 0.5 &&
+				Math.abs(next.height - rect.height) < 0.5;
+
+			if (stable) {
+				stableFrames += 1;
+				if (stableFrames >= 2) return next;
+			} else {
+				stableFrames = 0;
+			}
+
+			rect = next;
+		}
+
+		return rect;
+	}
+
+	async function animate(text: string, images?: ImageAttachment[], opts: RunOptions = {}): Promise<void> {
+		const visualOnly = opts.visualOnly ?? false;
+		const runStageUser = opts.stageUser ?? stageUser;
+		const runRevealStagedUser = opts.revealStagedUser ?? revealStagedUser;
+
 		if (!root) {
-			stageUser(text, images);
-			revealStagedUser();
+			if (!visualOnly) {
+				runStageUser(text, images);
+				runRevealStagedUser();
+			}
 			setFlightDone(true);
 			setActive(false);
 			onComplete?.();
@@ -72,26 +144,32 @@
 		onPrepareFlight?.();
 		setActive(true);
 		setFlightDone(false);
-		stageUser(text, images);
+		if (!visualOnly) runStageUser(text, images);
 		await tick();
 
+		let avatarFlightEnd: Promise<void> | undefined;
 		const avatarTarget = await waitForSelector(root, '[data-flight-target="avatar"]');
 		if (avatarFrom && avatarTarget instanceof HTMLElement) {
-			avatarFlightStyle = rectStyle(avatarFrom, avatarTarget.getBoundingClientRect());
+			const avatarTo = await waitForStableRect(avatarTarget);
+			avatarFlightStyle = rectStyle(avatarFrom, avatarTo);
 			showAvatarFlight = true;
+			avatarFlightEnd = waitForAvatarFlightEnd();
 		}
 
 		const userFlew = await userBubbleFlight.runAsync(text, images, {
 			skipOnPrepare: true,
 			skipStage: true,
+			skipReveal: visualOnly,
 			textareaFrom,
-			deferReveal: true,
+			deferReveal: !visualOnly,
 			deferHideParticle: true
 		});
 
 		if (!userFlew) {
-			revealStagedUser();
+			await avatarFlightEnd;
+			if (!visualOnly) runRevealStagedUser();
 			setFlightDone(true);
+			await afterPaint();
 			hideAvatarParticle();
 			userBubbleFlight.dismissParticle();
 			setActive(false);
@@ -99,7 +177,8 @@
 			return;
 		}
 
-		revealStagedUser();
+		await avatarFlightEnd;
+		if (!visualOnly) runRevealStagedUser();
 		// Unhide the real thread avatar slot BEFORE tearing down flight particles,
 		// so the avatar never blinks out between overlay end and the thread slot.
 		setFlightDone(true);
@@ -114,6 +193,7 @@
 
 {#if showAvatarFlight}
 	<div
+		bind:this={avatarFlightElement}
 		class="flight-particle avatar-flight rounded-full border border-gray-400 overflow-hidden"
 		style={avatarFlightStyle}
 	>

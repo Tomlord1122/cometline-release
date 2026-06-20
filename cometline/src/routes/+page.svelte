@@ -19,7 +19,7 @@
 	// is a lifecycle action, not a reactive effect.
 	onMount(() => {
 		sessionStore.selectSession(null);
-		chatStore.clear();
+		chatStore.detachActiveSession();
 		shellStore.clearDraftPanel();
 		shellStore.centerComposer();
 		modelStore.selectDefault();

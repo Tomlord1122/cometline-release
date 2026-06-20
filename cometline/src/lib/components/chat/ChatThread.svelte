@@ -35,11 +35,13 @@
 	let {
 		sessionId,
 		awaitingFirstAssistant = false,
-		firstTurnFlightDone = false
+		firstTurnFlightDone = false,
+		firstTurnHandoffPending = false
 	}: {
 		sessionId: string;
 		awaitingFirstAssistant?: boolean;
 		firstTurnFlightDone?: boolean;
+		firstTurnHandoffPending?: boolean;
 	} = $props();
 
 	let iconVariant = $derived(settingsStore.settings.app.iconVariant);
@@ -69,7 +71,7 @@
 	// the top; follow-up turns sit a little lower (upper-middle) so the message
 	// reads naturally and leaves the bulk of the screen for the reply below.
 	const USER_SEND_TOP_OFFSET = 24;
-	const USER_SEND_FOLLOWUP_OFFSET = 128;
+	const USER_SEND_FOLLOWUP_OFFSET = 24;
 	// ChatGPT-style: reserve empty space below the latest turn so a freshly-sent
 	// user message can always scroll up to the top, leaving room for the
 	// assistant avatar/response to appear below it (never clipped).
@@ -89,6 +91,9 @@
 		) as Extract<ChatItem, { type: 'assistant' }> | undefined
 	);
 	let firstAssistantId = $derived(firstAssistantItem?.id ?? null);
+	let firstAssistantRowId = $derived(
+		threadItems.find((item) => item.type === 'assistant')?.id ?? null
+	);
 	let streamingAssistantId = $derived.by(() => {
 		if (!sessionStreaming) return null;
 		const last = threadItems.at(-1);
@@ -272,9 +277,11 @@
 	let renderDebugSnapshot = $derived.by(() => ({
 		awaitingFirstAssistant,
 		firstTurnFlightDone,
+		firstTurnHandoffPending,
 		isStreaming: sessionStreaming,
 		firstUserId,
 		firstAssistantId,
+		firstAssistantRowId,
 		firstAssistantItem: firstAssistantItem ? summarizeChatItem(firstAssistantItem) : null,
 		firstAssistantVisible: firstAssistantItem ? showAssistantRow(firstAssistantItem) : false,
 		items: threadItems.map(summarizeRenderItem)
@@ -401,7 +408,9 @@
 	}
 
 	function showFirstTurnAvatarSlot() {
-		if (!awaitingFirstAssistant || !firstUserId) return false;
+		if (!firstUserId) return false;
+		if (firstTurnHandoffPending) return true;
+		if (!awaitingFirstAssistant) return false;
 		if (!firstTurnFlightDone) return true;
 		if (!firstAssistantItem) return true;
 		return !showAssistantRow(firstAssistantItem);
@@ -417,10 +426,18 @@
 		if (showFirstTurnAvatarSlot()) return false;
 		return !(
 			awaitingFirstAssistant &&
-			item.id === firstAssistantId &&
+			item.id === firstAssistantRowId &&
 			firstUserId &&
 			!(firstTurnFlightDone && showAssistantRow(item))
 		);
+	}
+
+	function hideAssistantAvatarForFirstTurn(item: Extract<ChatItem, { type: 'assistant' }>) {
+		return firstTurnHandoffPending && item.id === firstAssistantRowId;
+	}
+
+	function hideFirstTurnDestination() {
+		return firstTurnHandoffPending;
 	}
 
 	function startsSpeakerRun(index: number, speaker: 'user' | 'assistant') {
@@ -691,17 +708,25 @@
 							<ThreadAvatar
 								variant="avatar"
 								{iconVariant}
-								flightHidden={!firstTurnFlightDone}
+								flightHidden={firstTurnHandoffPending}
 								flightTarget="avatar"
 							/>
 							{#if firstAssistantItem && showAssistantRow(firstAssistantItem)}
-								{@render assistantStack(firstAssistantItem)}
+								<div class:first-turn-destination-hidden={hideFirstTurnDestination()}>
+									{@render assistantStack(firstAssistantItem)}
+								</div>
 							{:else if sessionStreaming}
-								<div class="assistant-stack">
+								<div
+									class="assistant-stack"
+									class:first-turn-destination-hidden={hideFirstTurnDestination()}
+								>
 									{@render assistantActivitySpinner()}
 								</div>
 							{:else}
-								<div class="assistant-stack"></div>
+								<div
+									class="assistant-stack"
+									class:first-turn-destination-hidden={hideFirstTurnDestination()}
+								></div>
 							{/if}
 						</div>
 					{/if}
@@ -774,17 +799,25 @@
 									<ThreadAvatar
 										variant="avatar"
 										{iconVariant}
-										flightHidden={!firstTurnFlightDone}
+										flightHidden={firstTurnHandoffPending}
 										flightTarget="avatar"
 									/>
 									{#if firstAssistantItem && showAssistantRow(firstAssistantItem)}
-										{@render assistantStack(firstAssistantItem)}
+										<div class:first-turn-destination-hidden={hideFirstTurnDestination()}>
+											{@render assistantStack(firstAssistantItem)}
+										</div>
 									{:else if sessionStreaming}
-										<div class="assistant-stack">
+										<div
+											class="assistant-stack"
+											class:first-turn-destination-hidden={hideFirstTurnDestination()}
+										>
 											{@render assistantActivitySpinner()}
 										</div>
 									{:else}
-										<div class="assistant-stack"></div>
+										<div
+											class="assistant-stack"
+											class:first-turn-destination-hidden={hideFirstTurnDestination()}
+										></div>
 									{/if}
 								</div>
 							{/if}
@@ -794,11 +827,17 @@
 								class:continuation-row={!startsSpeakerRun(index, 'assistant')}
 							>
 								{#if startsSpeakerRun(index, 'assistant')}
-									<ThreadAvatar variant="avatar" {iconVariant} />
+									<ThreadAvatar
+										variant="avatar"
+										{iconVariant}
+										flightHidden={hideAssistantAvatarForFirstTurn(item)}
+									/>
 								{:else}
 									<ThreadAvatar variant="gutter" {iconVariant} />
 								{/if}
-								{@render assistantStack(item)}
+								<div class:first-turn-destination-hidden={hideAssistantAvatarForFirstTurn(item)}>
+									{@render assistantStack(item)}
+								</div>
 							</div>
 						{:else if item.type === 'tool' && !isToolInBuffer(item)}
 							<div
@@ -1005,11 +1044,15 @@
 		pointer-events: none;
 	}
 
-	.flight-placeholder .assistant-stack {
-		min-height: 1px;
-	}
+		.flight-placeholder .assistant-stack {
+			min-height: 1px;
+		}
 
-	.flight-hidden {
+		.first-turn-destination-hidden {
+			visibility: hidden;
+		}
+
+		.flight-hidden {
 		opacity: 0;
 		pointer-events: none;
 	}
