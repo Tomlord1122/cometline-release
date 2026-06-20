@@ -36,11 +36,18 @@
 	import SettingsShortcutsPanel from './SettingsShortcutsPanel.svelte';
 	import SettingsProvidersPanel from './SettingsProvidersPanel.svelte';
 	import SettingsButton from './SettingsButton.svelte';
+	import SettingsTabPersistence from './SettingsTabPersistence.svelte';
 	import { cloneCometMindSettings, normalizeCometMindSettings } from '$lib/cometmind-settings';
 	import { ICON_VARIANT_OPTIONS, projectAvatarSrc } from '$lib/project-icon';
 	import type { IconVariant } from '$lib/types';
 	import type { MemorySettings } from '$lib/client/cometmind';
 	import { pruneWorkspaces } from '$lib/client/cometmind';
+	import { heroComposerCssVars } from '$lib/hero-composer-appearance';
+	import {
+		sectionPendingDirty,
+		settingsPendingDirty,
+		type SettingsSection as PendingSettingsSection
+	} from '$lib/settings/pending-settings';
 	import { onMount } from 'svelte';
 
 	type SettingsSection = 'models' | 'memory' | 'agent' | 'appearance' | 'shortcuts' | 'app';
@@ -168,6 +175,41 @@
 	let canCheckUpdates = $derived(
 		!checkingUpdates && updateState.status !== 'downloading' && !installingUpdate
 	);
+
+	let draftPendingDirty = $derived(
+		settingsPendingDirty(draft, settingsStore.settings)
+	);
+
+	let memoryPendingDirty = $derived(memoryPanel?.isDirty?.() ?? false);
+
+	let hasPendingChanges = $derived(draftPendingDirty || memoryPendingDirty);
+
+	function navSectionDirty(section: PendingSettingsSection): boolean {
+		if (section === 'memory') return memoryPendingDirty;
+		return sectionPendingDirty(section, draft, settingsStore.settings);
+	}
+
+	let saveDisabled = $derived(
+		settingsStore.isSaving ||
+			settingsStore.isFetchingModels ||
+			!hasPendingChanges ||
+			(activeSection === 'models' && enabledModelCount === 0) ||
+			(activeSection === 'memory' && memoryPanel?.isBusy?.())
+	);
+
+	$effect(() => {
+		const vars = heroComposerCssVars(draft.appearance.heroComposer);
+		const root = document.documentElement;
+		for (const [key, value] of Object.entries(vars)) {
+			root.style.setProperty(key, value);
+		}
+		return () => {
+			const saved = heroComposerCssVars(settingsStore.settings.appearance.heroComposer);
+			for (const [key, value] of Object.entries(saved)) {
+				root.style.setProperty(key, value);
+			}
+		};
+	});
 
 	onMount(() => {
 		const api = window.electronAPI;
@@ -371,25 +413,24 @@
 		restartCometMind: boolean,
 		iconVariantChanged = false
 	) {
+		const restartNote = restartCometMind ? ' CometMind restarted.' : '';
 		switch (section) {
 			case 'models':
 				return restartCometMind
-					? 'Saved. CometMind is restarting with enabled providers.'
-					: 'Saved model settings.';
+					? `Changes saved.${restartNote}`
+					: 'Changes saved.';
 			case 'agent':
-				return restartCometMind
-					? 'Agent runtime saved. Sidecar is restarting.'
-					: 'Agent runtime saved.';
+				return `Changes saved.${restartNote}`;
 			case 'appearance':
 				return iconVariantChanged || restartCometMind
-					? 'Appearance saved. CometMind is restarting with the matching SOUL persona.'
-					: 'Appearance saved.';
+					? `Changes saved.${restartNote}`
+					: 'Changes saved.';
 			case 'app':
-				return 'App settings saved.';
+				return 'Changes saved.';
 			case 'memory':
-				return 'Memory settings saved.';
+				return `Changes saved.${restartNote}`;
 			default:
-				return 'Saved settings.';
+				return 'Changes saved.';
 		}
 	}
 
@@ -679,6 +720,10 @@
 		return method !== 'codex';
 	}
 
+	function discardSettings() {
+		shellStore.closeSettings();
+	}
+
 	function canFetchModels(provider: ProviderConfig) {
 		if (settingsStore.isFetchingModels || !provider.baseURL.trim()) return false;
 		return (
@@ -712,7 +757,7 @@
 					{:else if activeSection === 'memory'}
 						Manage global memories, retrieval thresholds, and compaction.
 					{:else if activeSection === 'shortcuts'}
-						Customize keyboard shortcuts. Changes apply immediately.
+						Customize keyboard shortcuts.
 					{:else}
 						Startup, storage, updates, and workspace.
 					{/if}
@@ -732,6 +777,7 @@
 				<button
 					class="settings-nav-item"
 					class:selected={activeSection === 'models'}
+					class:has-pending={navSectionDirty('models')}
 					onclick={() => {
 						activeSection = 'models';
 						status = '';
@@ -743,6 +789,7 @@
 				<button
 					class="settings-nav-item"
 					class:selected={activeSection === 'memory'}
+					class:has-pending={navSectionDirty('memory')}
 					onclick={() => {
 						activeSection = 'memory';
 						status = '';
@@ -754,6 +801,7 @@
 				<button
 					class="settings-nav-item"
 					class:selected={activeSection === 'agent'}
+					class:has-pending={navSectionDirty('agent')}
 					onclick={() => {
 						activeSection = 'agent';
 						status = '';
@@ -765,6 +813,7 @@
 				<button
 					class="settings-nav-item"
 					class:selected={activeSection === 'appearance'}
+					class:has-pending={navSectionDirty('appearance')}
 					onclick={() => {
 						activeSection = 'appearance';
 						status = '';
@@ -787,6 +836,7 @@
 				<button
 					class="settings-nav-item"
 					class:selected={activeSection === 'app'}
+					class:has-pending={navSectionDirty('app')}
 					onclick={() => {
 						activeSection = 'app';
 						status = '';
@@ -800,6 +850,7 @@
 			<div class="settings-pane">
 				{#if activeSection === 'models'}
 					<div class="settings-panel-stack">
+						<SettingsTabPersistence section="models" />
 						<SettingsProvidersPanel
 						providers={draft.providers}
 						bind:selectedProviderId
@@ -828,6 +879,7 @@
 					/>
 					</div>
 				{:else if activeSection === 'memory'}
+					<SettingsTabPersistence section="memory" />
 					{#key memoryPanelKey}
 						<SettingsMemoryPanel
 							bind:this={memoryPanel}
@@ -837,6 +889,7 @@
 						/>
 					{/key}
 				{:else if activeSection === 'agent'}
+					<SettingsTabPersistence section="agent" />
 					{#key cometmindPanelKey}
 						<SettingsCometMindPanel
 							bind:this={cometmindPanel}
@@ -847,6 +900,7 @@
 					{/key}
 				{:else if activeSection === 'appearance'}
 					<div class="settings-panel-stack">
+						<SettingsTabPersistence section="appearance" />
 						<SettingsAppearancePanel
 							bind:appearance={draft.appearance.heroComposer}
 							bind:caretTrail={draft.appearance.caretTrail}
@@ -890,8 +944,10 @@
 						</section>
 					</div>
 				{:else if activeSection === 'shortcuts'}
+					<SettingsTabPersistence section="shortcuts" />
 					<SettingsShortcutsPanel shortcuts={draft.shortcuts} onChange={updateShortcut} />
 				{:else}
+					<SettingsTabPersistence section="app" />
 					<div class="settings-panel-stack">
 						<SettingsGeneralPanel
 							bind:openAtLogin={draft.app.openAtLogin}
@@ -1068,30 +1124,18 @@
 		{/if}
 
 		<footer>
-			<p>
-				{#if activeSection === 'models'}
-					{enabledModelCount} model{enabledModelCount === 1 ? '' : 's'} enabled
-				{:else if activeSection === 'agent'}
-					Runs Discord gateway while Cometline is open when enabled
-				{:else if activeSection === 'memory'}
-					Embedding and memory behavior save with Save below
-				{:else if activeSection === 'shortcuts'}
-					Shortcut changes apply immediately
+			<p class="settings-footer-copy">
+				{#if settingsStore.isSaving}
+					Saving changes…
 				{:else}
-					&nbsp;
+					{#if hasPendingChanges}<strong>Unsaved changes ·</strong>{/if}
+					Save applies all tabs. Close without saving discards pending edits.
 				{/if}
 			</p>
-			<SettingsButton variant="secondary" onclick={shellStore.closeSettings}>Cancel</SettingsButton>
-			<SettingsButton
-				variant="secondary"
-				onclick={save}
-				disabled={settingsStore.isSaving ||
-					settingsStore.isFetchingModels ||
-					(activeSection === 'models' && enabledModelCount === 0) ||
-					(activeSection === 'memory' && memoryPanel?.isBusy?.())}
-			>
+			<SettingsButton variant="secondary" onclick={discardSettings}>Discard</SettingsButton>
+			<SettingsButton variant="primary" onclick={save} disabled={saveDisabled}>
 				{#if settingsStore.isSaving}<span class="spin"><LoaderCircle size={14} /></span>{/if}
-				Save
+				Save changes
 			</SettingsButton>
 		</footer>
 	</div>

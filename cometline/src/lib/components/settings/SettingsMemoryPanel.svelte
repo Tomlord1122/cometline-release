@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { LoaderCircle, Trash2 } from '@lucide/svelte';
 	import SettingsToggle from './SettingsToggle.svelte';
+	import SettingsPersistenceHint from './SettingsPersistenceHint.svelte';
 	import {
 		compactMemory,
 		compactMemoryPreview,
@@ -47,6 +48,22 @@
 	let selectedEmbeddingKey = $state('');
 
 	let loadError = $state('');
+	let savedSnapshot = $state('');
+
+	function memorySettingsSnapshot(next: MemorySettings): string {
+		return JSON.stringify({
+			auto_retrieve: next.auto_retrieve,
+			auto_extract: next.auto_extract,
+			similarity_threshold: next.similarity_threshold,
+			max_retrieved: next.max_retrieved,
+			lifecycle: next.lifecycle,
+			embedding: next.embedding
+		});
+	}
+
+	function markSavedSnapshot(next: MemorySettings) {
+		savedSnapshot = memorySettingsSnapshot(next);
+	}
 
 	const persistedEmbedding = $derived(
 		settings ? mergeEmbeddingFields(settings.embedding, savedEmbedding) : undefined
@@ -128,6 +145,7 @@
 			}
 			settings = nextSettings;
 			selectedEmbeddingKey = embeddingKeyForSettings(nextSettings);
+			markSavedSnapshot(nextSettings);
 			fullMemories = list.memories ?? [];
 			memories = fullMemories;
 			searchQuery = '';
@@ -135,6 +153,7 @@
 			loadError = error instanceof Error ? error.message : 'Failed to load memory settings';
 			settings = defaultMemorySettings();
 			selectedEmbeddingKey = '';
+			markSavedSnapshot(settings);
 			fullMemories = [];
 			memories = [];
 		} finally {
@@ -149,6 +168,17 @@
 	export function applySavedMemory(next: MemorySettings) {
 		settings = next;
 		selectedEmbeddingKey = embeddingKeyForSettings(next);
+		markSavedSnapshot(next);
+	}
+
+	export function isDirty(): boolean {
+		if (loading || !settings) return false;
+		try {
+			const payload = buildSavePayload();
+			return memorySettingsSnapshot(payload) !== savedSnapshot;
+		} catch {
+			return false;
+		}
 	}
 
 	export function buildSavePayload(): MemorySettings {
@@ -182,7 +212,7 @@
 	}
 
 	export function syncFields() {
-		// Memory settings persist via SettingsPanel footer Save.
+		// Memory settings persist via SettingsPanel Save changes.
 	}
 
 	async function applyMemorySearch(query: string) {
@@ -406,6 +436,8 @@
 						aria-busy={searching}
 					/>
 				</div>
+
+				<SettingsPersistenceHint tier="instant" detail="Adding or deleting memories" />
 
 				<div class="add-row">
 					<div class="add-row-header">

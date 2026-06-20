@@ -8,6 +8,7 @@
 	import type { SkillResource } from '$lib/types';
 	import { onMount } from 'svelte';
 	import SettingsMCPPanel from './SettingsMCPPanel.svelte';
+	import SettingsPersistenceHint from './SettingsPersistenceHint.svelte';
 
 	let {
 		cometmind = $bindable(),
@@ -520,6 +521,7 @@
 			<p class="gateway-status" class:running={gatewayRunning}>
 				Status: {gatewayRunning ? 'Running' : 'Stopped'}
 			</p>
+			<SettingsPersistenceHint tier="instant" detail="Run Discord gateway toggle" />
 		</div>
 		<label>
 			<span>Bot Token</span>

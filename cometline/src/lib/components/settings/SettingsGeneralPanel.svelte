@@ -1,5 +1,6 @@
 <script lang="ts">
 	import SettingsToggle from './SettingsToggle.svelte';
+	import SettingsPersistenceHint from './SettingsPersistenceHint.svelte';
 	import type { CometMindStorageSettings } from '$lib/settings/schema';
 
 	let {
@@ -52,16 +53,21 @@
 			disabled={!window.electronAPI?.setOpenAtLogin}
 			onchange={onOpenAtLoginChange}
 		/>
+		<SettingsPersistenceHint tier="instant" />
 	</div>
 
 	<div class="settings-section">
 		<div class="settings-section-heading">
 			<h3>Storage & retention</h3>
 			<p>
-				Automatic cleanup runs when CometMind starts and after settings are saved. Set a
-				field to 0 to disable that rule.
+				Control how long CometMind keeps archived sessions and memory before purging.
 			</p>
 		</div>
+		<SettingsPersistenceHint tier="pending" detail="Included in Save changes" />
+		<p class="settings-field-hint">
+			Automatic cleanup runs when CometMind starts and after settings are saved. Set a
+			field to 0 to disable that rule.
+		</p>
 
 		<label class="field">
 			<span>Session retention (days)</span>
