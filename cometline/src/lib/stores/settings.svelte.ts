@@ -2,7 +2,6 @@ import {
 	cloneCometMindSettings,
 	cloneProvider,
 	defaultSettings,
-	mergeFetchedModelMetadata,
 	migrateSingleProvider,
 	newProvider,
 	normalizeCometMindSettings,
@@ -74,14 +73,11 @@ function createSettingsStore() {
 				(await window.electronAPI?.fetchProviderModels?.(cloneProvider(provider))) ??
 				({ models: [] } satisfies FetchProviderModelsResult);
 			const models = Array.isArray(result) ? result : result.models;
-			const modelMetadata = Array.isArray(result)
-				? provider.modelMetadata
-				: mergeFetchedModelMetadata(provider.modelMetadata, result.modelMetadata);
 			const enabledModels = provider.enabledModels.filter((model) => models.includes(model));
 			const selectedModel =
 				enabledModels[0] ??
 				(models.includes(provider.selectedModel) ? provider.selectedModel : '');
-			return { ...provider, models, modelMetadata, enabledModels, selectedModel };
+			return { ...provider, models, enabledModels, selectedModel };
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to fetch models';
 			throw err;

@@ -9,7 +9,8 @@ import (
 )
 
 const (
-	compactionThresholdRatio = 0.75
+	// Compact only once estimated input exceeds the full configured budget (minus output reserve).
+	compactionThresholdRatio = 1.0
 	recentTurnPreserveCount  = 10
 )
 
@@ -95,7 +96,7 @@ func EstimatePromptTokens(in PromptBudgetInput) int {
 	return total
 }
 
-// ShouldCompact reports whether estimated input exceeds the compaction threshold.
+// ShouldCompact reports whether estimated input exceeds the configured context budget.
 func ShouldCompact(estimatedInput, contextWindow, outputBudget int) bool {
 	if contextWindow <= 0 {
 		return false

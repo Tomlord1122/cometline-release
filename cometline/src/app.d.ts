@@ -1,10 +1,6 @@
 declare global {
 	type ProviderMethod = 'openai-compatible' | 'openai' | 'anthropic' | 'opencode-go' | 'codex';
 
-	interface ProviderModelMetadata {
-		contextWindow?: number;
-	}
-
 	interface ProviderConfig {
 		id: string;
 		name: string;
@@ -15,13 +11,10 @@ declare global {
 		selectedModel: string;
 		models: string[];
 		enabledModels: string[];
-		modelMetadata?: Record<string, ProviderModelMetadata>;
-		defaultContextWindow?: number;
 	}
 
 	interface FetchProviderModelsResult {
 		models: string[];
-		modelMetadata?: Record<string, ProviderModelMetadata>;
 	}
 
 	interface HeroComposerAppearance {
@@ -172,6 +165,7 @@ declare global {
 	interface CometMindSettings {
 		systemPromptPath: string;
 		maxTokens: number;
+		contextWindowLimit: 128_000 | 256_000;
 		titleProviderId: string;
 		titleModelId: string;
 		acp: CometMindACPSettings;

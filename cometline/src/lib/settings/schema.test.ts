@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
 	defaultSettings,
-	mergeFetchedModelMetadata,
 	migrateSingleProvider,
 	normalizeSettings,
 	parseAndNormalizeSettings,
@@ -25,6 +24,7 @@ describe('settings schema', () => {
 		expect(settings.app.iconVariant).toBe('default');
 		expect(settings.cometmind.systemPromptPath).toBe('');
 		expect(settings.cometmind.maxTokens).toBe(2048);
+		expect(settings.cometmind.contextWindowLimit).toBe(128_000);
 		expect(settings.cometmind.storage.retentionDays).toBe(90);
 		expect(settings.cometmind.storage.maxSessionsPerWorkspace).toBe(0);
 	});
@@ -176,33 +176,23 @@ describe('settings schema', () => {
 		expect(runtimeSlice(settings)?.maxTokens).toBe(3072);
 	});
 
-	it('preserves optional provider model context metadata', () => {
+	it('normalizes context window limit to 128k or 256k', () => {
 		const settings = normalizeSettings({
 			...defaultSettings(),
-			providers: defaultSettings().providers.map((provider) =>
-				provider.id === 'anthropic'
-					? {
-							...provider,
-							modelMetadata: {
-								'claude-sonnet-4-20250514': { contextWindow: 200000 }
-							},
-							defaultContextWindow: 200000
-						}
-					: provider
-			)
+			cometmind: {
+				...defaultSettings().cometmind,
+				contextWindowLimit: 256_000
+			}
 		});
+		expect(settings.cometmind.contextWindowLimit).toBe(256_000);
 
-		const anthropic = settings.providers.find((provider) => provider.id === 'anthropic');
-		expect(anthropic?.defaultContextWindow).toBe(200000);
-		expect(anthropic?.modelMetadata?.['claude-sonnet-4-20250514']?.contextWindow).toBe(200000);
-	});
-
-	it('merges fetched model metadata without dropping existing entries', () => {
-		const merged = mergeFetchedModelMetadata(
-			{ 'gpt-4.1': { contextWindow: 128000 } },
-			{ 'gpt-4.1-mini': { contextWindow: 32000 } }
-		);
-		expect(merged?.['gpt-4.1']?.contextWindow).toBe(128000);
-		expect(merged?.['gpt-4.1-mini']?.contextWindow).toBe(32000);
+		const invalid = normalizeSettings({
+			...defaultSettings(),
+			cometmind: {
+				...defaultSettings().cometmind,
+				contextWindowLimit: 200_000 as 128_000
+			}
+		});
+		expect(invalid.cometmind.contextWindowLimit).toBe(128_000);
 	});
 });

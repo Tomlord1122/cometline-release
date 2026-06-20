@@ -22,10 +22,6 @@ export type MemoryUpdate = MemoryChangeWire;
 
 export type ProviderMethod = 'openai-compatible' | 'openai' | 'anthropic' | 'opencode-go' | 'codex';
 
-export interface ProviderModelMetadata {
-	contextWindow?: number;
-}
-
 export interface ProviderConfig {
 	id: string;
 	name: string;
@@ -36,13 +32,10 @@ export interface ProviderConfig {
 	selectedModel: string;
 	models: string[];
 	enabledModels: string[];
-	modelMetadata?: Record<string, ProviderModelMetadata>;
-	defaultContextWindow?: number;
 }
 
 export interface FetchProviderModelsResult {
 	models: string[];
-	modelMetadata?: Record<string, ProviderModelMetadata>;
 }
 
 export interface HeroComposerAppearance {

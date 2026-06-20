@@ -1986,24 +1986,7 @@ async function startMcpOAuth({ serverId, oauth }) {
 	}
 }
 
-function extractContextWindow(item) {
-	if (!item || typeof item !== 'object') return undefined;
-	const candidates = [
-		item.context_window,
-		item.contextWindow,
-		item.max_context_length,
-		item.max_context_tokens,
-		item.max_tokens
-	];
-	for (const candidate of candidates) {
-		const n = Number(candidate);
-		if (Number.isFinite(n) && n > 0) return Math.floor(n);
-	}
-	return undefined;
-}
-
 function normalizeModelFetchResult(rawModels, pickModel = (item) => item?.id) {
-	const modelMetadata = {};
 	const models = [];
 	for (const item of rawModels) {
 		if (typeof item === 'string') {
@@ -2015,17 +1998,9 @@ function normalizeModelFetchResult(rawModels, pickModel = (item) => item?.id) {
 		const id = String(pickModel(item) || '').trim();
 		if (!id) continue;
 		models.push(id);
-		const contextWindow = extractContextWindow(item);
-		if (contextWindow) {
-			modelMetadata[id] = { contextWindow };
-		}
 	}
 	const uniqueModels = Array.from(new Set(models)).sort();
-	const metadataKeys = Object.keys(modelMetadata);
-	return {
-		models: uniqueModels,
-		...(metadataKeys.length > 0 ? { modelMetadata } : {})
-	};
+	return { models: uniqueModels };
 }
 
 function normalizeCodexModelsURL(rawBaseURL) {

@@ -1,34 +1,31 @@
 import { describe, expect, it } from 'vitest';
-import type { ChatItem, ProviderConfig } from '$lib/types';
 import {
+	DEFAULT_CONTEXT_WINDOW_LIMIT,
 	estimateChatContextTokens,
 	estimateTokensFromText,
 	formatContextPercent,
 	formatContextUsageTokens,
 	formatContextWindow,
+	normalizeContextWindowLimit,
 	resolveContextWindow
 } from './context-window';
 
 describe('context-window', () => {
-	it('prefers per-model metadata', () => {
-		const provider: ProviderConfig = {
-			id: 'anthropic',
-			name: 'Anthropic',
-			method: 'anthropic',
-			enabled: true,
-			baseURL: '',
-			apiKey: '',
-			selectedModel: '',
-			models: [],
-			enabledModels: [],
-			modelMetadata: { 'claude-sonnet': { contextWindow: 200_000 } }
-		};
-		expect(resolveContextWindow(provider, 'claude-sonnet')).toBe(200_000);
+	it('normalizes to 128k or 256k only', () => {
+		expect(normalizeContextWindowLimit(256_000)).toBe(256_000);
+		expect(normalizeContextWindowLimit(128_000)).toBe(128_000);
+		expect(normalizeContextWindowLimit(200_000)).toBe(128_000);
+		expect(normalizeContextWindowLimit(undefined)).toBe(128_000);
+	});
+
+	it('resolves configured limit', () => {
+		expect(resolveContextWindow()).toBe(DEFAULT_CONTEXT_WINDOW_LIMIT);
+		expect(resolveContextWindow(256_000)).toBe(256_000);
 	});
 
 	it('formats large windows compactly', () => {
-		expect(formatContextWindow(200_000)).toBe('200k');
-		expect(formatContextWindow(1_280_000)).toBe('1.3M');
+		expect(formatContextWindow(128_000)).toBe('128k');
+		expect(formatContextWindow(256_000)).toBe('256k');
 	});
 
 	it('estimates tokens from text with chars/4 heuristic', () => {
@@ -38,15 +35,15 @@ describe('context-window', () => {
 	});
 
 	it('estimates transcript tokens from chat items', () => {
-		const items: ChatItem[] = [
-			{ id: '1', type: 'user', text: 'hello world' },
-			{ id: '2', type: 'assistant', text: 'hi there' }
+		const items = [
+			{ id: '1', type: 'user' as const, text: 'hello world' },
+			{ id: '2', type: 'assistant' as const, text: 'hi there' }
 		];
 		expect(estimateChatContextTokens(items)).toBeGreaterThan(0);
 	});
 
 	it('formats usage tooltip values', () => {
 		expect(formatContextUsageTokens(180_400)).toBe('180.4K');
-		expect(formatContextPercent(180_400, 200_000)).toBe('90.2');
+		expect(formatContextPercent(180_400, 256_000)).toBe('70.5');
 	});
 });

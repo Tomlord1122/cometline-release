@@ -1,29 +1,16 @@
 import { getReasoningSegments } from '$lib/conversation/reasoning';
-import type { ChatItem, ProviderConfig, ProviderMethod } from '$lib/types';
+import type { ChatItem } from '$lib/types';
 
-const GLOBAL_CONTEXT_WINDOW_FALLBACK = 32_000;
+export const CONTEXT_WINDOW_LIMIT_OPTIONS = [128_000, 256_000] as const;
+export type ContextWindowLimit = (typeof CONTEXT_WINDOW_LIMIT_OPTIONS)[number];
+export const DEFAULT_CONTEXT_WINDOW_LIMIT: ContextWindowLimit = 128_000;
 
-const METHOD_DEFAULTS: Record<ProviderMethod, number> = {
-	anthropic: 200_000,
-	openai: 128_000,
-	codex: 128_000,
-	'opencode-go': 32_000,
-	'openai-compatible': 32_000
-};
+export function normalizeContextWindowLimit(value: unknown): ContextWindowLimit {
+	return Number(value) === 256_000 ? 256_000 : 128_000;
+}
 
-/** Mirrors CometMind runtime context-window resolution for UI display. */
-export function resolveContextWindow(
-	provider: ProviderConfig | undefined,
-	modelId: string
-): number {
-	if (!provider) return GLOBAL_CONTEXT_WINDOW_FALLBACK;
-	const trimmedModel = modelId.trim();
-	const modelMeta = provider.modelMetadata?.[trimmedModel]?.contextWindow;
-	if (modelMeta && modelMeta > 0) return modelMeta;
-	if (provider.defaultContextWindow && provider.defaultContextWindow > 0) {
-		return provider.defaultContextWindow;
-	}
-	return METHOD_DEFAULTS[provider.method] ?? GLOBAL_CONTEXT_WINDOW_FALLBACK;
+export function resolveContextWindow(limit?: ContextWindowLimit | number | null): number {
+	return normalizeContextWindowLimit(limit ?? DEFAULT_CONTEXT_WINDOW_LIMIT);
 }
 
 export function formatContextWindow(tokens: number): string {

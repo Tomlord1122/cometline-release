@@ -46,7 +46,7 @@ func (c *ContextCompactor) MaybeCompact(
 		return sess, nil
 	}
 
-	contextWindow := ResolveContextWindow(c.Config, sess.ProviderID, sess.ModelID)
+	contextWindow := ResolveContextWindow(c.Config)
 	rows, err := c.Sessions.ListMessageRows(ctx, sess.ID)
 	if err != nil {
 		return sess, err

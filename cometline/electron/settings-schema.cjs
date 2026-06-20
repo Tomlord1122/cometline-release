@@ -28,7 +28,6 @@ __export(schema_exports, {
   defaultCometMindSettings: () => defaultCometMindSettings,
   defaultCometMindStorageSettings: () => defaultCometMindStorageSettings,
   defaultSettings: () => defaultSettings,
-  mergeFetchedModelMetadata: () => mergeFetchedModelMetadata,
   migrateSingleProvider: () => migrateSingleProvider,
   newProvider: () => newProvider,
   normalizeCometMindSettings: () => normalizeCometMindSettings,
@@ -4268,6 +4267,12 @@ function normalizeKeyboardShortcuts(saved) {
   return next;
 }
 
+// src/lib/context-window.ts
+var DEFAULT_CONTEXT_WINDOW_LIMIT = 128e3;
+function normalizeContextWindowLimit(value) {
+  return Number(value) === 256e3 ? 256e3 : 128e3;
+}
+
 // src/lib/settings/schema.ts
 var VALID_PROVIDER_METHODS = [
   "openai-compatible",
@@ -4464,6 +4469,7 @@ function defaultCometMindSettings(workspacePath = "") {
   return {
     systemPromptPath: "",
     maxTokens: 2048,
+    contextWindowLimit: DEFAULT_CONTEXT_WINDOW_LIMIT,
     titleProviderId: "",
     titleModelId: "",
     acp: {
@@ -4520,6 +4526,9 @@ function normalizeCometMindSettings(input, fallbackWorkspacePath = "") {
   return {
     systemPromptPath: String(input?.systemPromptPath ?? defaults.systemPromptPath).trim(),
     maxTokens: normalizePositiveInt(input?.maxTokens, defaults.maxTokens),
+    contextWindowLimit: normalizeContextWindowLimit(
+      input?.contextWindowLimit ?? defaults.contextWindowLimit
+    ),
     titleProviderId: String(input?.titleProviderId ?? defaults.titleProviderId).trim(),
     titleModelId: String(input?.titleModelId ?? defaults.titleModelId).trim(),
     acp: {
@@ -4590,6 +4599,7 @@ function cloneCometMindSettings(settings) {
   return {
     systemPromptPath: settings.systemPromptPath,
     maxTokens: settings.maxTokens,
+    contextWindowLimit: settings.contextWindowLimit,
     titleProviderId: settings.titleProviderId,
     titleModelId: settings.titleModelId,
     acp: {
@@ -4654,44 +4664,11 @@ function defaultAppSettings() {
 function normalizeIconVariant(value) {
   return value === "man" ? "man" : "default";
 }
-function normalizeOptionalPositiveInt(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n) || n <= 0) return void 0;
-  return Math.floor(n);
-}
-function normalizeModelMetadata(input, fallback) {
-  const merged = {};
-  for (const source of [fallback, input]) {
-    if (!source) continue;
-    for (const [modelId, meta] of Object.entries(source)) {
-      const id = String(modelId || "").trim();
-      if (!id) continue;
-      const contextWindow = normalizeOptionalPositiveInt(meta?.contextWindow);
-      if (contextWindow) {
-        merged[id] = { contextWindow };
-      }
-    }
-  }
-  return Object.keys(merged).length > 0 ? merged : void 0;
-}
-function mergeFetchedModelMetadata(existing, fetched) {
-  if (!fetched) return normalizeModelMetadata(existing);
-  const merged = { ...existing ?? {} };
-  for (const [modelId, meta] of Object.entries(fetched)) {
-    const id = String(modelId || "").trim();
-    const contextWindow = normalizeOptionalPositiveInt(meta?.contextWindow);
-    if (id && contextWindow) {
-      merged[id] = { contextWindow };
-    }
-  }
-  return Object.keys(merged).length > 0 ? merged : void 0;
-}
 function cloneProvider(provider) {
   return {
     ...provider,
     models: [...provider.models],
-    enabledModels: [...provider.enabledModels],
-    modelMetadata: provider.modelMetadata ? { ...provider.modelMetadata } : void 0
+    enabledModels: [...provider.enabledModels]
   };
 }
 function normalizeProvider(provider, fallback) {
@@ -4713,12 +4690,7 @@ function normalizeProvider(provider, fallback) {
     apiKey: method === "codex" ? "" : String(provider.apiKey ?? fallback?.apiKey ?? "").trim(),
     selectedModel: enabledModels[0] || "",
     models: [...modelList],
-    enabledModels,
-    modelMetadata: normalizeModelMetadata(
-      provider.modelMetadata,
-      fallback?.modelMetadata
-    ),
-    defaultContextWindow: normalizeOptionalPositiveInt(provider.defaultContextWindow) ?? normalizeOptionalPositiveInt(fallback?.defaultContextWindow)
+    enabledModels
   };
 }
 function resolveActiveProviderId(providers, preferredId) {
@@ -4860,9 +4832,7 @@ var providerConfigSchema = external_exports.object({
   apiKey: external_exports.string(),
   selectedModel: external_exports.string(),
   models: external_exports.array(external_exports.string()),
-  enabledModels: external_exports.array(external_exports.string()),
-  modelMetadata: external_exports.record(external_exports.string(), external_exports.object({ contextWindow: external_exports.number().int().positive().optional() })).optional(),
-  defaultContextWindow: external_exports.number().int().positive().optional()
+  enabledModels: external_exports.array(external_exports.string())
 });
 var providerSettingsSchema = external_exports.object({
   providers: external_exports.array(providerConfigSchema).min(1),
@@ -4889,6 +4859,7 @@ var providerSettingsSchema = external_exports.object({
   cometmind: external_exports.object({
     systemPromptPath: external_exports.string(),
     maxTokens: external_exports.number().int().positive(),
+    contextWindowLimit: external_exports.union([external_exports.literal(128e3), external_exports.literal(256e3)]),
     titleProviderId: external_exports.string(),
     titleModelId: external_exports.string(),
     acp: external_exports.object({
@@ -4992,7 +4963,6 @@ function parseAndNormalizeSettings(raw, options = {}) {
   defaultCometMindSettings,
   defaultCometMindStorageSettings,
   defaultSettings,
-  mergeFetchedModelMetadata,
   migrateSingleProvider,
   newProvider,
   normalizeCometMindSettings,

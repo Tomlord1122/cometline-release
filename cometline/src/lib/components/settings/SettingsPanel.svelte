@@ -997,12 +997,6 @@
 										</button>
 									</div>
 								</div>
-
-								<div class="settings-row">
-									<span class="settings-row-label">Version</span>
-									<span class="settings-row-value">{appVersion || '—'}</span>
-								</div>
-
 								<div class="settings-row align-start">
 									<div class="settings-row-copy">
 										<span class="settings-row-label">Workspace</span>
@@ -1109,6 +1103,10 @@
 											Replay intro
 										</button>
 									</div>
+								</div>
+								<div class="settings-row">
+									<span class="settings-row-label ">Version</span>
+									<span class="settings-row-value mr-2">{appVersion || '—'}</span>
 								</div>
 							</div>
 						</section>

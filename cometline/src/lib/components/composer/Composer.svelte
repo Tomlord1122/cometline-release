@@ -113,10 +113,7 @@
 	let dragActive = $derived(dragDepth > 0 || dropProcessing);
 	let canSubmit = $derived(Boolean(value.trim() || images.length > 0));
 	let contextWindowUsage = $derived.by(() => {
-		const selected = modelStore.selected;
-		if (!selected) return null;
-		const provider = settingsStore.settings.providers.find((p) => p.id === selected.providerId);
-		const limit = resolveContextWindow(provider, selected.modelId);
+		const limit = resolveContextWindow(settingsStore.settings.cometmind.contextWindowLimit);
 		const items =
 			sessionId && chatStore.sessionID === sessionId ? chatStore.items : [];
 		const draftTokens = value.trim() ? estimateTokensFromText(value) : 0;

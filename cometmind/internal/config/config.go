@@ -20,19 +20,13 @@ const (
 )
 
 // ProviderEntry is one configured LLM provider managed by Cometline.
-type ModelMetadata struct {
-	ContextWindow int `json:"context_window" mapstructure:"context_window"`
-}
-
 type ProviderEntry struct {
-	ID                   string                    `mapstructure:"id"`
-	Name                 string                    `mapstructure:"name"`
-	Method               string                    `mapstructure:"method"`
-	BaseURL              string                    `mapstructure:"base_url"`
-	APIKey               string                    `mapstructure:"api_key"`
-	Model                string                    `mapstructure:"model"`
-	ModelMetadata        map[string]ModelMetadata  `json:"model_metadata" mapstructure:"model_metadata"`
-	DefaultContextWindow int                       `json:"default_context_window" mapstructure:"default_context_window"`
+	ID      string `mapstructure:"id"`
+	Name    string `mapstructure:"name"`
+	Method  string `mapstructure:"method"`
+	BaseURL string `mapstructure:"base_url"`
+	APIKey  string `mapstructure:"api_key"`
+	Model   string `mapstructure:"model"`
 }
 
 // ACPConfig controls external coding agent delegation.
@@ -76,8 +70,9 @@ type Config struct {
 	BaseURL          string          `mapstructure:"base_url"`
 	TitleProvider    string          `mapstructure:"title_provider"`
 	TitleModel       string          `mapstructure:"title_model"`
-	MaxTokens        int             `mapstructure:"max_tokens"`
-	MaxSteps         int             `mapstructure:"max_steps"`
+	MaxTokens           int `mapstructure:"max_tokens"`
+	ContextWindowLimit  int `mapstructure:"context_window_limit"`
+	MaxSteps            int `mapstructure:"max_steps"`
 	SystemPromptPath string          `mapstructure:"system_prompt_path"`
 	Providers        []ProviderEntry `mapstructure:"providers"`
 	ACP              ACPConfig       `mapstructure:"acp"`
@@ -93,8 +88,9 @@ func Defaults() *Config {
 	return &Config{
 		Provider:  ProviderAnthropic,
 		Model:     "claude-sonnet-4-5",
-		MaxTokens: 2048,
-		MaxSteps:  50,
+		MaxTokens:          2048,
+		ContextWindowLimit: 128_000,
+		MaxSteps:           50,
 		Skills:    SkillsConfig{Enabled: true, IncludeOpenCode: true, IncludeClaude: true},
 		Memory:    defaultMemoryConfig(),
 		Storage:   defaultStorageConfig(),

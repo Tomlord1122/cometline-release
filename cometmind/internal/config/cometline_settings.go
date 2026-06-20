@@ -7,22 +7,16 @@ import (
 	"strings"
 )
 
-type cometlineModelMetadataJSON struct {
-	ContextWindow int `json:"contextWindow,omitempty"`
-}
-
 type cometlineProviderJSON struct {
-	ID                   string                              `json:"id"`
-	Name                 string                              `json:"name"`
-	Method               string                              `json:"method"`
-	Enabled              bool                                `json:"enabled"`
-	BaseURL              string                              `json:"baseURL"`
-	APIKey               string                              `json:"apiKey"`
-	SelectedModel        string                              `json:"selectedModel"`
-	Models               []string                            `json:"models"`
-	EnabledModels        []string                            `json:"enabledModels"`
-	ModelMetadata        map[string]cometlineModelMetadataJSON `json:"modelMetadata,omitempty"`
-	DefaultContextWindow int                                 `json:"defaultContextWindow,omitempty"`
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	Method        string   `json:"method"`
+	Enabled       bool     `json:"enabled"`
+	BaseURL       string   `json:"baseURL"`
+	APIKey        string   `json:"apiKey"`
+	SelectedModel string   `json:"selectedModel"`
+	Models        []string `json:"models"`
+	EnabledModels []string `json:"enabledModels"`
 }
 
 type cometlineACPJSON struct {
@@ -93,9 +87,10 @@ type cometlineMCPJSON struct {
 }
 
 type cometlineCometmindJSON struct {
-	SystemPromptPath string              `json:"systemPromptPath"`
-	MaxTokens        int                 `json:"maxTokens"`
-	TitleProviderID  string              `json:"titleProviderId"`
+	SystemPromptPath   string              `json:"systemPromptPath"`
+	MaxTokens          int                 `json:"maxTokens"`
+	ContextWindowLimit int                 `json:"contextWindowLimit"`
+	TitleProviderID    string              `json:"titleProviderId"`
 	TitleModelID     string              `json:"titleModelId"`
 	ACP              cometlineACPJSON    `json:"acp"`
 	Skills           cometlineSkillsJSON `json:"skills"`
@@ -165,23 +160,13 @@ func adaptCometlineSettings(raw cometlineSettingsJSON) (*Config, error) {
 
 	providers := make([]ProviderEntry, 0, len(runtimeProviders))
 	for _, provider := range runtimeProviders {
-		modelMetadata := make(map[string]ModelMetadata)
-		for modelID, meta := range provider.ModelMetadata {
-			id := strings.TrimSpace(modelID)
-			if id == "" || meta.ContextWindow <= 0 {
-				continue
-			}
-			modelMetadata[id] = ModelMetadata{ContextWindow: meta.ContextWindow}
-		}
 		providers = append(providers, ProviderEntry{
-			ID:                   strings.TrimSpace(provider.ID),
-			Name:                 strings.TrimSpace(provider.Name),
-			Method:               strings.TrimSpace(provider.Method),
-			BaseURL:              strings.TrimSpace(provider.BaseURL),
-			APIKey:               provider.APIKey,
-			Model:                primaryModel(provider),
-			ModelMetadata:        modelMetadata,
-			DefaultContextWindow: provider.DefaultContextWindow,
+			ID:      strings.TrimSpace(provider.ID),
+			Name:    strings.TrimSpace(provider.Name),
+			Method:  strings.TrimSpace(provider.Method),
+			BaseURL: strings.TrimSpace(provider.BaseURL),
+			APIKey:  provider.APIKey,
+			Model:   primaryModel(provider),
 		})
 	}
 
@@ -193,8 +178,9 @@ func adaptCometlineSettings(raw cometlineSettingsJSON) (*Config, error) {
 		BaseURL:          strings.TrimSpace(active.BaseURL),
 		TitleProvider:    strings.TrimSpace(cm.TitleProviderID),
 		TitleModel:       strings.TrimSpace(cm.TitleModelID),
-		MaxTokens:        cm.MaxTokens,
-		MaxSteps:         50,
+		MaxTokens:          cm.MaxTokens,
+		ContextWindowLimit: normalizeContextWindowLimit(cm.ContextWindowLimit),
+		MaxSteps:           50,
 		SystemPromptPath: strings.TrimSpace(cm.SystemPromptPath),
 		Providers:        providers,
 		ACP: ACPConfig{
@@ -274,6 +260,13 @@ func adaptCometlineSettings(raw cometlineSettingsJSON) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func normalizeContextWindowLimit(value int) int {
+	if value == 256_000 {
+		return 256_000
+	}
+	return 128_000
 }
 
 func adaptMCPJSON(raw cometlineMCPJSON) MCPConfig {
@@ -356,8 +349,9 @@ func writeMinimalCometlineSettingsJSON(path string, def *Config) error {
 		},
 		ActiveProviderID: def.Provider,
 		Cometmind: cometlineCometmindJSON{
-			SystemPromptPath: def.SystemPromptPath,
-			MaxTokens:        def.MaxTokens,
+			SystemPromptPath:   def.SystemPromptPath,
+			MaxTokens:          def.MaxTokens,
+			ContextWindowLimit: def.ContextWindowLimit,
 			ACP: cometlineACPJSON{
 				Command: "opencode",
 				Args:    []string{"acp"},
