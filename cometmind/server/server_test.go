@@ -549,6 +549,63 @@ func TestClearSessionResetsTranscript(t *testing.T) {
 	}
 }
 
+func TestClearSessionRemovesChildSessions(t *testing.T) {
+	t.Parallel()
+
+	engine, svc, cleanup := newTestEngine(t, func(sess session.Session, workspacePath string) (Runner, error) {
+		return fakeRunner(func(ctx context.Context, turn session.AgentTurn, ch chan<- event.Event) error {
+			ch <- event.Done()
+			return nil
+		}), nil
+	})
+	defer cleanup()
+
+	ctx := context.Background()
+	ws, err := svc.EnsureWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("EnsureWorkspace() error = %v", err)
+	}
+	parent, err := svc.NewSession(ctx, ws.ID, "test-model", "test-provider")
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	if _, err := svc.AppendUserMessage(ctx, parent.ID, "delegate something"); err != nil {
+		t.Fatalf("AppendUserMessage() error = %v", err)
+	}
+	if _, err := svc.NewChildSession(ctx, parent, "refactor auth module"); err != nil {
+		t.Fatalf("NewChildSession() error = %v", err)
+	}
+	children, err := svc.ListChildSessions(ctx, parent.ID)
+	if err != nil {
+		t.Fatalf("ListChildSessions() before clear error = %v", err)
+	}
+	if len(children) != 1 {
+		t.Fatalf("children before clear = %d, want 1", len(children))
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+parent.ID+"/clear", nil)
+	engine.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("clear status = %d, want %d body=%s", rec.Code, http.StatusNoContent, rec.Body.String())
+	}
+
+	msgs, err := svc.ListMessageRows(ctx, parent.ID)
+	if err != nil {
+		t.Fatalf("ListMessageRows() error = %v", err)
+	}
+	if len(msgs) != 0 {
+		t.Fatalf("messages after clear = %d, want 0", len(msgs))
+	}
+	children, err = svc.ListChildSessions(ctx, parent.ID)
+	if err != nil {
+		t.Fatalf("ListChildSessions() after clear error = %v", err)
+	}
+	if len(children) != 0 {
+		t.Fatalf("children after clear = %d, want 0", len(children))
+	}
+}
+
 func TestPatchSessionUpdatesModel(t *testing.T) {
 	t.Parallel()
 

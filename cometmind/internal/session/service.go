@@ -377,9 +377,20 @@ func (s *Service) DeleteSession(ctx context.Context, sessionID string) error {
 
 // ClearSessionTranscript deletes all transcript rows for a session and resets
 // compaction, token usage, and title while preserving the session identity.
+// Delegated child sessions are removed as well so subagent UI does not reappear
+// on transcript reload.
 func (s *Service) ClearSessionTranscript(ctx context.Context, sessionID string) error {
 	if _, err := s.GetSession(ctx, sessionID); err != nil {
 		return err
+	}
+	children, err := s.ListChildSessions(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	for _, child := range children {
+		if err := s.DeleteSession(ctx, child.ID); err != nil {
+			return err
+		}
 	}
 	if err := s.q.DeleteMessagesBySession(ctx, sessionID); err != nil {
 		return err

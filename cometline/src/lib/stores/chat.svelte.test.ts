@@ -451,3 +451,64 @@ describe('chatStore session switching', () => {
 		});
 	});
 });
+
+describe('chatStore clear and subagents', () => {
+	beforeEach(() => {
+		chatStore.clear();
+		sessionStore.setSessions([]);
+		vi.clearAllMocks();
+		vi.mocked(listChildSessions).mockResolvedValue({ sessions: [] });
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			cb(0);
+			return 0;
+		});
+	});
+
+	it('loadTranscript after clear does not show subagent items', async () => {
+		vi.mocked(getSessionMessages).mockResolvedValue({
+			session_id: 'sess-a',
+			items: []
+		});
+		vi.mocked(listChildSessions).mockResolvedValue({ sessions: [] });
+
+		chatStore.bindSession('sess-a');
+		await chatStore.loadTranscript('sess-a');
+
+		expect(chatStore.items).toEqual([]);
+		expect(chatStore.items.some((item) => item.type === 'subagent')).toBe(false);
+	});
+
+	it('ignores orphan child sessions when transcript has no delegate tool', async () => {
+		vi.mocked(getSessionMessages).mockResolvedValue({
+			session_id: 'sess-a',
+			items: []
+		});
+		vi.mocked(listChildSessions).mockResolvedValue({
+			sessions: [
+				{
+					id: 'child-1',
+					workspace_id: 'workspace-1',
+					workspace_path: '/tmp/workspace',
+					title: 'Delegated task',
+					model_id: 'model',
+					provider_id: 'provider',
+					status: 'active',
+					token_usage: { input_tokens: 0, output_tokens: 0, cache_read: 0, cache_write: 0 },
+					pinned: false,
+					parent_session_id: 'sess-a',
+					purpose: 'refactor auth',
+					delegation_status: 'completed',
+					output_summary: 'done',
+					created_at: 0,
+					updated_at: 0
+				}
+			]
+		});
+
+		chatStore.bindSession('sess-a');
+		await chatStore.loadTranscript('sess-a');
+
+		expect(chatStore.items).toEqual([]);
+		expect(chatStore.items.some((item) => item.type === 'subagent')).toBe(false);
+	});
+});

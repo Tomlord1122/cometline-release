@@ -878,6 +878,15 @@ func (a *App) handleClearSession(c *gin.Context) {
 		writeError(c, http.StatusConflict, "session_running", "session is running")
 		return
 	}
+	if children, err := a.sessions.ListChildSessions(c.Request.Context(), sessID); err == nil && a.acpMgr != nil {
+		for _, child := range children {
+			if child.DelegationStatus != "running" {
+				continue
+			}
+			_ = a.acpMgr.Cancel(child.ID)
+			_ = a.sessions.UpdateDelegationState(c.Request.Context(), child.ID, "cancelled", "", "")
+		}
+	}
 	if err := a.sessions.ClearSessionTranscript(c.Request.Context(), sessID); err != nil {
 		writeError(c, http.StatusInternalServerError, "internal_error", err.Error())
 		return

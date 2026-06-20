@@ -82,9 +82,14 @@ function mergeSubagents(items: ChatItem[], children: Session[]): ChatItem[] {
 		out.push(item);
 	}
 
-	for (const child of children) {
-		if (!used.has(child.id)) {
-			out.push(subagentFromChild(child));
+	const hasDelegateTool = out.some(
+		(item) => item.type === 'tool' && item.toolName === 'delegate_coding_task'
+	);
+	if (hasDelegateTool) {
+		for (const child of children) {
+			if (!used.has(child.id)) {
+				out.push(subagentFromChild(child));
+			}
 		}
 	}
 	return out;
