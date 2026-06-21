@@ -22,6 +22,8 @@
 	import { matchesShortcut } from '$lib/keyboard-shortcuts';
 	import type { ImageAttachment, ChatItem } from '$lib/types';
 	import type { ModelOption } from '$lib/stores/model.svelte';
+	import ProviderSwitchDialog from '$lib/components/ProviderSwitchDialog.svelte';
+	import { analyzeProviderSwitch, type ProviderSwitchWarning } from '$lib/provider-switch';
 
 	const THREAD_IN = { duration: 140 };
 
@@ -79,6 +81,9 @@
 	let queuedCount = $state(0);
 	let queuedMessages = $state<QueuedMessage[]>([]);
 	let turnBusy = $state(false);
+	let pendingSwitch = $state<{ option: ModelOption; warnings: ProviderSwitchWarning[] } | null>(
+		null
+	);
 
 	let snapshotItems = $state.raw<ChatItem[]>([]);
 	// Default to "loading" until the store binds this session so a freshly
@@ -220,7 +225,12 @@
 		stop();
 	}
 
-	async function onModelChange(option: ModelOption) {
+	function revertModelSelection() {
+		const session = sessionStore.sessions.find((item) => item.id === sessionId);
+		if (session) modelStore.selectFromSession(session);
+	}
+
+	async function commitModelChange(option: ModelOption) {
 		try {
 			const updated = await updateSession(sessionId, {
 				model_id: option.modelId,
@@ -228,9 +238,32 @@
 			});
 			sessionStore.updateSession(updated);
 		} catch {
-			const session = sessionStore.sessions.find((item) => item.id === sessionId);
-			if (session) modelStore.selectFromSession(session);
+			revertModelSelection();
 		}
+	}
+
+	async function onModelChange(option: ModelOption) {
+		// Warn before switching to a provider that handles existing history
+		// differently (e.g. Codex summarizes prior chain-of-thought). The model
+		// store has already optimistically selected the option, so cancelling
+		// must revert to the persisted session selection.
+		const warnings = analyzeProviderSwitch(snapshotItems, option.providerMethod);
+		if (warnings.length > 0) {
+			pendingSwitch = { option, warnings };
+			return;
+		}
+		await commitModelChange(option);
+	}
+
+	function confirmPendingSwitch() {
+		const pending = pendingSwitch;
+		pendingSwitch = null;
+		if (pending) void commitModelChange(pending.option);
+	}
+
+	function cancelPendingSwitch() {
+		pendingSwitch = null;
+		revertModelSelection();
 	}
 </script>
 
@@ -322,6 +355,15 @@
 		</HeroComposerFrame>
 	</div>
 </div>
+
+{#if pendingSwitch}
+	<ProviderSwitchDialog
+		providerName={pendingSwitch.option.providerName}
+		warnings={pendingSwitch.warnings}
+		onCancel={cancelPendingSwitch}
+		onConfirm={confirmPendingSwitch}
+	/>
+{/if}
 
 <style>
 	.chat-home {
