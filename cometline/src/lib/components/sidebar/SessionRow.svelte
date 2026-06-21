@@ -96,6 +96,7 @@
 <style>
 	.session-row-wrap {
 		border-left: 2px solid var(--session-row-rail);
+		border-radius: 8px;
 		padding-left: 8px;
 		transition:
 			background-color var(--duration-fast) var(--ease-smooth),
