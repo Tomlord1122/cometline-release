@@ -4,10 +4,6 @@
 @import './lib/styles/settings-panels.css';
 @import './lib/styles/fold-panel.css';
 
-@utility scrollbar-gutter-stable {
-	scrollbar-gutter: stable;
-}
-
 :root {
 	/* Colors */
 	--app-bg: #fbfbfa;

@@ -235,7 +235,6 @@
 	max-height: min(320px, 40vh);
 	overflow-y: auto;
 	min-height: 0;
-	scrollbar-gutter: stable;
 }
 
 .settings-panel-frame label {

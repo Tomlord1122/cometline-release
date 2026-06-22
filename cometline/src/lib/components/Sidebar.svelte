@@ -204,7 +204,7 @@
 			<SidebarSearch bind:searchQuery bind:searchInput onNewChat={newChat} />
 		</div>
 
-		<div class="session-list">
+		<div class="session-list scrollbar-none">
 			{#if pinnedSessions.length > 0}
 				<PinnedGroup
 					sessions={pinnedSessions}
@@ -401,11 +401,10 @@
 	.session-list {
 		flex: 1;
 		overflow-y: auto;
-		scrollbar-gutter: stable;
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		padding: 0 12px 12px 12px;
+		padding: 0 8px 12px 8px;
 	}
 
 	.session-empty {
@@ -418,7 +417,7 @@
 
 	.sidebar-section-divider {
 		height: 2px;
-		margin: 8px 6px 6px;
+		margin: 8px 0 6px;
 		background: rgba(15, 23, 42, 0.16);
 		border-radius: 1px;
 		flex-shrink: 0;

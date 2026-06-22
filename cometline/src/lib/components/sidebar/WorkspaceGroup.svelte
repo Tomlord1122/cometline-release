@@ -99,8 +99,6 @@
 	.workspace-group:not(.active) {
 		border-left: 3px solid var(--workspace-inactive-color, #9a9a9f);
 		padding-left: 4px;
-		margin-left: -6px;
-		margin-right: -6px;
 		background: color-mix(in srgb, var(--workspace-inactive-color, #9a9a9f) 15%, transparent);
 	}
 
@@ -111,8 +109,6 @@
 	.workspace-group.active {
 		border-left: 3px solid var(--hero-composer-glow-color, var(--accent));
 		padding-left: 4px;
-		margin-left: -6px;
-		margin-right: -6px;
 		background: color-mix(
 			in srgb,
 			var(--hero-composer-glow-color, var(--accent)) 30%,

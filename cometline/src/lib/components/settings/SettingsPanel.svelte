@@ -847,7 +847,7 @@
 				</button>
 			</nav>
 
-			<div class="settings-pane">
+			<div class="settings-pane scrollbar-gutter-stable">
 				{#if activeSection === 'models'}
 					<div class="settings-panel-stack">
 						<SettingsTabPersistence section="models" />
@@ -1277,7 +1277,6 @@
 		min-width: 0;
 		min-height: 0;
 		overflow-y: auto;
-		scrollbar-gutter: stable;
 	}
 
 	.message {

@@ -274,7 +274,7 @@
 					spellcheck="false"
 				/>
 
-				<div class="settings-scroll-list model-list">
+				<div class="settings-scroll-list model-list scrollbar-gutter-stable">
 					{#each filteredModels as model (model)}
 						<ModelRow
 							{model}

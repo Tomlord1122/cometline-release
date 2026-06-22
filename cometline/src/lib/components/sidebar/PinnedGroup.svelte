@@ -84,8 +84,6 @@
 		gap: 4px;
 		border-radius: 8px;
 		padding: 2px 2px 2px 4px;
-		margin-left: -6px;
-		margin-right: -6px;
 		border-left: 3px solid var(--pinned-group-color, #b45309);
 		background: var(--pinned-group-bg, color-mix(in srgb, #b45309 10%, transparent));
 		transition: background var(--duration-fast) var(--ease-smooth);

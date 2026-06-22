@@ -89,8 +89,6 @@
 		border-radius: 8px;
 		padding: 2px;
 		padding-left: 4px;
-		margin-left: -6px;
-		margin-right: -6px;
 		border-left: 3px solid var(--workspace-inactive-color, #9a9a9f);
 		background: var(--discord-group-bg, color-mix(in srgb, #5865f2 10%, transparent));
 		transition:

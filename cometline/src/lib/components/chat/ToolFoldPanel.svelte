@@ -61,15 +61,15 @@
 	{#if expanded}
 		<div class="fold-body tool-output-body" transition:slide={FOLD_IN}>
 			{#if formatToolInput(item.input)}
-				<pre class="tool-input-text">{formatToolInput(item.input)}</pre>
+				<pre class="tool-input-text scrollbar-gutter-stable">{formatToolInput(item.input)}</pre>
 			{/if}
 			{#if item.error}
-				<pre class="tool-error-text">{item.error}</pre>
+				<pre class="tool-error-text scrollbar-gutter-stable">{item.error}</pre>
 			{:else if item.output}
-				<pre>{item.output}</pre>
+				<pre class="scrollbar-gutter-stable">{item.output}</pre>
 			{/if}
 			{#if item.pending && !item.output && !item.error}
-				<pre>Running…</pre>
+				<pre class="scrollbar-gutter-stable">Running…</pre>
 			{/if}
 		</div>
 	{/if}
@@ -122,7 +122,6 @@
 		overflow-wrap: break-word;
 		max-height: 220px;
 		overflow: auto;
-		scrollbar-gutter: stable;
 	}
 
 	.tool-output-body pre + pre {

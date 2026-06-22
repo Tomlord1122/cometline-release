@@ -89,7 +89,7 @@
 	</button>
 
 	{#if modelOpen}
-		<div class="model-menu" transition:fly={{ y: 6, duration: 120 }}>
+		<div class="model-menu scrollbar-gutter-stable" transition:fly={{ y: 6, duration: 120 }}>
 			<input
 				class="model-search"
 				bind:this={modelSearchInput}
@@ -180,7 +180,6 @@
 		border-radius: 14px;
 		background: rgba(246, 249, 252, 0.98);
 		box-shadow: var(--shadow-card);
-		scrollbar-gutter: stable;
 	}
 
 	.model-search {

@@ -125,7 +125,7 @@
 			{/if}
 			{#if item.summary}
 				<div class="subagent-summary">
-					<p>{item.summary}</p>
+					<p class="scrollbar-gutter-stable">{item.summary}</p>
 				</div>
 			{/if}
 		</div>
@@ -312,6 +312,5 @@
 		max-height: 220px;
 		overflow-x: hidden;
 		overflow-y: auto;
-		scrollbar-gutter: stable;
 	}
 </style>

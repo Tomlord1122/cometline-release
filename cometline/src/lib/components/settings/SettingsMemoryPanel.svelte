@@ -452,7 +452,7 @@
 					></textarea>
 				</div>
 
-		<div class="memory-list">
+		<div class="memory-list scrollbar-gutter-stable">
 			{#each memories as memory (memory.id)}
 				<article class="memory-card">
 					<div>
@@ -600,7 +600,6 @@
 		gap: 8px;
 		max-height: 280px;
 		overflow: auto;
-		scrollbar-gutter: stable;
 	}
 
 	.memory-card {

@@ -16,7 +16,7 @@
 </script>
 
 <div
-	class="skill-command-menu {className}"
+	class="skill-command-menu scrollbar-gutter-stable {className}"
 	role="listbox"
 	aria-label={ariaLabel}
 	bind:this={menuRef}
@@ -39,7 +39,6 @@
 		border-radius: 14px;
 		background: rgba(246, 249, 252, 0.98);
 		box-shadow: var(--shadow-card);
-		scrollbar-gutter: stable;
 	}
 
 	.skill-command-menu :global(.skill-command-option) {
