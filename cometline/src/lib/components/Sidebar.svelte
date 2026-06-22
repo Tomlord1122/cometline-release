@@ -280,6 +280,9 @@
 		</div>
 
 		<div class="sidebar-footer">
+			<button aria-label="Settings" title="Settings" onclick={shellStore.openSettings}>
+				<Settings size={16} stroke-width={1.8} />
+			</button>
 			<button
 				aria-label="Jobs"
 				title="Jobs"
@@ -287,9 +290,6 @@
 				onclick={() => goto('/jobs')}
 			>
 				<Briefcase size={16} stroke-width={1.8} />
-			</button>
-			<button aria-label="Settings" title="Settings" onclick={shellStore.openSettings}>
-				<Settings size={16} stroke-width={1.8} />
 			</button>
 		</div>
 	</div>
@@ -430,6 +430,9 @@
 		margin-left: 10px;
 		padding-top: 8px;
 		border-top: 1px solid var(--border-soft);
+		display: flex;
+		flex-direction: row;
+		gap: 4px;
 	}
 
 	@media (max-width: 900px) {
