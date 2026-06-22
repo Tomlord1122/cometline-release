@@ -1,4 +1,6 @@
 <script lang="ts">
+	import WorkspacePathField from '$lib/components/WorkspacePathField.svelte';
+
 	let {
 		description = $bindable(''),
 		dod = $bindable(''),
@@ -44,10 +46,8 @@
 		</label>
 	</div>
 	<div class="settings-field">
-		<label>
-			<span>Workspace path (optional)</span>
-			<input type="text" bind:value={workspacePath} placeholder="/path/to/project" spellcheck="false" />
-		</label>
+		<span class="field-label">Workspace path (optional)</span>
+		<WorkspacePathField bind:value={workspacePath} />
 	</div>
 	<div class="job-create-actions">
 		<button type="submit" class="primary" disabled={saving || !description.trim()}>
@@ -64,7 +64,7 @@
 	}
 
 	.job-create-form textarea,
-	.job-create-form input {
+	.job-create-form input:not(.path-input) {
 		width: 100%;
 		border: 1px solid var(--border-soft);
 		border-radius: 10px;
@@ -77,7 +77,7 @@
 	}
 
 	.job-create-form textarea:focus,
-	.job-create-form input:focus {
+	.job-create-form input:not(.path-input):focus {
 		outline: none;
 		border-color: rgba(0, 102, 204, 0.35);
 		box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
@@ -86,5 +86,13 @@
 	.job-create-actions {
 		display: flex;
 		justify-content: flex-end;
+	}
+
+	.field-label {
+		display: block;
+		margin-bottom: 6px;
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--text-main);
 	}
 </style>

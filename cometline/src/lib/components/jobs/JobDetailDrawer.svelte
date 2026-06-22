@@ -4,6 +4,7 @@
 	import { X, Trash2, Play } from '@lucide/svelte';
 	import type { JobEventResource, JobResource } from '$lib/client/cometmind';
 	import JobCreateForm from './JobCreateForm.svelte';
+	import WorkspacePathField from '$lib/components/WorkspacePathField.svelte';
 	import { startJobInChat } from '$lib/jobs/start-job-in-chat';
 
 	type DrawerMode = 'detail' | 'create';
@@ -159,10 +160,8 @@
 							</label>
 						</div>
 						<div class="settings-field">
-							<label>
-								<span>Workspace path</span>
-								<input type="text" bind:value={editWorkspacePath} spellcheck="false" />
-							</label>
+							<span class="field-label">Workspace path</span>
+							<WorkspacePathField bind:value={editWorkspacePath} />
 						</div>
 						<button type="submit" class="secondary" disabled={saving}>Save changes</button>
 					</form>
@@ -340,7 +339,7 @@
 	}
 
 	.drawer-form textarea,
-	.drawer-form input {
+	.drawer-form input:not(.path-input) {
 		width: 100%;
 		border: 1px solid var(--border-soft);
 		border-radius: 10px;
@@ -384,6 +383,14 @@
 		margin: 0;
 		font-size: 12px;
 		color: #b42318;
+	}
+
+	.field-label {
+		display: block;
+		margin-bottom: 6px;
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--text-main);
 	}
 
 	@media (max-width: 900px) {
