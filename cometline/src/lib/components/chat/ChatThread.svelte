@@ -374,9 +374,7 @@
 	let heroGlowColor = $derived(settingsStore.settings.appearance.heroComposer.glowColor);
 
 	function showAssistantActivitySpinner(item: Extract<ChatItem, { type: 'assistant' }>) {
-		if (!sessionStreaming || item.id !== streamingAssistantId) return false;
-		if (!item.text?.trim() && hasVisibleThinkingBlock(item.id)) return false;
-		return true;
+		return sessionStreaming && item.id === streamingAssistantId;
 	}
 
 	function assistantWaitSeconds(item: Extract<ChatItem, { type: 'assistant' }> | undefined) {
