@@ -14,14 +14,12 @@ describe('truncateJobLabel', () => {
 });
 
 describe('jobMenuSubtitle', () => {
-	it('omits zero priority', () => {
-		expect(jobMenuSubtitle({ priority: 0 })).toBe('');
+	it('returns empty without workspace', () => {
+		expect(jobMenuSubtitle({})).toBe('');
 	});
 
-	it('includes priority and workspace', () => {
-		expect(
-			jobMenuSubtitle({ priority: 2, workspace_path: '/Users/me/project/src' })
-		).toContain('Priority 2');
+	it('includes workspace path', () => {
+		expect(jobMenuSubtitle({ workspace_path: '/Users/me/project/src' })).toContain('project');
 	});
 });
 

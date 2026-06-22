@@ -5,9 +5,6 @@ INSERT INTO jobs (
     definition_of_done,
     progress,
     status,
-    priority,
-    scheduled_at,
-    due_at,
     workspace_path,
     assigned_session_id,
     lease_expires_at,
@@ -19,7 +16,7 @@ INSERT INTO jobs (
     created_at,
     updated_at
 ) VALUES (
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 );
 
 -- name: GetJob :one
@@ -30,17 +27,16 @@ WHERE id = ?;
 -- name: ListJobs :many
 SELECT *
 FROM jobs
-WHERE deleted_at IS NULL
+WHERE (sqlc.narg('include_deleted') = 1 OR deleted_at IS NULL)
   AND (sqlc.narg('status') IS NULL OR status = sqlc.narg('status'))
-ORDER BY priority DESC, updated_at ASC;
+ORDER BY updated_at ASC;
 
 -- name: ListReadyJobs :many
 SELECT *
 FROM jobs
 WHERE deleted_at IS NULL
   AND status = 'todo'
-  AND (scheduled_at IS NULL OR scheduled_at <= ?)
-ORDER BY priority DESC, updated_at ASC;
+ORDER BY updated_at ASC;
 
 -- name: ListOngoingJobs :many
 SELECT *
@@ -59,9 +55,6 @@ UPDATE jobs
 SET
     description = ?,
     definition_of_done = ?,
-    priority = ?,
-    scheduled_at = ?,
-    due_at = ?,
     workspace_path = ?,
     updated_at = ?
 WHERE id = ?

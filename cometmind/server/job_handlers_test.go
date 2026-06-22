@@ -34,7 +34,7 @@ func TestJobHandlersCreateListClaim(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	createBody := `{"description":"fix tests","definition_of_done":"green","priority":3}`
+	createBody := `{"description":"fix tests","definition_of_done":"green"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/jobs", bytes.NewBufferString(createBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

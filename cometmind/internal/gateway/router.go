@@ -28,6 +28,7 @@ type Router struct {
 	Jobs     *jobs.Service
 	Runner   Runner
 	Typing   TypingIndicator
+	Turns    *TurnRunTracker
 	onReply  func(context.Context, OutboundMessage) error
 }
 
@@ -79,6 +80,19 @@ func (r *Router) HandleInbound(ctx context.Context, msg InboundMessage) error {
 		return err
 	}
 
+	runCtx := ctx
+	var finishTurn func()
+	if r.Turns != nil {
+		var err error
+		runCtx, finishTurn, err = r.Turns.Start(ctx, sess.ID)
+		if err != nil {
+			return err
+		}
+		defer finishTurn()
+	}
+	stopHeartbeat := startJobHeartbeatDuringTurn(runCtx, r.Jobs, sess.ID)
+	defer stopHeartbeat()
+
 	if r.Typing != nil {
 		stopTyping := r.Typing.KeepTyping(ctx, deliveryChannelID(msg))
 		defer stopTyping()
@@ -86,7 +100,7 @@ func (r *Router) HandleInbound(ctx context.Context, msg InboundMessage) error {
 
 	log.Printf("discord: running agent turn session=%s workspace=%s", sess.ID, runPath)
 	var reply strings.Builder
-	err = r.Runner.RunTurn(ctx, sess, runPath, msg, func(ev event.Event) {
+	err = r.Runner.RunTurn(runCtx, sess, runPath, msg, func(ev event.Event) {
 		switch ev.Kind {
 		case event.KindTextDelta:
 			reply.WriteString(ev.Delta)

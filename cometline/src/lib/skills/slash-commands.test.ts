@@ -18,8 +18,8 @@ describe('parseJobCommand', () => {
 
 describe('filterJobOptions', () => {
 	const jobs = [
-		{ id: '01JOBAUTH', description: 'Fix auth module', priority: 5 },
-		{ id: '01JOBDOC', description: 'Write docs', priority: 1 }
+		{ id: '01JOBAUTH', description: 'Fix auth module' },
+		{ id: '01JOBDOC', description: 'Write docs' }
 	];
 
 	it('filters by description and id', () => {

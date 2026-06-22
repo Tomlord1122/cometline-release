@@ -166,6 +166,15 @@ var alterStatements = [][]string{
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_job_events_job ON job_events (job_id, created_at)`,
 	},
+	// v12 -> v13: drop unused job scheduling/priority columns
+	{
+		`DROP INDEX IF EXISTS idx_jobs_status_priority`,
+		`DROP INDEX IF EXISTS idx_jobs_scheduled_at`,
+		`CREATE INDEX IF NOT EXISTS idx_jobs_status_updated ON jobs (status, updated_at ASC)`,
+		`ALTER TABLE jobs DROP COLUMN priority`,
+		`ALTER TABLE jobs DROP COLUMN scheduled_at`,
+		`ALTER TABLE jobs DROP COLUMN due_at`,
+	},
 }
 
 // execAlter runs one incremental DDL statement, tolerating idempotent failures
@@ -176,7 +185,7 @@ func execAlter(ctx context.Context, conn *sql.DB, stmt string) error {
 		return nil
 	}
 	msg := strings.ToLower(err.Error())
-	if strings.Contains(msg, "duplicate column name") || strings.Contains(msg, "already exists") {
+	if strings.Contains(msg, "duplicate column name") || strings.Contains(msg, "already exists") || strings.Contains(msg, "no such column") {
 		return nil
 	}
 	return err
@@ -204,7 +213,7 @@ func splitStatements(sql string) []string {
 	return out
 }
 
-const schemaVersion = 12
+const schemaVersion = 13
 
 // EnsureSchema runs [Migrate] once per database file using PRAGMA user_version.
 // For existing databases, it applies incremental ALTER statements to upgrade

@@ -47,10 +47,15 @@ func runGateway(_ *cobra.Command, _ []string) error {
 	}
 	defer rt.Close()
 
+	turns := gateway.NewTurnRunTracker()
+	rt.SetSessionRunningChecker(turns.Running)
+	rt.StartJobsMaintenance(ctx)
+
 	router := &gateway.Router{
 		Sessions: rt.Sessions,
 		Config:   rt.Config,
 		Jobs:     rt.Jobs,
+		Turns:    turns,
 		Runner: gateway.AgentRunner{
 			NewRunner: func(sess session.Session, workspacePath string, msg gateway.InboundMessage) (gateway.TurnRunner, error) {
 				channelID := msg.ChannelID

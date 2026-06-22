@@ -1,28 +1,46 @@
 <script lang="ts">
-	import type { GroupedJobs } from '$lib/jobs/group-jobs';
+	import type { GroupedJobs, JobColumn } from '$lib/jobs/group-jobs';
 	import type { JobResource } from '$lib/client/cometmind';
 	import JobsKanbanColumn from './JobsKanbanColumn.svelte';
 
 	let {
 		grouped,
+		statusFilter = 'all',
 		selectedJobId = null,
 		onSelectJob,
 		onAddJob
 	}: {
 		grouped: GroupedJobs;
+		statusFilter?: 'all' | JobColumn;
 		selectedJobId?: string | null;
 		onSelectJob: (job: JobResource) => void;
 		onAddJob: () => void;
 	} = $props();
 
-	const columns = [
-		{ key: 'todo' as const, title: 'Todo', showAdd: true },
-		{ key: 'ongoing' as const, title: 'Ongoing', showAdd: false },
-		{ key: 'done' as const, title: 'Done', showAdd: false }
-	];
+	const columnMeta: Record<JobColumn, { title: string; showAdd: boolean }> = {
+		todo: { title: 'Todo', showAdd: true },
+		ongoing: { title: 'Ongoing', showAdd: false },
+		done: { title: 'Done', showAdd: false }
+	};
+
+	const columns = $derived(
+		statusFilter === 'all'
+			? (['todo', 'ongoing', 'done'] as const).map((key) => ({
+					key,
+					title: columnMeta[key].title,
+					showAdd: columnMeta[key].showAdd
+				}))
+			: [
+					{
+						key: statusFilter,
+						title: columnMeta[statusFilter].title,
+						showAdd: columnMeta[statusFilter].showAdd
+					}
+				]
+	);
 </script>
 
-<div class="kanban-board">
+<div class="kanban-board" class:single-column={statusFilter !== 'all'}>
 	{#each columns as column (column.key)}
 		<JobsKanbanColumn
 			title={column.title}
@@ -44,6 +62,11 @@
 		flex: 1;
 		overflow-x: auto;
 		padding-bottom: 4px;
+	}
+
+	.kanban-board.single-column {
+		grid-template-columns: 1fr;
+		max-width: 480px;
 	}
 
 	@media (max-width: 900px) {

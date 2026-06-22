@@ -8,7 +8,6 @@ function job(partial: Partial<JobResource> & Pick<JobResource, 'description'>): 
 		definition_of_done: '',
 		progress: '',
 		status: 'todo',
-		priority: 0,
 		created_at: 0,
 		updated_at: 0,
 		...partial
@@ -22,10 +21,10 @@ describe('formatReadyJobsList', () => {
 
 	it('formats jobs without ids', () => {
 		const text = formatReadyJobsList([
-			job({ description: 'Fix auth', priority: 2 }),
+			job({ description: 'Fix auth' }),
 			job({ description: 'Update docs' })
 		]);
-		expect(text).toContain('(p=2) Fix auth');
+		expect(text).toContain('• Fix auth');
 		expect(text).toContain('• Update docs');
 		expect(text).not.toContain('job-1');
 	});

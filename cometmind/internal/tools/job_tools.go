@@ -22,12 +22,12 @@ type listJobsTool struct{ deps JobsDeps }
 func (listJobsTool) Spec() ToolSpec {
 	return ToolSpec{
 		Name:        "list_jobs",
-		Description: "List global jobs. By default returns ready todo jobs sorted by priority.",
+		Description: "List global jobs. By default returns ready todo jobs.",
 		Parameters: json.RawMessage(`{
 			"type":"object",
 			"properties":{
 				"status":{"type":"string","enum":["todo","ongoing","done"],"description":"Filter by status"},
-				"ready_only":{"type":"boolean","description":"When true, only return schedulable todo jobs"}
+				"ready_only":{"type":"boolean","description":"When true, only return todo jobs ready to claim"}
 			}
 		}`),
 	}
@@ -56,7 +56,7 @@ func (t listJobsTool) Execute(ctx context.Context, input json.RawMessage) (Resul
 	}
 	var b strings.Builder
 	for _, j := range items {
-		fmt.Fprintf(&b, "- %s [priority=%d status=%s] %s\n", j.ID, j.Priority, j.Status, j.Description)
+		fmt.Fprintf(&b, "- %s [status=%s] %s\n", j.ID, j.Status, j.Description)
 		if j.DefinitionOfDone != "" {
 			fmt.Fprintf(&b, "  DoD: %s\n", j.DefinitionOfDone)
 		}
@@ -77,8 +77,6 @@ func (createJobTool) Spec() ToolSpec {
 			"properties":{
 				"description":{"type":"string"},
 				"definition_of_done":{"type":"string"},
-				"priority":{"type":"integer"},
-				"scheduled_at":{"type":"integer","description":"Unix ms epoch"},
 				"workspace_path":{"type":"string"}
 			},
 			"required":["description"]
@@ -93,8 +91,6 @@ func (t createJobTool) Execute(ctx context.Context, input json.RawMessage) (Resu
 	var in struct {
 		Description      string `json:"description"`
 		DefinitionOfDone string `json:"definition_of_done"`
-		Priority         int    `json:"priority"`
-		ScheduledAt      *int64 `json:"scheduled_at"`
 		WorkspacePath    string `json:"workspace_path"`
 	}
 	if err := json.Unmarshal(input, &in); err != nil {
@@ -107,8 +103,6 @@ func (t createJobTool) Execute(ctx context.Context, input json.RawMessage) (Resu
 	job, err := t.deps.Service.Create(ctx, jobs.CreateInput{
 		Description:      in.Description,
 		DefinitionOfDone: in.DefinitionOfDone,
-		Priority:         in.Priority,
-		ScheduledAt:      in.ScheduledAt,
 		WorkspacePath:    in.WorkspacePath,
 		CreatedBy:        jobs.CreatedByAgent,
 		SourceSessionID:  t.deps.SessionID,
@@ -154,16 +148,13 @@ type updateJobTool struct{ deps JobsDeps }
 func (updateJobTool) Spec() ToolSpec {
 	return ToolSpec{
 		Name:        "update_job",
-		Description: "Update a job. Todo jobs: description/DoD/priority/schedule. Ongoing jobs: progress only.",
+		Description: "Update a job. Todo jobs: description/DoD/workspace. Ongoing jobs: progress only.",
 		Parameters: json.RawMessage(`{
 			"type":"object",
 			"properties":{
 				"job_id":{"type":"string"},
 				"description":{"type":"string"},
 				"definition_of_done":{"type":"string"},
-				"priority":{"type":"integer"},
-				"scheduled_at":{"type":"integer"},
-				"due_at":{"type":"integer"},
 				"workspace_path":{"type":"string"},
 				"progress":{"type":"string"}
 			},
@@ -180,9 +171,6 @@ func (t updateJobTool) Execute(ctx context.Context, input json.RawMessage) (Resu
 		JobID            string `json:"job_id"`
 		Description      string `json:"description"`
 		DefinitionOfDone string `json:"definition_of_done"`
-		Priority         *int   `json:"priority"`
-		ScheduledAt      *int64 `json:"scheduled_at"`
-		DueAt            *int64 `json:"due_at"`
 		WorkspacePath    string `json:"workspace_path"`
 		Progress         string `json:"progress"`
 	}
@@ -201,10 +189,6 @@ func (t updateJobTool) Execute(ctx context.Context, input json.RawMessage) (Resu
 	if err != nil {
 		return Result{OK: false, Output: err.Error()}, nil
 	}
-	priority := current.Priority
-	if in.Priority != nil {
-		priority = *in.Priority
-	}
 	desc := current.Description
 	if strings.TrimSpace(in.Description) != "" {
 		desc = in.Description
@@ -213,14 +197,6 @@ func (t updateJobTool) Execute(ctx context.Context, input json.RawMessage) (Resu
 	if in.DefinitionOfDone != "" {
 		dod = in.DefinitionOfDone
 	}
-	scheduled := current.ScheduledAt
-	if in.ScheduledAt != nil {
-		scheduled = in.ScheduledAt
-	}
-	due := current.DueAt
-	if in.DueAt != nil {
-		due = in.DueAt
-	}
 	ws := current.WorkspacePath
 	if in.WorkspacePath != "" {
 		ws = in.WorkspacePath
@@ -228,9 +204,6 @@ func (t updateJobTool) Execute(ctx context.Context, input json.RawMessage) (Resu
 	job, err := t.deps.Service.UpdateTodo(ctx, jobID, jobs.UpdateTodoInput{
 		Description:      desc,
 		DefinitionOfDone: dod,
-		Priority:         priority,
-		ScheduledAt:      scheduled,
-		DueAt:            due,
 		WorkspacePath:    ws,
 	}, t.deps.SessionID)
 	if err != nil {

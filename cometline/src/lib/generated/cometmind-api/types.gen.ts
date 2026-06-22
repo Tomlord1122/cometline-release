@@ -550,9 +550,6 @@ export type JobResource = {
     definition_of_done: string;
     progress: string;
     status: 'todo' | 'ongoing' | 'done';
-    priority: number;
-    scheduled_at?: number;
-    due_at?: number;
     workspace_path?: string;
     assigned_session_id?: string;
     lease_expires_at?: number;
@@ -585,9 +582,6 @@ export type ListJobEventsResponse = {
 export type CreateJobRequest = {
     description: string;
     definition_of_done?: string;
-    priority?: number;
-    scheduled_at?: number;
-    due_at?: number;
     workspace_path?: string;
     created_by?: string;
     source_session_id?: string;
@@ -598,9 +592,6 @@ export type CreateJobRequest = {
 export type UpdateJobRequest = {
     description: string;
     definition_of_done: string;
-    priority: number;
-    scheduled_at?: number;
-    due_at?: number;
     workspace_path?: string;
 };
 

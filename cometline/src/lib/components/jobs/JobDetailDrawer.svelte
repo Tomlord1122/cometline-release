@@ -17,11 +17,9 @@
 		loadingEvents = false,
 		editDescription = $bindable(''),
 		editDod = $bindable(''),
-		editPriority = $bindable(0),
 		editWorkspacePath = $bindable(''),
 		createDescription = $bindable(''),
 		createDod = $bindable(''),
-		createPriority = $bindable(0),
 		createWorkspacePath = $bindable(''),
 		onClose,
 		onSave,
@@ -36,11 +34,9 @@
 		loadingEvents?: boolean;
 		editDescription?: string;
 		editDod?: string;
-		editPriority?: number;
 		editWorkspacePath?: string;
 		createDescription?: string;
 		createDod?: string;
-		createPriority?: number;
 		createWorkspacePath?: string;
 		onClose: () => void;
 		onSave?: () => void | Promise<void>;
@@ -51,6 +47,7 @@
 
 	let starting = $state(false);
 	let startError = $state('');
+	const isArchived = $derived(job?.deleted_at != null);
 
 	onMount(() => {
 		function onKeydown(event: KeyboardEvent) {
@@ -100,7 +97,6 @@
 			<JobCreateForm
 				bind:description={createDescription}
 				bind:dod={createDod}
-				bind:priority={createPriority}
 				bind:workspacePath={createWorkspacePath}
 				{saving}
 				onSubmit={() => onCreate?.()}
@@ -123,14 +119,14 @@
 				</section>
 			{/if}
 
-			{#if job.definition_of_done?.trim()}
+			{#if job.definition_of_done?.trim() && job.status !== 'todo'}
 				<section class="drawer-section">
 					<h3>Definition of done</h3>
 					<p class="drawer-copy">{job.definition_of_done}</p>
 				</section>
 			{/if}
 
-			{#if job.status === 'todo'}
+			{#if job.status === 'todo' && !isArchived}
 				<section class="drawer-section">
 					<h3>Edit</h3>
 					<form
@@ -150,12 +146,6 @@
 							<label>
 								<span>Definition of done</span>
 								<textarea bind:value={editDod} rows={3}></textarea>
-							</label>
-						</div>
-						<div class="settings-field">
-							<label>
-								<span>Priority</span>
-								<input type="number" bind:value={editPriority} min="0" step="1" />
 							</label>
 						</div>
 						<div class="settings-field">
@@ -193,7 +183,7 @@
 		{/if}
 	</div>
 
-	{#if mode === 'detail' && job}
+	{#if mode === 'detail' && job && !isArchived}
 		<footer class="drawer-footer">
 			{#if job.status === 'todo'}
 				<button
@@ -337,8 +327,7 @@
 		gap: 12px;
 	}
 
-	.drawer-form textarea,
-	.drawer-form input:not(.path-input) {
+	.drawer-form textarea {
 		width: 100%;
 		border: 1px solid var(--border-soft);
 		border-radius: 10px;

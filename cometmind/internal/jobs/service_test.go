@@ -29,7 +29,6 @@ func TestCreateClaimComplete(t *testing.T) {
 	job, err := svc.Create(ctx, jobs.CreateInput{
 		Description:      "fix CI",
 		DefinitionOfDone: "tests pass",
-		Priority:         5,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -108,5 +107,34 @@ func TestUpdateTodoOnlyInTodo(t *testing.T) {
 	_, err = svc.UpdateTodo(ctx, job.ID, jobs.UpdateTodoInput{Description: "nope"}, "")
 	if err != jobs.ErrNotEditable {
 		t.Fatalf("err=%v want ErrNotEditable", err)
+	}
+}
+
+func TestListIncludeDeleted(t *testing.T) {
+	svc := testJobsService(t)
+	ctx := context.Background()
+
+	job, err := svc.Create(ctx, jobs.CreateInput{Description: "to archive"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.SoftDelete(ctx, job.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	active, err := svc.List(ctx, jobs.ListFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(active) != 0 {
+		t.Fatalf("active jobs=%d want 0", len(active))
+	}
+
+	withDeleted, err := svc.List(ctx, jobs.ListFilter{IncludeDeleted: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(withDeleted) != 1 || withDeleted[0].DeletedAt == nil {
+		t.Fatalf("withDeleted=%+v", withDeleted)
 	}
 }

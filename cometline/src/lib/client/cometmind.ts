@@ -39,6 +39,9 @@ import {
 	deleteJob as deleteJobApi,
 	claimJob as claimJobApi,
 	listJobEvents as listJobEventsApi,
+	releaseJob as releaseJobApi,
+	completeJob as completeJobApi,
+	heartbeatJob as heartbeatJobApi,
 	getJobSettings as getJobSettingsApi,
 	putJobSettings as putJobSettingsApi
 } from '$lib/generated/cometmind-api';
@@ -620,6 +623,38 @@ export function claimJob(id: string, sessionId: string): Promise<JobResource> {
 		body: { session_id: sessionId },
 		throwOnError: true
 	}).then(({ data }) => data);
+}
+
+export function releaseJob(
+	id: string,
+	sessionId: string,
+	reason?: string
+): Promise<JobResource> {
+	return releaseJobApi({
+		path: { id },
+		body: { session_id: sessionId, reason },
+		throwOnError: true
+	}).then(({ data }) => data);
+}
+
+export function completeJob(
+	id: string,
+	sessionId: string,
+	progress?: string
+): Promise<JobResource> {
+	return completeJobApi({
+		path: { id },
+		body: { session_id: sessionId, progress },
+		throwOnError: true
+	}).then(({ data }) => data);
+}
+
+export function heartbeatJob(id: string, sessionId: string): Promise<void> {
+	return heartbeatJobApi({
+		path: { id },
+		body: { session_id: sessionId },
+		throwOnError: true
+	}).then(() => undefined);
 }
 
 export function listJobEvents(id: string): Promise<{ events: JobEventResource[] }> {

@@ -25,9 +25,6 @@ type Job struct {
 	DefinitionOfDone  string         `json:"definition_of_done"`
 	Progress          string         `json:"progress"`
 	Status            string         `json:"status"`
-	Priority          int64          `json:"priority"`
-	ScheduledAt       sql.NullInt64  `json:"scheduled_at"`
-	DueAt             sql.NullInt64  `json:"due_at"`
 	WorkspacePath     sql.NullString `json:"workspace_path"`
 	AssignedSessionID sql.NullString `json:"assigned_session_id"`
 	LeaseExpiresAt    sql.NullInt64  `json:"lease_expires_at"`

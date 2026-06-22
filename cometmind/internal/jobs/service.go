@@ -130,24 +130,21 @@ func (s *Service) recordEvent(ctx context.Context, jobID, action, detail, actorS
 
 func jobFromRow(row db.Job) Job {
 	return Job{
-		ID:               row.ID,
-		Description:      row.Description,
-		DefinitionOfDone: row.DefinitionOfDone,
-		Progress:         row.Progress,
-		Status:           row.Status,
-		Priority:         int(row.Priority),
-		ScheduledAt:      nullInt64Ptr(row.ScheduledAt),
-		DueAt:            nullInt64Ptr(row.DueAt),
-		WorkspacePath:    nullStringVal(row.WorkspacePath),
+		ID:                row.ID,
+		Description:       row.Description,
+		DefinitionOfDone:  row.DefinitionOfDone,
+		Progress:          row.Progress,
+		Status:            row.Status,
+		WorkspacePath:     nullStringVal(row.WorkspacePath),
 		AssignedSessionID: nullStringVal(row.AssignedSessionID),
-		LeaseExpiresAt:   nullInt64Ptr(row.LeaseExpiresAt),
-		CreatedBy:        row.CreatedBy,
-		SourceSessionID:  nullStringVal(row.SourceSessionID),
-		SourcePlatform:   row.SourcePlatform,
-		SourceChannelID:  nullStringVal(row.SourceChannelID),
-		DeletedAt:        nullInt64Ptr(row.DeletedAt),
-		CreatedAt:        row.CreatedAt,
-		UpdatedAt:        row.UpdatedAt,
+		LeaseExpiresAt:    nullInt64Ptr(row.LeaseExpiresAt),
+		CreatedBy:         row.CreatedBy,
+		SourceSessionID:   nullStringVal(row.SourceSessionID),
+		SourcePlatform:    row.SourcePlatform,
+		SourceChannelID:   nullStringVal(row.SourceChannelID),
+		DeletedAt:         nullInt64Ptr(row.DeletedAt),
+		CreatedAt:         row.CreatedAt,
+		UpdatedAt:         row.UpdatedAt,
 	}
 }
 
@@ -177,13 +174,6 @@ func nullStringVal(v sql.NullString) string {
 	return v.String
 }
 
-func optionalNullInt64(v *int64) sql.NullInt64 {
-	if v == nil {
-		return sql.NullInt64{}
-	}
-	return sql.NullInt64{Int64: *v, Valid: true}
-}
-
 func optionalNullString(v string) sql.NullString {
 	v = strings.TrimSpace(v)
 	if v == "" {
@@ -204,24 +194,21 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Job, error) {
 	ts := nowMillis()
 	jobID := id.New()
 	row := db.InsertJobParams{
-		ID:               jobID,
-		Description:      strings.TrimSpace(in.Description),
-		DefinitionOfDone: strings.TrimSpace(in.DefinitionOfDone),
-		Progress:         "",
-		Status:           StatusTodo,
-		Priority:         int64(in.Priority),
-		ScheduledAt:      optionalNullInt64(in.ScheduledAt),
-		DueAt:            optionalNullInt64(in.DueAt),
-		WorkspacePath:    optionalNullString(in.WorkspacePath),
+		ID:                jobID,
+		Description:       strings.TrimSpace(in.Description),
+		DefinitionOfDone:  strings.TrimSpace(in.DefinitionOfDone),
+		Progress:          "",
+		Status:            StatusTodo,
+		WorkspacePath:     optionalNullString(in.WorkspacePath),
 		AssignedSessionID: sql.NullString{},
-		LeaseExpiresAt:   sql.NullInt64{},
-		CreatedBy:        createdBy,
-		SourceSessionID:  optionalNullString(in.SourceSessionID),
-		SourcePlatform:   strings.TrimSpace(in.SourcePlatform),
-		SourceChannelID:  optionalNullString(in.SourceChannelID),
-		DeletedAt:        sql.NullInt64{},
-		CreatedAt:        ts,
-		UpdatedAt:        ts,
+		LeaseExpiresAt:    sql.NullInt64{},
+		CreatedBy:         createdBy,
+		SourceSessionID:   optionalNullString(in.SourceSessionID),
+		SourcePlatform:    strings.TrimSpace(in.SourcePlatform),
+		SourceChannelID:   optionalNullString(in.SourceChannelID),
+		DeletedAt:         sql.NullInt64{},
+		CreatedAt:         ts,
+		UpdatedAt:         ts,
 	}
 	if err := s.q.InsertJob(ctx, row); err != nil {
 		return Job{}, err
@@ -252,19 +239,19 @@ func (s *Service) List(ctx context.Context, filter ListFilter) ([]Job, error) {
 	if strings.TrimSpace(filter.Status) != "" {
 		status = sql.NullString{String: filter.Status, Valid: true}
 	}
-	rows, err := s.q.ListJobs(ctx, status)
+	var includeDeleted sql.NullInt64
+	if filter.IncludeDeleted {
+		includeDeleted = sql.NullInt64{Int64: 1, Valid: true}
+	}
+	rows, err := s.q.ListJobs(ctx, db.ListJobsParams{
+		Status:         status,
+		IncludeDeleted: includeDeleted,
+	})
 	if err != nil {
 		return nil, err
 	}
 	out := make([]Job, 0, len(rows))
 	for _, row := range rows {
-		if filter.IncludeDeleted {
-			out = append(out, jobFromRow(row))
-			continue
-		}
-		if row.DeletedAt.Valid {
-			continue
-		}
 		out = append(out, jobFromRow(row))
 	}
 	return out, nil
@@ -273,7 +260,7 @@ func (s *Service) List(ctx context.Context, filter ListFilter) ([]Job, error) {
 // ListReady returns todo jobs that are ready to be claimed.
 func (s *Service) ListReady(ctx context.Context) ([]Job, error) {
 	_, _ = s.Reconcile(ctx, nil)
-	rows, err := s.q.ListReadyJobs(ctx, sql.NullInt64{Int64: nowMillis(), Valid: true})
+	rows, err := s.q.ListReadyJobs(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -306,9 +293,6 @@ func (s *Service) UpdateTodo(ctx context.Context, jobID string, in UpdateTodoInp
 	n, err := s.q.UpdateJobTodoFields(ctx, db.UpdateJobTodoFieldsParams{
 		Description:      strings.TrimSpace(in.Description),
 		DefinitionOfDone: strings.TrimSpace(in.DefinitionOfDone),
-		Priority:         int64(in.Priority),
-		ScheduledAt:      optionalNullInt64(in.ScheduledAt),
-		DueAt:            optionalNullInt64(in.DueAt),
 		WorkspacePath:    optionalNullString(in.WorkspacePath),
 		UpdatedAt:        ts,
 		ID:               jobID,

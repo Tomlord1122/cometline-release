@@ -14,9 +14,6 @@ type jobResource struct {
 	DefinitionOfDone  string `json:"definition_of_done"`
 	Progress          string `json:"progress"`
 	Status            string `json:"status"`
-	Priority          int    `json:"priority"`
-	ScheduledAt       *int64 `json:"scheduled_at,omitempty"`
-	DueAt             *int64 `json:"due_at,omitempty"`
 	WorkspacePath     string `json:"workspace_path,omitempty"`
 	AssignedSessionID string `json:"assigned_session_id,omitempty"`
 	LeaseExpiresAt    *int64 `json:"lease_expires_at,omitempty"`
@@ -41,9 +38,6 @@ type jobEventResource struct {
 type createJobRequest struct {
 	Description      string `json:"description"`
 	DefinitionOfDone string `json:"definition_of_done"`
-	Priority         int    `json:"priority"`
-	ScheduledAt      *int64 `json:"scheduled_at"`
-	DueAt            *int64 `json:"due_at"`
 	WorkspacePath    string `json:"workspace_path"`
 	CreatedBy        string `json:"created_by"`
 	SourceSessionID  string `json:"source_session_id"`
@@ -54,9 +48,6 @@ type createJobRequest struct {
 type updateJobRequest struct {
 	Description      string `json:"description"`
 	DefinitionOfDone string `json:"definition_of_done"`
-	Priority         int    `json:"priority"`
-	ScheduledAt      *int64 `json:"scheduled_at"`
-	DueAt            *int64 `json:"due_at"`
 	WorkspacePath    string `json:"workspace_path"`
 }
 
@@ -95,9 +86,6 @@ func jobToResource(j jobs.Job) jobResource {
 		DefinitionOfDone:  j.DefinitionOfDone,
 		Progress:          j.Progress,
 		Status:            j.Status,
-		Priority:          j.Priority,
-		ScheduledAt:       j.ScheduledAt,
-		DueAt:             j.DueAt,
 		WorkspacePath:     j.WorkspacePath,
 		AssignedSessionID: j.AssignedSessionID,
 		LeaseExpiresAt:    j.LeaseExpiresAt,
@@ -185,9 +173,6 @@ func (a *App) handleCreateJob(c *gin.Context) {
 	job, err := a.jobs.Create(c.Request.Context(), jobs.CreateInput{
 		Description:      req.Description,
 		DefinitionOfDone: req.DefinitionOfDone,
-		Priority:         req.Priority,
-		ScheduledAt:      req.ScheduledAt,
-		DueAt:            req.DueAt,
 		WorkspacePath:    req.WorkspacePath,
 		CreatedBy:        req.CreatedBy,
 		SourceSessionID:  req.SourceSessionID,
@@ -231,9 +216,6 @@ func (a *App) handleUpdateJob(c *gin.Context) {
 	job, err := a.jobs.UpdateTodo(c.Request.Context(), c.Param("id"), jobs.UpdateTodoInput{
 		Description:      req.Description,
 		DefinitionOfDone: req.DefinitionOfDone,
-		Priority:         req.Priority,
-		ScheduledAt:      req.ScheduledAt,
-		DueAt:            req.DueAt,
 		WorkspacePath:    req.WorkspacePath,
 	}, "")
 	if err != nil {

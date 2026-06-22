@@ -4,7 +4,6 @@
 	let {
 		description = $bindable(''),
 		dod = $bindable(''),
-		priority = $bindable(0),
 		workspacePath = $bindable(''),
 		saving = false,
 		submitLabel = 'Create',
@@ -12,7 +11,6 @@
 	}: {
 		description?: string;
 		dod?: string;
-		priority?: number;
 		workspacePath?: string;
 		saving?: boolean;
 		submitLabel?: string;
@@ -40,12 +38,6 @@
 		</label>
 	</div>
 	<div class="settings-field">
-		<label>
-			<span>Priority</span>
-			<input type="number" bind:value={priority} min="0" step="1" />
-		</label>
-	</div>
-	<div class="settings-field">
 		<span class="field-label">Workspace path (optional)</span>
 		<WorkspacePathField bind:value={workspacePath} />
 	</div>
@@ -63,8 +55,7 @@
 		gap: 12px;
 	}
 
-	.job-create-form textarea,
-	.job-create-form input:not(.path-input) {
+	.job-create-form textarea {
 		width: 100%;
 		border: 1px solid var(--border-soft);
 		border-radius: 10px;
@@ -76,8 +67,7 @@
 		resize: vertical;
 	}
 
-	.job-create-form textarea:focus,
-	.job-create-form input:not(.path-input):focus {
+	.job-create-form textarea:focus {
 		outline: none;
 		border-color: rgba(0, 102, 204, 0.35);
 		box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);

@@ -153,9 +153,6 @@ CREATE TABLE jobs (
     progress            TEXT NOT NULL DEFAULT '',
     status              TEXT NOT NULL DEFAULT 'todo'
                         CHECK (status IN ('todo', 'ongoing', 'done')),
-    priority            INTEGER NOT NULL DEFAULT 0,
-    scheduled_at        INTEGER,
-    due_at              INTEGER,
     workspace_path      TEXT,
     assigned_session_id TEXT,
     lease_expires_at    INTEGER,
@@ -170,13 +167,11 @@ CREATE TABLE jobs (
     updated_at          INTEGER NOT NULL DEFAULT (unixepoch ('now', 'subsec') * 1000)
 );
 
-CREATE INDEX idx_jobs_status_priority ON jobs (status, priority DESC, updated_at ASC);
+CREATE INDEX idx_jobs_status_updated ON jobs (status, updated_at ASC);
 
 CREATE INDEX idx_jobs_assigned_session ON jobs (assigned_session_id);
 
 CREATE INDEX idx_jobs_deleted_at ON jobs (deleted_at);
-
-CREATE INDEX idx_jobs_scheduled_at ON jobs (scheduled_at);
 
 CREATE TABLE job_events (
     id                TEXT PRIMARY KEY,

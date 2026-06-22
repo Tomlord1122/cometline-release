@@ -15,11 +15,7 @@ func FormatReadyJobsList(items []jobs.Job) string {
 	}
 	var b strings.Builder
 	for _, j := range items {
-		prefix := ""
-		if j.Priority > 0 {
-			prefix = fmt.Sprintf("(p=%d) ", j.Priority)
-		}
-		fmt.Fprintf(&b, "• %s%s\n", prefix, j.Description)
+		fmt.Fprintf(&b, "• %s\n", j.Description)
 	}
 	return strings.TrimSpace(b.String())
 }

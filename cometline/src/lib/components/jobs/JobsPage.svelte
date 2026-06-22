@@ -12,8 +12,10 @@
 	} from '$lib/client/cometmind';
 	import {
 		filterArchivedJobs,
+		filterGroupedByStatus,
 		groupJobsByColumn,
-		type GroupedJobs
+		type GroupedJobs,
+		type JobColumn
 	} from '$lib/jobs/group-jobs';
 	import { truncateJobLabel } from '$lib/jobs/format-job-label';
 	import JobCard from './JobCard.svelte';
@@ -21,10 +23,20 @@
 	import JobsKanbanBoard from './JobsKanbanBoard.svelte';
 
 	type DrawerMode = 'detail' | 'create' | null;
+	type StatusFilter = 'all' | JobColumn;
+
+	const STATUS_FILTERS: { id: StatusFilter; label: string }[] = [
+		{ id: 'all', label: 'All' },
+		{ id: 'todo', label: 'Todo' },
+		{ id: 'ongoing', label: 'Ongoing' },
+		{ id: 'done', label: 'Done' }
+	];
 
 	let jobs = $state<JobResource[]>([]);
 	let grouped = $state<GroupedJobs>({ todo: [], ongoing: [], done: [] });
 	let archivedJobs = $state<JobResource[]>([]);
+	let statusFilter = $state<StatusFilter>('all');
+	let filteredGrouped = $derived(filterGroupedByStatus(grouped, statusFilter));
 	let loading = $state(true);
 	let refreshing = $state(false);
 	let error = $state('');
@@ -37,12 +49,10 @@
 
 	let editDescription = $state('');
 	let editDod = $state('');
-	let editPriority = $state(0);
 	let editWorkspacePath = $state('');
 
 	let createDescription = $state('');
 	let createDod = $state('');
-	let createPriority = $state(0);
 	let createWorkspacePath = $state('');
 
 	function applyJobs(next: JobResource[]) {
@@ -73,7 +83,6 @@
 	function resetCreateForm() {
 		createDescription = '';
 		createDod = '';
-		createPriority = 0;
 		createWorkspacePath = '';
 	}
 
@@ -89,7 +98,6 @@
 		drawerMode = 'detail';
 		editDescription = job.description;
 		editDod = job.definition_of_done ?? '';
-		editPriority = job.priority ?? 0;
 		editWorkspacePath = job.workspace_path ?? '';
 		loadingEvents = true;
 		try {
@@ -117,7 +125,6 @@
 			const created = await createJob({
 				description: createDescription.trim(),
 				definition_of_done: createDod.trim(),
-				priority: createPriority,
 				workspace_path: createWorkspacePath.trim() || undefined,
 				created_by: 'user',
 				source_platform: 'desktop'
@@ -140,7 +147,6 @@
 			const updated = await updateJob(selectedJob.id, {
 				description: editDescription.trim(),
 				definition_of_done: editDod.trim(),
-				priority: editPriority,
 				workspace_path: editWorkspacePath.trim() || undefined
 			});
 			selectedJob = updated;
@@ -175,6 +181,21 @@
 			<p>Global work queue shared across sessions.</p>
 		</div>
 		<div class="jobs-header-actions">
+			{#if !showArchived}
+				<div class="status-filters" role="group" aria-label="Filter by status">
+					{#each STATUS_FILTERS as filter (filter.id)}
+						<button
+							type="button"
+							class="status-filter"
+							class:active={statusFilter === filter.id}
+							aria-pressed={statusFilter === filter.id}
+							onclick={() => (statusFilter = filter.id)}
+						>
+							{filter.label}
+						</button>
+					{/each}
+				</div>
+			{/if}
 			<label class="archived-toggle">
 				<input type="checkbox" bind:checked={showArchived} />
 				<span>Show archived</span>
@@ -224,7 +245,8 @@
 			</section>
 		{:else}
 			<JobsKanbanBoard
-				{grouped}
+				grouped={filteredGrouped}
+				{statusFilter}
 				selectedJobId={selectedJob?.id ?? null}
 				onSelectJob={(job) => void openJob(job)}
 				onAddJob={openCreate}
@@ -242,11 +264,9 @@
 		{loadingEvents}
 		bind:editDescription
 		bind:editDod
-		bind:editPriority
 		bind:editWorkspacePath
 		bind:createDescription
 		bind:createDod
-		bind:createPriority
 		bind:createWorkspacePath
 		onClose={closeDrawer}
 		onSave={handleSave}
@@ -292,6 +312,39 @@
 		align-items: center;
 		gap: 8px;
 		flex-shrink: 0;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+	}
+
+	.status-filters {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 3px;
+		border-radius: 999px;
+		background: rgba(15, 23, 42, 0.05);
+	}
+
+	.status-filter {
+		border: none;
+		background: transparent;
+		color: var(--text-muted);
+		font: inherit;
+		font-size: 11px;
+		font-weight: 600;
+		padding: 5px 10px;
+		border-radius: 999px;
+		cursor: pointer;
+	}
+
+	.status-filter.active {
+		background: var(--panel-bg);
+		color: var(--text-main);
+		box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+	}
+
+	.status-filter:hover:not(.active) {
+		color: var(--text-main);
 	}
 
 	.archived-toggle {

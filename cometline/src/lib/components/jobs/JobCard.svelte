@@ -1,10 +1,6 @@
 <script lang="ts">
 	import type { JobResource } from '$lib/client/cometmind';
-	import {
-		formatScheduledLabel,
-		isJobScheduledNotReady,
-		truncateWorkspacePath
-	} from '$lib/jobs/group-jobs';
+	import { truncateWorkspacePath } from '$lib/jobs/group-jobs';
 
 	let {
 		job,
@@ -16,12 +12,6 @@
 		onclick?: () => void;
 	} = $props();
 
-	const scheduled = $derived(
-		job.scheduled_at != null && isJobScheduledNotReady(job)
-	);
-	const scheduledLabel = $derived(
-		job.scheduled_at != null ? formatScheduledLabel(job.scheduled_at) : ''
-	);
 	const progressPreview = $derived(job.progress?.trim().split('\n')[0] ?? '');
 </script>
 
@@ -29,22 +19,15 @@
 	type="button"
 	class="job-card"
 	class:selected
-	class:scheduled
 	aria-pressed={selected}
 	onclick={() => onclick?.()}
 >
 	<div class="job-card-top">
 		<p class="job-card-title">{job.description}</p>
-		{#if (job.priority ?? 0) > 0}
-			<span class="job-priority">P{job.priority}</span>
-		{/if}
 	</div>
 
-	{#if scheduled || job.workspace_path || job.assigned_session_id || progressPreview}
+	{#if job.workspace_path || job.assigned_session_id || progressPreview}
 		<div class="job-card-chips">
-			{#if scheduled}
-				<span class="job-chip scheduled">Scheduled {scheduledLabel}</span>
-			{/if}
 			{#if job.workspace_path}
 				<span class="job-chip" title={job.workspace_path}>
 					{truncateWorkspacePath(job.workspace_path)}
@@ -58,7 +41,6 @@
 			{/if}
 		</div>
 	{/if}
-
 </button>
 
 <style>
@@ -90,10 +72,6 @@
 		box-shadow: var(--shadow-card);
 	}
 
-	.job-card.scheduled {
-		opacity: 0.72;
-	}
-
 	.job-card-top {
 		display: flex;
 		align-items: flex-start;
@@ -114,16 +92,6 @@
 		overflow: hidden;
 	}
 
-	.job-priority {
-		flex-shrink: 0;
-		font-size: 10px;
-		font-weight: 700;
-		padding: 2px 6px;
-		border-radius: 999px;
-		background: color-mix(in srgb, var(--accent) 12%, transparent);
-		color: var(--accent);
-	}
-
 	.job-card-chips {
 		display: flex;
 		flex-wrap: wrap;
@@ -141,11 +109,6 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-	}
-
-	.job-chip.scheduled {
-		background: color-mix(in srgb, var(--accent) 10%, transparent);
-		color: var(--accent);
 	}
 
 	.job-chip.progress {

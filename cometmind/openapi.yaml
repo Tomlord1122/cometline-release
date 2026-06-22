@@ -2407,7 +2407,6 @@ components:
         - definition_of_done
         - progress
         - status
-        - priority
         - created_by
         - created_at
         - updated_at
@@ -2423,14 +2422,6 @@ components:
         status:
           type: string
           enum: [todo, ongoing, done]
-        priority:
-          type: integer
-        scheduled_at:
-          type: integer
-          format: int64
-        due_at:
-          type: integer
-          format: int64
         workspace_path:
           type: string
         assigned_session_id:
@@ -2504,14 +2495,6 @@ components:
           type: string
         definition_of_done:
           type: string
-        priority:
-          type: integer
-        scheduled_at:
-          type: integer
-          format: int64
-        due_at:
-          type: integer
-          format: int64
         workspace_path:
           type: string
         created_by:
@@ -2526,20 +2509,12 @@ components:
     UpdateJobRequest:
       type: object
       additionalProperties: false
-      required: [description, definition_of_done, priority]
+      required: [description, definition_of_done]
       properties:
         description:
           type: string
         definition_of_done:
           type: string
-        priority:
-          type: integer
-        scheduled_at:
-          type: integer
-          format: int64
-        due_at:
-          type: integer
-          format: int64
         workspace_path:
           type: string
 

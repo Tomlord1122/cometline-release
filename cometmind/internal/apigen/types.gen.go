@@ -311,9 +311,6 @@ type CreateJobRequest struct {
 	CreatedBy        *string `json:"created_by,omitempty"`
 	DefinitionOfDone *string `json:"definition_of_done,omitempty"`
 	Description      string  `json:"description"`
-	DueAt            *int64  `json:"due_at,omitempty"`
-	Priority         *int    `json:"priority,omitempty"`
-	ScheduledAt      *int64  `json:"scheduled_at,omitempty"`
 	SourceChannelId  *string `json:"source_channel_id,omitempty"`
 	SourcePlatform   *string `json:"source_platform,omitempty"`
 	SourceSessionId  *string `json:"source_session_id,omitempty"`
@@ -433,12 +430,9 @@ type JobResource struct {
 	DefinitionOfDone  string            `json:"definition_of_done"`
 	DeletedAt         *int64            `json:"deleted_at,omitempty"`
 	Description       string            `json:"description"`
-	DueAt             *int64            `json:"due_at,omitempty"`
 	Id                string            `json:"id"`
 	LeaseExpiresAt    *int64            `json:"lease_expires_at,omitempty"`
-	Priority          int               `json:"priority"`
 	Progress          string            `json:"progress"`
-	ScheduledAt       *int64            `json:"scheduled_at,omitempty"`
 	SourceChannelId   *string           `json:"source_channel_id,omitempty"`
 	SourcePlatform    *string           `json:"source_platform,omitempty"`
 	SourceSessionId   *string           `json:"source_session_id,omitempty"`
@@ -873,9 +867,6 @@ type TurnStatusEventPhase string
 type UpdateJobRequest struct {
 	DefinitionOfDone string  `json:"definition_of_done"`
 	Description      string  `json:"description"`
-	DueAt            *int64  `json:"due_at,omitempty"`
-	Priority         int     `json:"priority"`
-	ScheduledAt      *int64  `json:"scheduled_at,omitempty"`
 	WorkspacePath    *string `json:"workspace_path,omitempty"`
 }
 

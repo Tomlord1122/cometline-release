@@ -547,6 +547,33 @@
 			bind:checked={cometmind.jobs.notifications.onReleased}
 			disabled={!cometmind.jobs.notifications.enabled}
 		/>
+		<label>
+			<span>Lease duration (minutes)</span>
+			<input
+				type="number"
+				min="1"
+				step="1"
+				bind:value={cometmind.jobs.leaseMinutes}
+			/>
+		</label>
+		<label>
+			<span>Reconcile interval (seconds)</span>
+			<input
+				type="number"
+				min="30"
+				step="1"
+				bind:value={cometmind.jobs.reconcileIntervalSeconds}
+			/>
+		</label>
+		<label>
+			<span>Deleted job purge (days)</span>
+			<input
+				type="number"
+				min="1"
+				step="1"
+				bind:value={cometmind.jobs.deletedPurgeDays}
+			/>
+		</label>
 		<SettingsPersistenceHint tier="action" detail="Job notification settings" />
 	</div>
 

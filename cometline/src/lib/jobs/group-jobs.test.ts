@@ -3,8 +3,6 @@ import type { JobResource } from '$lib/client/cometmind';
 import {
 	filterArchivedJobs,
 	groupJobsByColumn,
-	isJobReady,
-	isJobScheduledNotReady,
 	sortJobs
 } from './group-jobs';
 
@@ -13,7 +11,6 @@ function job(overrides: Partial<JobResource> & Pick<JobResource, 'id' | 'status'
 		description: 'test',
 		definition_of_done: '',
 		progress: '',
-		priority: 0,
 		created_by: 'user',
 		created_at: 1,
 		updated_at: 1,
@@ -22,27 +19,13 @@ function job(overrides: Partial<JobResource> & Pick<JobResource, 'id' | 'status'
 }
 
 describe('sortJobs', () => {
-	it('sorts by priority desc then updated_at asc', () => {
+	it('sorts by updated_at asc', () => {
 		const jobs = [
-			job({ id: 'a', status: 'todo', priority: 1, updated_at: 20 }),
-			job({ id: 'b', status: 'todo', priority: 5, updated_at: 30 }),
-			job({ id: 'c', status: 'todo', priority: 5, updated_at: 10 })
+			job({ id: 'a', status: 'todo', updated_at: 20 }),
+			job({ id: 'b', status: 'todo', updated_at: 10 }),
+			job({ id: 'c', status: 'todo', updated_at: 30 })
 		];
-		expect(sortJobs(jobs).map((j) => j.id)).toEqual(['c', 'b', 'a']);
-	});
-});
-
-describe('isJobScheduledNotReady', () => {
-	it('returns true when scheduled_at is in the future', () => {
-		const j = job({ id: 'x', status: 'todo', scheduled_at: 2_000 });
-		expect(isJobScheduledNotReady(j, 1_000)).toBe(true);
-		expect(isJobReady(j, 1_000)).toBe(false);
-	});
-
-	it('returns false when scheduled_at is past or absent', () => {
-		const j = job({ id: 'x', status: 'todo', scheduled_at: 500 });
-		expect(isJobScheduledNotReady(j, 1_000)).toBe(false);
-		expect(isJobReady(j, 1_000)).toBe(true);
+		expect(sortJobs(jobs).map((j) => j.id)).toEqual(['b', 'a', 'c']);
 	});
 });
 

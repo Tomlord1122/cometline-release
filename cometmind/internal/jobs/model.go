@@ -35,9 +35,6 @@ type Job struct {
 	DefinitionOfDone  string
 	Progress          string
 	Status            string
-	Priority          int
-	ScheduledAt       *int64
-	DueAt             *int64
 	WorkspacePath     string
 	AssignedSessionID string
 	LeaseExpiresAt    *int64
@@ -64,9 +61,6 @@ type JobEvent struct {
 type CreateInput struct {
 	Description      string
 	DefinitionOfDone string
-	Priority         int
-	ScheduledAt      *int64
-	DueAt            *int64
 	WorkspacePath    string
 	CreatedBy        string
 	SourceSessionID  string
@@ -78,15 +72,12 @@ type CreateInput struct {
 type UpdateTodoInput struct {
 	Description      string
 	DefinitionOfDone string
-	Priority         int
-	ScheduledAt      *int64
-	DueAt            *int64
 	WorkspacePath    string
 }
 
 // ListFilter filters job listings.
 type ListFilter struct {
-	Status          string
-	ReadyOnly       bool
-	IncludeDeleted  bool
+	Status         string
+	ReadyOnly      bool
+	IncludeDeleted bool
 }
