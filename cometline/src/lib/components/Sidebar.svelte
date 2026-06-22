@@ -279,7 +279,7 @@
 			{/if}
 		</div>
 
-		<div class="sidebar-footer">
+		<div class="sidebar-footer p-2">
 			<button aria-label="Settings" title="Settings" onclick={shellStore.openSettings}>
 				<Settings size={16} stroke-width={1.8} />
 			</button>
