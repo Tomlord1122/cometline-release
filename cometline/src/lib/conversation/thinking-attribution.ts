@@ -36,6 +36,53 @@ export function isPinnedJobProposalTool(item: ToolChatItem): boolean {
 	return item.toolName === 'propose_job' && !item.pending && !item.error;
 }
 
+function stopsPinnedJobScan(item: ChatItem): boolean {
+	return (
+		item.type === 'user' ||
+		item.type === 'assistant' ||
+		item.type === 'status' ||
+		item.type === 'error'
+	);
+}
+
+/** Pinned propose_job tools in the same assistant turn (survives reload item ordering). */
+export function pinnedJobProposalsForAssistant(
+	assistantId: string,
+	items: readonly ChatItem[]
+): ToolChatItem[] {
+	const start = items.findIndex(
+		(item): item is AssistantItem => item.type === 'assistant' && item.id === assistantId
+	);
+	if (start === -1) return [];
+
+	const pinned: ToolChatItem[] = [];
+	for (let i = start + 1; i < items.length; i++) {
+		const item = items[i];
+		if (stopsPinnedJobScan(item)) break;
+		// Transcript reload inserts a standalone memory row between assistant and tools.
+		if (item.type === 'memory') continue;
+		if (item.type === 'tool' && isPinnedJobProposalTool(item)) {
+			pinned.push(item);
+			continue;
+		}
+		if (item.type === 'tool' || item.type === 'subagent') break;
+	}
+	return pinned;
+}
+
+/** Tool ids rendered inside assistant-stack instead of standalone tool rows. */
+export function pinnedJobProposalToolIds(items: readonly ChatItem[]): Set<string> {
+	const ids = new Set<string>();
+	for (let i = 0; i < items.length; i++) {
+		const item = items[i];
+		if (item.type !== 'assistant') continue;
+		for (const tool of pinnedJobProposalsForAssistant(item.id, items)) {
+			ids.add(tool.id);
+		}
+	}
+	return ids;
+}
+
 /** Attribute memory/tool rows to the assistant in the same user turn (full transcript scan). */
 export function buildThinkingAttribution(items: readonly ChatItem[]): ThinkingAttribution {
 	const map = new Map<string, ThinkingBlock>();

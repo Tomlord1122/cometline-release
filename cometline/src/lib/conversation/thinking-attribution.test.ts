@@ -4,6 +4,8 @@ import {
 	buildThinkingAttribution,
 	defaultActivityGroupExpanded,
 	defaultThinkingExpanded,
+	pinnedJobProposalToolIds,
+	pinnedJobProposalsForAssistant,
 	shouldGroupAssistantTimeline
 } from './thinking-attribution';
 import type { ChatItem } from '$lib/types';
@@ -422,6 +424,89 @@ describe('propose_job pinning', () => {
 			{ kind: 'tool' as const, tool: proposeTool }
 		];
 		expect(shouldGroupAssistantTimeline(assistant, timeline)).toBe(false);
+	});
+});
+
+describe('pinnedJobProposalsForAssistant', () => {
+	const proposeTool: Extract<ChatItem, { type: 'tool' }> = {
+		id: 'pj1',
+		type: 'tool',
+		toolName: 'propose_job',
+		input: { description: 'Fix auth' },
+		output: '{"status":"awaiting_workspace","description":"Fix auth"}',
+		pending: false
+	};
+	const otherTool: Extract<ChatItem, { type: 'tool' }> = {
+		id: 'rf1',
+		type: 'tool',
+		toolName: 'read_file',
+		input: { path: 'main.go' },
+		output: 'package main',
+		pending: false
+	};
+
+	it('collects consecutive pinned propose_job after assistant', () => {
+		const items: ChatItem[] = [
+			{ id: 'u1', type: 'user', text: 'create a job' },
+			{ id: 'a1', type: 'assistant', text: 'Please confirm below.' },
+			proposeTool
+		];
+		expect(pinnedJobProposalsForAssistant('a1', items)).toEqual([proposeTool]);
+	});
+
+	it('collects propose_job after standalone memory row on transcript reload', () => {
+		const items: ChatItem[] = [
+			{ id: 'a1', type: 'assistant', text: 'Please confirm below.' },
+			{
+				id: 'm1',
+				type: 'memory',
+				memories: [{ id: 'mem-1', content: 'note', kind: 'fact', similarity: 1, effective_weight: 1 }]
+			},
+			proposeTool
+		];
+		expect(pinnedJobProposalsForAssistant('a1', items)).toEqual([proposeTool]);
+	});
+
+	it('stops at next user or assistant', () => {
+		const items: ChatItem[] = [
+			{ id: 'a1', type: 'assistant', text: 'First' },
+			proposeTool,
+			{ id: 'u1', type: 'user', text: 'next' }
+		];
+		expect(pinnedJobProposalsForAssistant('a1', items)).toEqual([proposeTool]);
+
+		const withNextAssistant: ChatItem[] = [
+			{ id: 'a1', type: 'assistant', text: 'First' },
+			proposeTool,
+			{ id: 'a2', type: 'assistant', text: 'Second' }
+		];
+		expect(pinnedJobProposalsForAssistant('a1', withNextAssistant)).toEqual([proposeTool]);
+	});
+
+	it('stops before non-pinned tools', () => {
+		const items: ChatItem[] = [
+			{ id: 'a1', type: 'assistant', text: 'Check files first.' },
+			otherTool,
+			proposeTool
+		];
+		expect(pinnedJobProposalsForAssistant('a1', items)).toEqual([]);
+	});
+
+	it('pinnedJobProposalToolIds includes all embedded propose_job ids', () => {
+		const pj2: Extract<ChatItem, { type: 'tool' }> = { ...proposeTool, id: 'pj2' };
+		const pj3: Extract<ChatItem, { type: 'tool' }> = { ...proposeTool, id: 'pj3' };
+		const items: ChatItem[] = [
+			{ id: 'a1', type: 'assistant', text: 'One' },
+			proposeTool,
+			pj2,
+			{ id: 'a2', type: 'assistant', text: 'Two' },
+			pj3
+		];
+		const ids = pinnedJobProposalToolIds(items);
+		expect(ids.has('pj1')).toBe(true);
+		expect(ids.has('pj2')).toBe(true);
+		expect(ids.has('pj3')).toBe(true);
+		expect(ids.size).toBe(3);
 	});
 });
 

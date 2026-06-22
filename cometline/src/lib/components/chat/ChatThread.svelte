@@ -22,6 +22,8 @@
 		buildThinkingAttribution,
 		defaultActivityGroupExpanded,
 		defaultThinkingExpanded,
+		pinnedJobProposalToolIds,
+		pinnedJobProposalsForAssistant,
 		shouldGroupAssistantTimeline,
 		type InjectedMemory,
 		type TimelineEntry
@@ -126,6 +128,7 @@
 	let copyResetTimer: ReturnType<typeof setTimeout> | null = null;
 	let now = $state(Date.now());
 	let threadItems = $derived(isSessionSynced ? chatStore.items : snapshotItems);
+	let embeddedPinnedJobIds = $derived(pinnedJobProposalToolIds(threadItems));
 	let firstAssistantItem = $derived(
 		threadItems.find(
 			(item) => item.type === 'assistant' && (item.text.trim() || hasReasoning(item))
@@ -442,6 +445,7 @@
 			item.text ||
 			hasReasoning(item) ||
 			hasVisibleThinkingBlock(item.id) ||
+			pinnedJobProposalsForAssistant(item.id, threadItems).length > 0 ||
 			showAssistantPending(item) ||
 			showAssistantActivitySpinner(item)
 		);
@@ -660,6 +664,7 @@
 {#snippet assistantStack(item: Extract<ChatItem, { type: 'assistant' }>)}
 	{@const timeline = buildAssistantTimeline(item.id, threadItems, thinkingForAssistant)}
 	{@const grouped = shouldGroupAssistantTimeline(item, timeline)}
+	{@const pinnedJobTools = pinnedJobProposalsForAssistant(item.id, threadItems)}
 	<div class="assistant-stack">
 		{#if grouped}
 			<AssistantActivityGroup
@@ -732,35 +737,46 @@
 					streaming={item.id === streamingAssistantId}
 				/>
 			</div>
-			{#if item.id !== streamingAssistantId}
-				<div class="message-actions m-1">
-					{#if item.memoryUpdates?.length}
-						<span
-							class="message-action memory-hint"
-							title={memoryUpdateTooltip(item.memoryUpdates)}
-							aria-label={memoryUpdateTooltip(item.memoryUpdates)}
-						>
-							{memoryUpdateHint(item.memoryUpdates)}
-						</span>
-					{/if}
-					<button
-						type="button"
-						class="message-action m-1"
-						class:copied={copiedId === item.id}
-						title="Copy message"
-						aria-label="Copy message"
-						onclick={() => copyMessage(item.id, item.text)}
+		{/if}
+		{#each pinnedJobTools as jobTool (jobTool.id)}
+			<ToolFoldPanel
+				item={jobTool}
+				label={toolFoldLabel(jobTool)}
+				expanded={toolOutputExpanded(jobTool)}
+				onToggle={() => toggleToolOutput(jobTool.id)}
+				{sessionId}
+				{onNotifyAgent}
+				{onStartJob}
+			/>
+		{/each}
+		{#if item.text && item.id !== streamingAssistantId}
+			<div class="message-actions m-1">
+				{#if item.memoryUpdates?.length}
+					<span
+						class="message-action memory-hint"
+						title={memoryUpdateTooltip(item.memoryUpdates)}
+						aria-label={memoryUpdateTooltip(item.memoryUpdates)}
 					>
-						{#if copiedId === item.id}
-							<Check size={13} />
-							<span>Copied</span>
-						{:else}
-							<Copy size={13} />
-							<span>Copy</span>
-						{/if}
-					</button>
-				</div>
-			{/if}
+						{memoryUpdateHint(item.memoryUpdates)}
+					</span>
+				{/if}
+				<button
+					type="button"
+					class="message-action m-1"
+					class:copied={copiedId === item.id}
+					title="Copy message"
+					aria-label="Copy message"
+					onclick={() => copyMessage(item.id, item.text)}
+				>
+					{#if copiedId === item.id}
+						<Check size={13} />
+						<span>Copied</span>
+					{:else}
+						<Copy size={13} />
+						<span>Copy</span>
+					{/if}
+				</button>
+			</div>
 		{/if}
 		{#if showAssistantActivitySpinner(item)}
 			{@render assistantActivitySpinner(item)}
@@ -913,7 +929,7 @@
 									{@render assistantStack(item)}
 								</div>
 							</div>
-						{:else if item.type === 'tool' && !isToolInBuffer(item)}
+						{:else if item.type === 'tool' && !isToolInBuffer(item) && !embeddedPinnedJobIds.has(item.id)}
 							<div
 								class="row tool-row"
 								class:continuation-row={!startsSpeakerRun(index, 'assistant')}
@@ -1141,6 +1157,11 @@
 		min-width: 0;
 		flex: 0 1 auto;
 		align-items: flex-start;
+	}
+
+	.assistant-stack :global(.tool-fold-panel) {
+		align-self: stretch;
+		width: 100%;
 	}
 
 	.message-actions {
