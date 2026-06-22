@@ -19,6 +19,10 @@ export const BUILTIN_SLASH_COMMANDS: BuiltinSlashCommand[] = [
 	{
 		name: 'model',
 		description: 'Switch the model for this session'
+	},
+	{
+		name: 'job',
+		description: 'Claim a ready job and start working on it'
 	}
 ];
 
@@ -58,7 +62,27 @@ export function expandBuiltinSlashCommand(text: string): string | null {
 	if (name === 'model') {
 		return null;
 	}
+	if (name === 'job') {
+		return null;
+	}
 	return null;
+}
+
+export function parseJobCommand(text: string): { query: string } | null {
+	const match = /^\s*\/job(?:\s+(.*))?$/i.exec(text);
+	if (!match) return null;
+	return { query: (match[1] ?? '').trim() };
+}
+
+export function filterJobOptions<T extends { id: string; description: string }>(query: string, jobs: T[]): T[] {
+	const q = query.toLowerCase();
+	return jobs.filter((job) => {
+		if (!q) return true;
+		return (
+			job.id.toLowerCase().includes(q) ||
+			job.description.toLowerCase().includes(q)
+		);
+	});
 }
 
 export function parseChangeCommand(text: string): { query: string } | null {

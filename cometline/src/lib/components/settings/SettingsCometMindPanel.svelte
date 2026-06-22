@@ -521,6 +521,37 @@
 
 	<div class="settings-section">
 		<div class="settings-section-heading">
+			<h3>Jobs</h3>
+			<p>Global work queue notifications and lease timing.</p>
+		</div>
+		<SettingsToggle
+			label="Job notifications"
+			description="Show desktop alerts when jobs are claimed or completed."
+			bind:checked={cometmind.jobs.notifications.enabled}
+		/>
+		<SettingsToggle
+			label="Notify on claimed"
+			description="Alert when a job is claimed by a session."
+			bind:checked={cometmind.jobs.notifications.onClaimed}
+			disabled={!cometmind.jobs.notifications.enabled}
+		/>
+		<SettingsToggle
+			label="Notify on completed"
+			description="Alert when a job is marked done."
+			bind:checked={cometmind.jobs.notifications.onCompleted}
+			disabled={!cometmind.jobs.notifications.enabled}
+		/>
+		<SettingsToggle
+			label="Notify on released"
+			description="Alert when an ongoing job returns to todo."
+			bind:checked={cometmind.jobs.notifications.onReleased}
+			disabled={!cometmind.jobs.notifications.enabled}
+		/>
+		<SettingsPersistenceHint tier="action" detail="Job notification settings" />
+	</div>
+
+	<div class="settings-section">
+		<div class="settings-section-heading">
 			<h3>Discord gateway</h3>
 			<p>
 				Runs <code>cometmind gateway run --platform discord</code> while Cometline is open.

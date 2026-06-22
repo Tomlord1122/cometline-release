@@ -90,6 +90,7 @@ export interface CometMindStorageSettings {
 	retentionDays: number;
 	maxSessionsPerWorkspace: number;
 	archivedMemoryPurgeDays: number;
+	deletedJobPurgeDays: number;
 	vacuumAfterPurge: boolean;
 }
 
@@ -121,6 +122,20 @@ export interface CometMindMCPSettings {
 	servers: MCPServerConfig[];
 }
 
+export interface CometMindJobsNotificationSettings {
+	enabled: boolean;
+	onClaimed: boolean;
+	onCompleted: boolean;
+	onReleased: boolean;
+}
+
+export interface CometMindJobsSettings {
+	notifications: CometMindJobsNotificationSettings;
+	leaseMinutes: number;
+	deletedPurgeDays: number;
+	reconcileIntervalSeconds: number;
+}
+
 export interface CometMindSettings {
 	systemPromptPath: string;
 	maxTokens: number;
@@ -135,6 +150,7 @@ export interface CometMindSettings {
 		discord: CometMindDiscordGatewaySettings;
 	};
 	mcp: CometMindMCPSettings;
+	jobs: CometMindJobsSettings;
 }
 
 export interface RuntimeProviderEntry {
@@ -345,11 +361,26 @@ function normalizeCometMindMCPSettings(input: Partial<CometMindMCPSettings> | un
 	return { enabled, servers };
 }
 
+export function defaultCometMindJobsSettings(): CometMindJobsSettings {
+	return {
+		notifications: {
+			enabled: true,
+			onClaimed: true,
+			onCompleted: true,
+			onReleased: false
+		},
+		leaseMinutes: 30,
+		deletedPurgeDays: 30,
+		reconcileIntervalSeconds: 120
+	};
+}
+
 export function defaultCometMindStorageSettings(): CometMindStorageSettings {
 	return {
 		retentionDays: 90,
 		maxSessionsPerWorkspace: 0,
 		archivedMemoryPurgeDays: 90,
+		deletedJobPurgeDays: 30,
 		vacuumAfterPurge: true
 	};
 }
@@ -398,7 +429,8 @@ export function defaultCometMindSettings(workspacePath = ''): CometMindSettings 
 				workspacePath
 			}
 		},
-		mcp: defaultCometMindMCPSettings()
+		mcp: defaultCometMindMCPSettings(),
+		jobs: defaultCometMindJobsSettings()
 	};
 }
 
@@ -414,6 +446,10 @@ export function normalizeCometMindSettings(
 	const storage: Partial<CometMindStorageSettings> = input?.storage ?? {};
 	const discord: Partial<CometMindDiscordGatewaySettings> = input?.gateway?.discord ?? {};
 	const mcp = normalizeCometMindMCPSettings(input?.mcp);
+	const jobsInput: Partial<CometMindJobsSettings> = input?.jobs ?? {};
+	const jobsDefaults = defaults.jobs;
+	const jobsNotifications: Partial<CometMindJobsNotificationSettings> =
+		jobsInput.notifications ?? {};
 	const args = Array.isArray(acp.args)
 		? acp.args.map((a) => String(a).trim()).filter(Boolean)
 		: defaults.acp.args;
@@ -469,6 +505,10 @@ export function normalizeCometMindSettings(
 				storage.archivedMemoryPurgeDays,
 				defaults.storage.archivedMemoryPurgeDays
 			),
+			deletedJobPurgeDays: normalizeNonNegativeInt(
+				storage.deletedJobPurgeDays,
+				defaults.storage.deletedJobPurgeDays
+			),
 			vacuumAfterPurge:
 				typeof storage.vacuumAfterPurge === 'boolean'
 					? storage.vacuumAfterPurge
@@ -498,7 +538,36 @@ export function normalizeCometMindSettings(
 					).trim() || defaults.gateway.discord.workspacePath
 			}
 		},
-		mcp
+		mcp,
+		jobs: {
+			notifications: {
+				enabled:
+					typeof jobsNotifications.enabled === 'boolean'
+						? jobsNotifications.enabled
+						: jobsDefaults.notifications.enabled,
+				onClaimed:
+					typeof jobsNotifications.onClaimed === 'boolean'
+						? jobsNotifications.onClaimed
+						: jobsDefaults.notifications.onClaimed,
+				onCompleted:
+					typeof jobsNotifications.onCompleted === 'boolean'
+						? jobsNotifications.onCompleted
+						: jobsDefaults.notifications.onCompleted,
+				onReleased:
+					typeof jobsNotifications.onReleased === 'boolean'
+						? jobsNotifications.onReleased
+						: jobsDefaults.notifications.onReleased
+			},
+			leaseMinutes: normalizePositiveInt(jobsInput.leaseMinutes, jobsDefaults.leaseMinutes),
+			deletedPurgeDays: normalizeNonNegativeInt(
+				jobsInput.deletedPurgeDays,
+				jobsDefaults.deletedPurgeDays
+			),
+			reconcileIntervalSeconds: normalizePositiveInt(
+				jobsInput.reconcileIntervalSeconds,
+				jobsDefaults.reconcileIntervalSeconds
+			)
+		}
 	};
 }
 
@@ -541,6 +610,10 @@ export function cloneCometMindSettings(settings: CometMindSettings): CometMindSe
 				oauth: server.oauth ? { ...server.oauth, scopes: [...(server.oauth.scopes ?? [])] } : undefined,
 				allowedTools: [...(server.allowedTools ?? [])]
 			}))
+		},
+		jobs: {
+			...settings.jobs,
+			notifications: { ...settings.jobs.notifications }
 		}
 	};
 }
@@ -871,6 +944,7 @@ const providerSettingsSchema = z.object({
 			retentionDays: z.number().int().min(0),
 			maxSessionsPerWorkspace: z.number().int().min(0),
 			archivedMemoryPurgeDays: z.number().int().min(0),
+			deletedJobPurgeDays: z.number().int().min(0),
 			vacuumAfterPurge: z.boolean()
 		}),
 		gateway: z.object({
@@ -910,6 +984,17 @@ const providerSettingsSchema = z.object({
 					allowedTools: z.array(z.string()).optional()
 				})
 			)
+		}),
+		jobs: z.object({
+			notifications: z.object({
+				enabled: z.boolean(),
+				onClaimed: z.boolean(),
+				onCompleted: z.boolean(),
+				onReleased: z.boolean()
+			}),
+			leaseMinutes: z.number().int().positive(),
+			deletedPurgeDays: z.number().int().min(0),
+			reconcileIntervalSeconds: z.number().int().positive()
 		})
 	})
 });

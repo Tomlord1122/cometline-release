@@ -37,6 +37,13 @@
 			archivedMemoryPurgeDays: Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0
 		});
 	}
+
+	function onDeletedJobPurgeDaysInput(event: Event) {
+		const value = Number((event.currentTarget as HTMLInputElement).value);
+		patchStorage({
+			deletedJobPurgeDays: Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0
+		});
+	}
 </script>
 
 <section class="general-panel settings-panel-frame">
@@ -120,6 +127,24 @@
 					Disabled — archived memories stay on disk.
 				{:else}
 					Hard-delete archived memories older than {storage.archivedMemoryPurgeDays} days.
+				{/if}
+			</small>
+		</label>
+
+		<label class="field">
+			<span>Purge deleted jobs (days)</span>
+			<input
+				type="number"
+				min="0"
+				step="1"
+				value={storage.deletedJobPurgeDays}
+				oninput={onDeletedJobPurgeDaysInput}
+			/>
+			<small>
+				{#if storage.deletedJobPurgeDays === 0}
+					Disabled — soft-deleted jobs stay on disk.
+				{:else}
+					Hard-delete soft-deleted jobs older than {storage.deletedJobPurgeDays} days.
 				{/if}
 			</small>
 		</label>

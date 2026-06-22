@@ -8,6 +8,7 @@ import (
 
 	"github.com/cometline/cometmind/internal/config"
 	"github.com/cometline/cometmind/internal/db"
+	"github.com/cometline/cometmind/internal/jobs"
 	"github.com/cometline/cometmind/internal/memory"
 	"github.com/cometline/cometmind/internal/session"
 )
@@ -18,6 +19,7 @@ type Result struct {
 	SubagentsDeleted   int
 	MemoriesPurged     int
 	MemoryEventsPurged int
+	JobsPurged         int
 	Vacuumed           bool
 }
 
@@ -26,6 +28,7 @@ type Runner struct {
 	DB       *sql.DB
 	Sessions *session.Service
 	Memory   *memory.Service
+	Jobs     *jobs.Service
 	Config   config.StorageConfig
 	// IsRunning, when set, skips sessions with an in-flight agent turn.
 	IsRunning func(sessionID string) bool
@@ -57,20 +60,29 @@ func (r *Runner) Run(ctx context.Context) (Result, error) {
 		out.MemoryEventsPurged = events
 	}
 
-	if cfg.VacuumAfterPurge && (out.SessionsDeleted > 0 || out.SubagentsDeleted > 0 || out.MemoriesPurged > 0) {
+	if r.Jobs != nil && cfg.JobPurgeEnabled() {
+		n, err := r.Jobs.PurgeDeleted(ctx, cfg.DeletedJobPurgeDays)
+		if err != nil {
+			return out, err
+		}
+		out.JobsPurged = n
+	}
+
+	if cfg.VacuumAfterPurge && (out.SessionsDeleted > 0 || out.SubagentsDeleted > 0 || out.MemoriesPurged > 0 || out.JobsPurged > 0) {
 		if _, err := r.DB.ExecContext(ctx, "VACUUM"); err != nil {
 			return out, err
 		}
 		out.Vacuumed = true
 	}
 
-	if out.SessionsDeleted > 0 || out.SubagentsDeleted > 0 || out.MemoriesPurged > 0 {
+	if out.SessionsDeleted > 0 || out.SubagentsDeleted > 0 || out.MemoriesPurged > 0 || out.JobsPurged > 0 {
 		log.Printf(
-			"cometmind: retention complete sessions_deleted=%d subagents_deleted=%d memories_purged=%d memory_events_purged=%d vacuumed=%v",
+			"cometmind: retention complete sessions_deleted=%d subagents_deleted=%d memories_purged=%d memory_events_purged=%d jobs_purged=%d vacuumed=%v",
 			out.SessionsDeleted,
 			out.SubagentsDeleted,
 			out.MemoriesPurged,
 			out.MemoryEventsPurged,
+			out.JobsPurged,
 			out.Vacuumed,
 		)
 	}

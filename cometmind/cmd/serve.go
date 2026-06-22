@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cometline/cometmind/internal/jobs"
 	"github.com/cometline/cometmind/internal/runtime"
 	"github.com/cometline/cometmind/internal/session"
 	"github.com/cometline/cometmind/server"
@@ -55,10 +56,16 @@ func runServe(_ *cobra.Command, _ []string) error {
 		fmt.Fprintf(os.Stderr, "pruned %d missing workspace(s) with no sessions\n", pruned)
 	}
 
+	runs := server.NewRunManager()
 	engine, err := server.New(server.Deps{
-		Config:       rt.Config,
-		Sessions:     rt.Sessions,
-		Memory:       rt.Memory,
+		Config:   rt.Config,
+		Sessions: rt.Sessions,
+		Memory:   rt.Memory,
+		Jobs:     rt.Jobs,
+		SetJobSettings: func(s jobs.Settings) {
+			rt.SetJobSettings(s)
+		},
+		Runs:         runs,
 		ACPMgr:       rt.ACPManager(),
 		MCPMgr:       rt.MCPManager(),
 		SubagentOrch: rt.SubagentOrchestrator(),
@@ -69,6 +76,9 @@ func runServe(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+
+	rt.SetSessionRunningChecker(runs.Running)
+	rt.StartJobsMaintenance(ctx)
 
 	httpServer := &http.Server{
 		Addr:              fmt.Sprintf("127.0.0.1:%d", servePort),

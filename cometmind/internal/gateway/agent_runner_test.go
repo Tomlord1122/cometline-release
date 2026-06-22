@@ -24,7 +24,7 @@ func TestAgentRunnerRunTurnClosesChannel(t *testing.T) {
 	t.Parallel()
 	var reply strings.Builder
 	ar := AgentRunner{
-		NewRunner: func(_ session.Session, _ string) (TurnRunner, error) {
+		NewRunner: func(_ session.Session, _ string, msg InboundMessage) (TurnRunner, error) {
 			return fakeTurnRunner{
 				events: []event.Event{
 					event.TextDelta("hello"),
@@ -33,7 +33,7 @@ func TestAgentRunnerRunTurnClosesChannel(t *testing.T) {
 			}, nil
 		},
 	}
-	err := ar.RunTurn(context.Background(), session.Session{ID: "sess-1"}, "/tmp", "hi", func(ev event.Event) {
+	err := ar.RunTurn(context.Background(), session.Session{ID: "sess-1"}, "/tmp", InboundMessage{Text: "hi"}, func(ev event.Event) {
 		if ev.Kind == event.KindTextDelta {
 			reply.WriteString(ev.Delta)
 		}

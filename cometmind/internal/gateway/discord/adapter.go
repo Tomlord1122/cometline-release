@@ -15,6 +15,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/cometline/cometmind/internal/config"
 	"github.com/cometline/cometmind/internal/gateway"
+	"github.com/cometline/cometmind/internal/jobs"
 	skillpkg "github.com/cometline/cometmind/internal/skills"
 )
 
@@ -42,6 +43,8 @@ type Adapter struct {
 	onThread  func(context.Context, string, string, string) error
 	onChange  func(context.Context, gateway.InboundMessage, string) (string, error)
 	onSuggest func(context.Context, string) ([]string, error)
+	onJobs    func(context.Context, gateway.InboundMessage, string) (string, string, error)
+	jobSuggest func(context.Context, string) ([]jobs.Job, error)
 
 	mu sync.Mutex
 }
@@ -113,6 +116,16 @@ func (a *Adapter) SetWorkspaceSuggestHandler(fn func(context.Context, string) ([
 	a.onSuggest = fn
 }
 
+// SetJobsHandler registers the callback used for /jobs slash commands.
+func (a *Adapter) SetJobsHandler(fn func(context.Context, gateway.InboundMessage, string) (string, string, error)) {
+	a.onJobs = fn
+}
+
+// SetJobSuggestHandler registers job autocomplete for /jobs.
+func (a *Adapter) SetJobSuggestHandler(fn func(context.Context, string) ([]jobs.Job, error)) {
+	a.jobSuggest = fn
+}
+
 // KeepTyping sends ChannelTyping periodically until stop is called.
 func (a *Adapter) KeepTyping(ctx context.Context, channelID string) func() {
 	stop := make(chan struct{})
@@ -141,7 +154,7 @@ func (a *Adapter) Start(ctx context.Context) error {
 		if err := a.registerCommands(s, r); err != nil {
 			log.Printf("discord: slash command registration failed: %v", err)
 		} else {
-			log.Printf("discord: slash commands registered (thread, create-skill, change)")
+			log.Printf("discord: slash commands registered (thread, create-skill, change, jobs)")
 		}
 	})
 	if err := a.Session.Open(); err != nil {
@@ -189,6 +202,19 @@ func applicationCommands() []*discordgo.ApplicationCommand {
 					Name:         "path",
 					Description:  "Absolute path to project root",
 					Required:     true,
+					Autocomplete: true,
+				},
+			},
+		},
+		{
+			Name:        "jobs",
+			Description: "List ready jobs or claim one to run",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:         discordgo.ApplicationCommandOptionString,
+					Name:         "job",
+					Description:  "Job ID to claim (optional)",
+					Required:     false,
 					Autocomplete: true,
 				},
 			},
@@ -327,13 +353,29 @@ func (a *Adapter) onInteractionCreate(s *discordgo.Session, i *discordgo.Interac
 			a.handleCreateSkillCommand(s, i, data)
 		case "change":
 			a.handleChangeCommand(s, i, data)
+		case "jobs":
+			a.handleJobsCommand(s, i, data)
 		}
 	}
 }
 
 func (a *Adapter) handleAutocomplete(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	data := i.ApplicationCommandData()
-	if data.Name != "change" || a.onSuggest == nil {
+	switch data.Name {
+	case "change":
+		a.handleChangeAutocomplete(s, i, data)
+	case "jobs":
+		a.handleJobsAutocomplete(s, i, data)
+	default:
+		_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionApplicationCommandAutocompleteResult,
+			Data: &discordgo.InteractionResponseData{Choices: []*discordgo.ApplicationCommandOptionChoice{}},
+		})
+	}
+}
+
+func (a *Adapter) handleChangeAutocomplete(s *discordgo.Session, i *discordgo.InteractionCreate, data discordgo.ApplicationCommandInteractionData) {
+	if a.onSuggest == nil {
 		_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionApplicationCommandAutocompleteResult,
 			Data: &discordgo.InteractionResponseData{Choices: []*discordgo.ApplicationCommandOptionChoice{}},
@@ -370,6 +412,46 @@ func (a *Adapter) handleAutocomplete(s *discordgo.Session, i *discordgo.Interact
 		})
 	}
 
+	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionApplicationCommandAutocompleteResult,
+		Data: &discordgo.InteractionResponseData{Choices: choices},
+	})
+}
+
+func (a *Adapter) handleJobsAutocomplete(s *discordgo.Session, i *discordgo.InteractionCreate, data discordgo.ApplicationCommandInteractionData) {
+	if a.jobSuggest == nil {
+		_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionApplicationCommandAutocompleteResult,
+			Data: &discordgo.InteractionResponseData{Choices: []*discordgo.ApplicationCommandOptionChoice{}},
+		})
+		return
+	}
+	query := ""
+	for _, opt := range data.Options {
+		if opt.Name == "job" && opt.Focused {
+			query = opt.StringValue()
+			break
+		}
+	}
+	items, err := a.jobSuggest(context.Background(), query)
+	if err != nil {
+		log.Printf("discord: job autocomplete failed: %v", err)
+		items = nil
+	}
+	choices := make([]*discordgo.ApplicationCommandOptionChoice, 0, len(items))
+	for _, job := range items {
+		if len(choices) >= 25 {
+			break
+		}
+		name := fmt.Sprintf("%s %s", job.ID, job.Description)
+		if len(name) > 100 {
+			name = name[:97] + "..."
+		}
+		choices = append(choices, &discordgo.ApplicationCommandOptionChoice{
+			Name:  name,
+			Value: job.ID,
+		})
+	}
 	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionApplicationCommandAutocompleteResult,
 		Data: &discordgo.InteractionResponseData{Choices: choices},
@@ -425,6 +507,52 @@ func (a *Adapter) handleChangeCommand(s *discordgo.Session, i *discordgo.Interac
 			Flags:   discordgo.MessageFlagsEphemeral,
 		},
 	})
+}
+
+func (a *Adapter) handleJobsCommand(s *discordgo.Session, i *discordgo.InteractionCreate, data discordgo.ApplicationCommandInteractionData) {
+	jobID := ""
+	for _, opt := range data.Options {
+		if opt.Name == "job" && opt.Type == discordgo.ApplicationCommandOptionString {
+			jobID = strings.TrimSpace(opt.StringValue())
+		}
+	}
+	if a.onJobs == nil {
+		_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "Jobs are not configured.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		return
+	}
+	msg := routingInboundMessage(s, i)
+	reply, runPrompt, err := a.onJobs(context.Background(), msg, jobID)
+	if err != nil {
+		_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: fmt.Sprintf("Jobs command failed: %v", err),
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		return
+	}
+	flags := discordgo.MessageFlagsEphemeral
+	if runPrompt != "" {
+		flags = 0
+	}
+	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: reply,
+			Flags:   flags,
+		},
+	})
+	if runPrompt != "" && a.onInbound != nil {
+		msg.Text = runPrompt
+		a.onInbound(context.Background(), msg)
+	}
 }
 
 func routingInboundMessage(s *discordgo.Session, i *discordgo.InteractionCreate) gateway.InboundMessage {

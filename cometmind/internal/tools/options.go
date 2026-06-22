@@ -5,6 +5,7 @@ import (
 
 	"github.com/cometline/cometmind/internal/acp"
 	"github.com/cometline/cometmind/internal/event"
+	"github.com/cometline/cometmind/internal/jobs"
 	"github.com/cometline/cometmind/internal/session"
 	mcppkg "github.com/cometline/cometmind/internal/mcp"
 	"github.com/cometline/cometmind/internal/skills"
@@ -28,7 +29,11 @@ type RegistryOptions struct {
 	MCP            *mcppkg.Manager
 	Orchestrator   *subagent.Orchestrator
 	RunnerFactory  ChildRunnerFactory
-	SubagentConfig SubagentToolConfig
+	SubagentConfig     SubagentToolConfig
+	Jobs               *jobs.Service
+	SessionID          string
+	JobPlatform        string
+	JobSourceChannelID string
 }
 
 // SubagentToolConfig holds limits passed into subagent tools.

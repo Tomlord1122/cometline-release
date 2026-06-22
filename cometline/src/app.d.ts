@@ -131,7 +131,22 @@ declare global {
 		retentionDays: number;
 		maxSessionsPerWorkspace: number;
 		archivedMemoryPurgeDays: number;
+		deletedJobPurgeDays: number;
 		vacuumAfterPurge: boolean;
+	}
+
+	interface CometMindJobsNotificationSettings {
+		enabled: boolean;
+		onClaimed: boolean;
+		onCompleted: boolean;
+		onReleased: boolean;
+	}
+
+	interface CometMindJobsSettings {
+		notifications: CometMindJobsNotificationSettings;
+		leaseMinutes: number;
+		deletedPurgeDays: number;
+		reconcileIntervalSeconds: number;
 	}
 
 	type MCPTransport = 'stdio' | 'http' | 'sse';
@@ -176,6 +191,7 @@ declare global {
 			discord: CometMindDiscordGatewaySettings;
 		};
 		mcp: CometMindMCPSettings;
+		jobs: CometMindJobsSettings;
 	}
 
 	interface SidebarChromeState {
@@ -270,6 +286,7 @@ declare global {
 			onToggleWebPanel?: (callback: () => void) => () => void;
 			onOpenWebPanel?: (callback: () => void) => () => void;
 			onNavigateSession?: (callback: (direction: 'prev' | 'next') => void) => () => void;
+			notifyJob?: (payload: { title: string; body: string }) => void;
 		};
 	}
 }

@@ -8,7 +8,8 @@ const {
 	shell,
 	Tray,
 	Menu,
-	nativeImage
+	nativeImage,
+	Notification
 } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
@@ -2199,6 +2200,16 @@ process.on('exit', () => {
 			// ignore
 		}
 	}
+});
+
+ipcMain.on('jobs:notify', (_event, payload) => {
+	if (!payload || typeof payload.title !== 'string') return;
+	if (!Notification.isSupported()) return;
+	const notification = new Notification({
+		title: payload.title,
+		body: typeof payload.body === 'string' ? payload.body : ''
+	});
+	notification.show();
 });
 
 ipcMain.on('cometmind:restart', async () => {

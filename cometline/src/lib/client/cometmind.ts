@@ -31,7 +31,16 @@ import {
 	reconnectMcpServer as reconnectMcpServerApi,
 	searchMemories as searchMemoriesApi,
 	syncSkills as syncSkillsApi,
-	testMcpServer as testMcpServerApi
+	testMcpServer as testMcpServerApi,
+	listJobs as listJobsApi,
+	createJob as createJobApi,
+	getJob as getJobApi,
+	updateJob as updateJobApi,
+	deleteJob as deleteJobApi,
+	claimJob as claimJobApi,
+	listJobEvents as listJobEventsApi,
+	getJobSettings as getJobSettingsApi,
+	putJobSettings as putJobSettingsApi
 } from '$lib/generated/cometmind-api';
 import type {
 	CompactMemoryPreviewResponse,
@@ -52,7 +61,13 @@ import type {
 	TranscriptResponse,
 	UpdateSessionRequest,
 	Workspace,
-	WorkspaceFileContent
+	WorkspaceFileContent,
+	JobResource,
+	ListJobsResponse,
+	JobEventResource,
+	JobSettings,
+	CreateJobRequest,
+	UpdateJobRequest
 } from '$lib/generated/cometmind-api';
 import { client } from '$lib/generated/cometmind-api/client.gen';
 import { createSSEParser } from '$lib/sse/parser';
@@ -65,6 +80,8 @@ export type {
 	McpToolInfo,
 	MemoryResource
 } from '$lib/generated/cometmind-api';
+
+export type { JobResource, JobEventResource, JobSettings, CreateJobRequest, UpdateJobRequest } from '$lib/generated/cometmind-api';
 
 export type MemoryLifecycleSettings = {
 	decay_half_life_days: number;
@@ -569,4 +586,55 @@ export function compactMemory(): Promise<{ status: string }> {
 
 export function compactMemoryPreview(): Promise<CompactMemoryPreviewResponse> {
 	return compactMemoryPreviewApi({ throwOnError: true }).then(({ data }) => data);
+}
+
+export type JobListQuery = {
+	status?: 'todo' | 'ongoing' | 'done';
+	ready_only?: boolean;
+	include_deleted?: boolean;
+};
+
+export function listJobs(query: JobListQuery = {}): Promise<ListJobsResponse> {
+	return listJobsApi({ query, throwOnError: true }).then(({ data }) => data);
+}
+
+export function createJob(body: CreateJobRequest): Promise<JobResource> {
+	return createJobApi({ body, throwOnError: true }).then(({ data }) => data);
+}
+
+export function getJob(id: string): Promise<JobResource> {
+	return getJobApi({ path: { id }, throwOnError: true }).then(({ data }) => data);
+}
+
+export function updateJob(id: string, body: UpdateJobRequest): Promise<JobResource> {
+	return updateJobApi({ path: { id }, body, throwOnError: true }).then(({ data }) => data);
+}
+
+export function deleteJob(id: string): Promise<void> {
+	return deleteJobApi({ path: { id }, throwOnError: true }).then(() => undefined);
+}
+
+export function claimJob(id: string, sessionId: string): Promise<JobResource> {
+	return claimJobApi({
+		path: { id },
+		body: { session_id: sessionId },
+		throwOnError: true
+	}).then(({ data }) => data);
+}
+
+export function listJobEvents(id: string): Promise<{ events: JobEventResource[] }> {
+	return listJobEventsApi({ path: { id }, throwOnError: true }).then(({ data }) => data);
+}
+
+export function getJobSettings(): Promise<JobSettings> {
+	return getJobSettingsApi({ throwOnError: true }).then(({ data }) => data);
+}
+
+export function putJobSettings(settings: JobSettings): Promise<JobSettings> {
+	return putJobSettingsApi({ body: settings, throwOnError: true }).then(({ data }) => data);
+}
+
+export function buildJobExecutionPrompt(job: JobResource): string {
+	const dod = job.definition_of_done?.trim() || '(none specified)';
+	return `Please work on job ${job.id}.\n\nDescription: ${job.description}\n\nDefinition of done: ${dod}\n\nUpdate progress with update_job as you go. When finished, call complete_job with a final progress summary.`;
 }

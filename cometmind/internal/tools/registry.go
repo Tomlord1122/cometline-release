@@ -69,6 +69,14 @@ func NewRegistry(workspaceRoot string, opts ...RegistryOptions) *Registry {
 			add(tool)
 		}
 	}
+	if opt.Jobs != nil {
+		RegisterJobTools(r, JobsDeps{
+			Service:           opt.Jobs,
+			SessionID:         opt.SessionID,
+			SourcePlatform:    opt.JobPlatform,
+			SourceChannelID:   opt.JobSourceChannelID,
+		})
+	}
 
 	return r
 }

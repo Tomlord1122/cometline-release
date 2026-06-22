@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/cometline/cometmind/internal/gateway"
 	discordgw "github.com/cometline/cometmind/internal/gateway/discord"
+	"github.com/cometline/cometmind/internal/jobs"
 	"github.com/cometline/cometmind/internal/runtime"
 	"github.com/cometline/cometmind/internal/session"
 	"github.com/spf13/cobra"
@@ -48,9 +50,14 @@ func runGateway(_ *cobra.Command, _ []string) error {
 	router := &gateway.Router{
 		Sessions: rt.Sessions,
 		Config:   rt.Config,
+		Jobs:     rt.Jobs,
 		Runner: gateway.AgentRunner{
-			NewRunner: func(sess session.Session, workspacePath string) (gateway.TurnRunner, error) {
-				return rt.RunnerFor(sess, workspacePath)
+			NewRunner: func(sess session.Session, workspacePath string, msg gateway.InboundMessage) (gateway.TurnRunner, error) {
+				channelID := msg.ChannelID
+				if msg.ThreadID != "" {
+					channelID = msg.ThreadID
+				}
+				return rt.RunnerForGateway(sess, workspacePath, jobs.PlatformDiscord, channelID)
 			},
 		},
 	}
@@ -60,6 +67,11 @@ func runGateway(_ *cobra.Command, _ []string) error {
 		adapter, err := discordgw.New(rt.Config.Gateway.Discord)
 		if err != nil {
 			return err
+		}
+		if n := rt.Jobs.Notifier(); n != nil {
+			n.Register(gateway.DiscordJobNotifier{Reply: func(ctx context.Context, msg gateway.OutboundMessage) error {
+				return adapter.Deliver(ctx, msg)
+			}})
 		}
 		router.SetReplyHandler(func(ctx context.Context, msg gateway.OutboundMessage) error {
 			return adapter.Deliver(ctx, msg)
@@ -73,6 +85,26 @@ func runGateway(_ *cobra.Command, _ []string) error {
 		})
 		adapter.SetWorkspaceSuggestHandler(func(ctx context.Context, query string) ([]string, error) {
 			return router.SuggestWorkspacePaths(ctx, query, 25)
+		})
+		adapter.SetJobsHandler(func(ctx context.Context, msg gateway.InboundMessage, jobID string) (string, string, error) {
+			return router.HandleJobsSlash(ctx, msg, jobID)
+		})
+		adapter.SetJobSuggestHandler(func(ctx context.Context, query string) ([]jobs.Job, error) {
+			items, err := rt.Jobs.ListReady(ctx)
+			if err != nil {
+				return nil, err
+			}
+			query = strings.ToLower(strings.TrimSpace(query))
+			if query == "" {
+				return items, nil
+			}
+			filtered := make([]jobs.Job, 0, len(items))
+			for _, job := range items {
+				if strings.Contains(strings.ToLower(job.ID), query) || strings.Contains(strings.ToLower(job.Description), query) {
+					filtered = append(filtered, job)
+				}
+			}
+			return filtered, nil
 		})
 		adapter.SetInboundHandler(func(ctx context.Context, msg gateway.InboundMessage) {
 			if err := router.HandleInbound(ctx, msg); err != nil {

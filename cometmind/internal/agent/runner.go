@@ -52,6 +52,7 @@ type Runner struct {
 	MemoryRetrievalTimeout time.Duration
 	SystemPrompt           string
 	SkillIndex             string
+	JobIndex               string
 
 	// MemorySem is an optional semaphore that bounds the number of
 	// extractMemoryBackground goroutines that may run concurrently across all
@@ -397,10 +398,10 @@ func (r *Runner) systemPrompt() string {
 	if base == "" {
 		base = DefaultSystemPrompt
 	}
-	if strings.TrimSpace(r.SkillIndex) == "" {
+	if strings.TrimSpace(r.SkillIndex) == "" && strings.TrimSpace(r.JobIndex) == "" {
 		return base
 	}
-	return base + r.SkillIndex
+	return base + r.SkillIndex + r.JobIndex
 }
 
 func (r *Runner) buildSystemPrompt(contextSummary string, truncationContinue bool) string {

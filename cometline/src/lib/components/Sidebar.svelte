@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import { flip } from 'svelte/animate';
-	import { Settings } from '@lucide/svelte';
+	import { Settings, Briefcase } from '@lucide/svelte';
 	import type { Session } from '$lib/types';
 	import { sessionStore } from '$lib/stores/session.svelte';
 	import { deleteSession, updateSession } from '$lib/client/cometmind';
@@ -280,6 +280,14 @@
 		</div>
 
 		<div class="sidebar-footer">
+			<button
+				aria-label="Jobs"
+				title="Jobs"
+				class:active={page.url.pathname === '/jobs'}
+				onclick={() => goto('/jobs')}
+			>
+				<Briefcase size={16} stroke-width={1.8} />
+			</button>
 			<button aria-label="Settings" title="Settings" onclick={shellStore.openSettings}>
 				<Settings size={16} stroke-width={1.8} />
 			</button>
@@ -384,6 +392,10 @@
 
 	.sidebar-footer button:active {
 		background: rgba(0, 0, 0, 0.07);
+	}
+
+	.sidebar-footer button.active {
+		background: rgba(0, 0, 0, 0.1);
 	}
 
 	.session-list {

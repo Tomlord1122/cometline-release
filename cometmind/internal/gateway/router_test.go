@@ -13,7 +13,7 @@ import (
 
 type routerTestRunner struct{}
 
-func (routerTestRunner) RunTurn(_ context.Context, _ session.Session, _, _ string, onEvent func(event.Event)) error {
+func (routerTestRunner) RunTurn(_ context.Context, _ session.Session, _ string, msg InboundMessage, onEvent func(event.Event)) error {
 	if onEvent != nil {
 		onEvent(event.TextDelta("ok"))
 	}
@@ -22,7 +22,7 @@ func (routerTestRunner) RunTurn(_ context.Context, _ session.Session, _, _ strin
 
 type subagentNoiseRunner struct{}
 
-func (subagentNoiseRunner) RunTurn(_ context.Context, _ session.Session, _, _ string, onEvent func(event.Event)) error {
+func (subagentNoiseRunner) RunTurn(_ context.Context, _ session.Session, _ string, msg InboundMessage, onEvent func(event.Event)) error {
 	if onEvent == nil {
 		return nil
 	}

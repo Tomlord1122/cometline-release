@@ -8,11 +8,18 @@
 	import { shellStore } from '$lib/stores/shell.svelte';
 	import { heroComposerCssVars } from '$lib/hero-composer-appearance';
 	import { ensureWorkspace, listAllSessions } from '$lib/client/cometmind';
+	import { startJobNotificationPoller } from '$lib/jobs/job-notifications';
 
 	let { children } = $props();
 
 	onMount(() => {
 		connectionState.startPolling();
+		const stopJobNotifications = startJobNotificationPoller({
+			getSettings: () => settingsStore.settings.cometmind.jobs.notifications,
+			onNotify: (title, body) => {
+				window.electronAPI?.notifyJob?.({ title, body });
+			}
+		});
 		void settingsStore.load().then(() => {
 			// First launch: play the cinematic intro once.
 			if (!settingsStore.settings.app.hasSeenIntro) {
@@ -20,7 +27,10 @@
 			}
 		});
 		void initializeWorkspace();
-		return () => connectionState.stopPolling();
+		return () => {
+			connectionState.stopPolling();
+			stopJobNotifications();
+		};
 	});
 
 	$effect(() => {

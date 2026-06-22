@@ -14,12 +14,12 @@ type TurnRunner interface {
 
 // AgentRunner runs one persisted turn using a factory-built agent loop.
 type AgentRunner struct {
-	NewRunner func(sess session.Session, workspacePath string) (TurnRunner, error)
+	NewRunner func(sess session.Session, workspacePath string, msg InboundMessage) (TurnRunner, error)
 }
 
 // RunTurn executes one user message and streams events to the callback.
-func (a AgentRunner) RunTurn(ctx context.Context, sess session.Session, workspacePath, text string, onEvent func(event.Event)) error {
-	runner, err := a.NewRunner(sess, workspacePath)
+func (a AgentRunner) RunTurn(ctx context.Context, sess session.Session, workspacePath string, msg InboundMessage, onEvent func(event.Event)) error {
+	runner, err := a.NewRunner(sess, workspacePath, msg)
 	if err != nil {
 		return err
 	}

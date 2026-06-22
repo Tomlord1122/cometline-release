@@ -82,6 +82,7 @@ type Config struct {
 	Subagent         SubagentSettings `mapstructure:"subagent"`
 	Gateway          GatewayConfig   `mapstructure:"gateway"`
 	MCP              MCPConfig       `mapstructure:"mcp"`
+	Jobs             JobsConfig      `mapstructure:"jobs"`
 }
 
 // Defaults returns baseline values when the config file is missing keys.
@@ -95,6 +96,7 @@ func Defaults() *Config {
 		Skills:    SkillsConfig{Enabled: true, IncludeOpenCode: true, IncludeClaude: true},
 		Memory:    defaultMemoryConfig(),
 		Storage:   defaultStorageConfig(),
+		Jobs:      defaultJobsConfig(),
 	}
 }
 

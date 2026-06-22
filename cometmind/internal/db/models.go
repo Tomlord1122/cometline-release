@@ -19,6 +19,36 @@ type GatewaySession struct {
 	LastActiveAt       int64  `json:"last_active_at"`
 }
 
+type Job struct {
+	ID                string         `json:"id"`
+	Description       string         `json:"description"`
+	DefinitionOfDone  string         `json:"definition_of_done"`
+	Progress          string         `json:"progress"`
+	Status            string         `json:"status"`
+	Priority          int64          `json:"priority"`
+	ScheduledAt       sql.NullInt64  `json:"scheduled_at"`
+	DueAt             sql.NullInt64  `json:"due_at"`
+	WorkspacePath     sql.NullString `json:"workspace_path"`
+	AssignedSessionID sql.NullString `json:"assigned_session_id"`
+	LeaseExpiresAt    sql.NullInt64  `json:"lease_expires_at"`
+	CreatedBy         string         `json:"created_by"`
+	SourceSessionID   sql.NullString `json:"source_session_id"`
+	SourcePlatform    string         `json:"source_platform"`
+	SourceChannelID   sql.NullString `json:"source_channel_id"`
+	DeletedAt         sql.NullInt64  `json:"deleted_at"`
+	CreatedAt         int64          `json:"created_at"`
+	UpdatedAt         int64          `json:"updated_at"`
+}
+
+type JobEvent struct {
+	ID             string         `json:"id"`
+	JobID          string         `json:"job_id"`
+	Action         string         `json:"action"`
+	Detail         string         `json:"detail"`
+	ActorSessionID sql.NullString `json:"actor_session_id"`
+	CreatedAt      int64          `json:"created_at"`
+}
+
 type MemoriesFt struct {
 	MemoryID string `json:"memory_id"`
 	Content  string `json:"content"`

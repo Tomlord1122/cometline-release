@@ -1074,6 +1074,306 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/v1/jobs:
+    get:
+      tags: [Jobs]
+      summary: List jobs
+      operationId: listJobs
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [todo, ongoing, done]
+        - name: ready_only
+          in: query
+          schema:
+            type: boolean
+        - name: include_deleted
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Job list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListJobsResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [Jobs]
+      summary: Create a job
+      operationId: createJob
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateJobRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/jobs/settings:
+    get:
+      tags: [Jobs]
+      summary: Get job notification settings
+      operationId: getJobSettings
+      responses:
+        '200':
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobSettings'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags: [Jobs]
+      summary: Update job notification settings
+      operationId: putJobSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobSettings'
+      responses:
+        '200':
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobSettings'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/jobs/{id}:
+    get:
+      tags: [Jobs]
+      summary: Get a job
+      operationId: getJob
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Job
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResource'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    patch:
+      tags: [Jobs]
+      summary: Update a todo job
+      operationId: updateJob
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateJobRequest'
+      responses:
+        '200':
+          description: Updated job
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [Jobs]
+      summary: Soft-delete a job
+      operationId: deleteJob
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/jobs/{id}/events:
+    get:
+      tags: [Jobs]
+      summary: List job audit events
+      operationId: listJobEvents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListJobEventsResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/jobs/{id}/claim:
+    post:
+      tags: [Jobs]
+      summary: Claim a job for a session
+      operationId: claimJob
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobSessionRequest'
+      responses:
+        '200':
+          description: Claimed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResource'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/jobs/{id}/release:
+    post:
+      tags: [Jobs]
+      summary: Release a claimed job
+      operationId: releaseJob
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobReleaseRequest'
+      responses:
+        '200':
+          description: Released
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResource'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/jobs/{id}/complete:
+    post:
+      tags: [Jobs]
+      summary: Complete a job
+      operationId: completeJob
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobCompleteRequest'
+      responses:
+        '200':
+          description: Completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResource'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/jobs/{id}/heartbeat:
+    post:
+      tags: [Jobs]
+      summary: Extend job lease
+      operationId: heartbeatJob
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobSessionRequest'
+      responses:
+        '204':
+          description: Lease extended
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
 components:
   parameters:
     SessionId:
@@ -1115,6 +1415,16 @@ components:
             error:
               code: forbidden
               message: operation is not allowed
+    Conflict:
+      description: State conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: conflict
+              message: resource state conflict
     InternalError:
       description: Unexpected server error
       content:
@@ -2083,6 +2393,205 @@ components:
         active:
           type: integer
         max_memories:
+          type: integer
+
+    JobResource:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - description
+        - definition_of_done
+        - progress
+        - status
+        - priority
+        - created_by
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        definition_of_done:
+          type: string
+        progress:
+          type: string
+        status:
+          type: string
+          enum: [todo, ongoing, done]
+        priority:
+          type: integer
+        scheduled_at:
+          type: integer
+          format: int64
+        due_at:
+          type: integer
+          format: int64
+        workspace_path:
+          type: string
+        assigned_session_id:
+          type: string
+        lease_expires_at:
+          type: integer
+          format: int64
+        created_by:
+          type: string
+        source_session_id:
+          type: string
+        source_platform:
+          type: string
+        source_channel_id:
+          type: string
+        deleted_at:
+          type: integer
+          format: int64
+        created_at:
+          type: integer
+          format: int64
+        updated_at:
+          type: integer
+          format: int64
+
+    JobEventResource:
+      type: object
+      additionalProperties: false
+      required: [id, job_id, action, detail, created_at]
+      properties:
+        id:
+          type: string
+        job_id:
+          type: string
+        action:
+          type: string
+        detail:
+          type: string
+        actor_session_id:
+          type: string
+        created_at:
+          type: integer
+          format: int64
+
+    ListJobsResponse:
+      type: object
+      additionalProperties: false
+      required: [jobs]
+      properties:
+        jobs:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobResource'
+
+    ListJobEventsResponse:
+      type: object
+      additionalProperties: false
+      required: [events]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobEventResource'
+
+    CreateJobRequest:
+      type: object
+      additionalProperties: false
+      required: [description]
+      properties:
+        description:
+          type: string
+        definition_of_done:
+          type: string
+        priority:
+          type: integer
+        scheduled_at:
+          type: integer
+          format: int64
+        due_at:
+          type: integer
+          format: int64
+        workspace_path:
+          type: string
+        created_by:
+          type: string
+        source_session_id:
+          type: string
+        source_platform:
+          type: string
+        source_channel_id:
+          type: string
+
+    UpdateJobRequest:
+      type: object
+      additionalProperties: false
+      required: [description, definition_of_done, priority]
+      properties:
+        description:
+          type: string
+        definition_of_done:
+          type: string
+        priority:
+          type: integer
+        scheduled_at:
+          type: integer
+          format: int64
+        due_at:
+          type: integer
+          format: int64
+        workspace_path:
+          type: string
+
+    JobSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [session_id]
+      properties:
+        session_id:
+          type: string
+
+    JobReleaseRequest:
+      type: object
+      additionalProperties: false
+      required: [session_id]
+      properties:
+        session_id:
+          type: string
+        reason:
+          type: string
+
+    JobCompleteRequest:
+      type: object
+      additionalProperties: false
+      required: [session_id]
+      properties:
+        session_id:
+          type: string
+        progress:
+          type: string
+
+    JobNotificationSettings:
+      type: object
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+        on_claimed:
+          type: boolean
+        on_completed:
+          type: boolean
+        on_released:
+          type: boolean
+
+    JobSettings:
+      type: object
+      additionalProperties: false
+      properties:
+        notifications:
+          $ref: '#/components/schemas/JobNotificationSettings'
+        lease_minutes:
+          type: integer
+        deleted_purge_days:
+          type: integer
+        reconcile_interval_seconds:
           type: integer
 
     SimpleErrorResponse:

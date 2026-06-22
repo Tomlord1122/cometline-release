@@ -1,0 +1,333 @@
+package tools
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	"github.com/cometline/cometmind/internal/jobs"
+)
+
+// JobsDeps provides job queue operations to agent tools.
+type JobsDeps struct {
+	Service           *jobs.Service
+	SessionID         string
+	SourcePlatform    string
+	SourceChannelID   string
+}
+
+type listJobsTool struct{ deps JobsDeps }
+
+func (listJobsTool) Spec() ToolSpec {
+	return ToolSpec{
+		Name:        "list_jobs",
+		Description: "List global jobs. By default returns ready todo jobs sorted by priority.",
+		Parameters: json.RawMessage(`{
+			"type":"object",
+			"properties":{
+				"status":{"type":"string","enum":["todo","ongoing","done"],"description":"Filter by status"},
+				"ready_only":{"type":"boolean","description":"When true, only return schedulable todo jobs"}
+			}
+		}`),
+	}
+}
+
+func (t listJobsTool) Execute(ctx context.Context, input json.RawMessage) (Result, error) {
+	if t.deps.Service == nil {
+		return Result{OK: false, Output: "jobs service unavailable"}, nil
+	}
+	var in struct {
+		Status    string `json:"status"`
+		ReadyOnly *bool  `json:"ready_only"`
+	}
+	_ = json.Unmarshal(input, &in)
+	readyOnly := true
+	if in.ReadyOnly != nil {
+		readyOnly = *in.ReadyOnly
+	}
+	filter := jobs.ListFilter{Status: in.Status, ReadyOnly: readyOnly}
+	items, err := t.deps.Service.List(ctx, filter)
+	if err != nil {
+		return Result{OK: false, Output: err.Error()}, nil
+	}
+	if len(items) == 0 {
+		return Result{OK: true, Output: "No jobs found."}, nil
+	}
+	var b strings.Builder
+	for _, j := range items {
+		fmt.Fprintf(&b, "- %s [priority=%d status=%s] %s\n", j.ID, j.Priority, j.Status, j.Description)
+		if j.DefinitionOfDone != "" {
+			fmt.Fprintf(&b, "  DoD: %s\n", j.DefinitionOfDone)
+		}
+	}
+	return Result{OK: true, Output: strings.TrimSpace(b.String())}, nil
+}
+
+type createJobTool struct {
+	deps JobsDeps
+}
+
+func (createJobTool) Spec() ToolSpec {
+	return ToolSpec{
+		Name:        "create_job",
+		Description: "Create a global todo job for later execution by any session.",
+		Parameters: json.RawMessage(`{
+			"type":"object",
+			"properties":{
+				"description":{"type":"string"},
+				"definition_of_done":{"type":"string"},
+				"priority":{"type":"integer"},
+				"scheduled_at":{"type":"integer","description":"Unix ms epoch"},
+				"workspace_path":{"type":"string"}
+			},
+			"required":["description"]
+		}`),
+	}
+}
+
+func (t createJobTool) Execute(ctx context.Context, input json.RawMessage) (Result, error) {
+	if t.deps.Service == nil {
+		return Result{OK: false, Output: "jobs service unavailable"}, nil
+	}
+	var in struct {
+		Description      string `json:"description"`
+		DefinitionOfDone string `json:"definition_of_done"`
+		Priority         int    `json:"priority"`
+		ScheduledAt      *int64 `json:"scheduled_at"`
+		WorkspacePath    string `json:"workspace_path"`
+	}
+	if err := json.Unmarshal(input, &in); err != nil {
+		return Result{}, err
+	}
+	platform := strings.TrimSpace(t.deps.SourcePlatform)
+	if platform == "" {
+		platform = jobs.PlatformDesktop
+	}
+	job, err := t.deps.Service.Create(ctx, jobs.CreateInput{
+		Description:      in.Description,
+		DefinitionOfDone: in.DefinitionOfDone,
+		Priority:         in.Priority,
+		ScheduledAt:      in.ScheduledAt,
+		WorkspacePath:    in.WorkspacePath,
+		CreatedBy:        jobs.CreatedByAgent,
+		SourceSessionID:  t.deps.SessionID,
+		SourcePlatform:   platform,
+		SourceChannelID:  t.deps.SourceChannelID,
+	})
+	if err != nil {
+		return Result{OK: false, Output: err.Error()}, nil
+	}
+	return Result{OK: true, Output: fmt.Sprintf("Created job %s", job.ID)}, nil
+}
+
+type claimJobTool struct{ deps JobsDeps }
+
+func (claimJobTool) Spec() ToolSpec {
+	return ToolSpec{
+		Name:        "claim_job",
+		Description: "Claim a todo job for the current session.",
+		Parameters:  json.RawMessage(`{"type":"object","properties":{"job_id":{"type":"string"}},"required":["job_id"]}`),
+	}
+}
+
+func (t claimJobTool) Execute(ctx context.Context, input json.RawMessage) (Result, error) {
+	if t.deps.Service == nil || t.deps.SessionID == "" {
+		return Result{OK: false, Output: "jobs service or session unavailable"}, nil
+	}
+	var in struct {
+		JobID string `json:"job_id"`
+	}
+	if err := json.Unmarshal(input, &in); err != nil {
+		return Result{}, err
+	}
+	job, err := t.deps.Service.Claim(ctx, strings.TrimSpace(in.JobID), t.deps.SessionID)
+	if err != nil {
+		return Result{OK: false, Output: err.Error()}, nil
+	}
+	_ = t.deps.Service.Heartbeat(ctx, job.ID, t.deps.SessionID)
+	return Result{OK: true, Output: jobs.ExecutionPrompt(job)}, nil
+}
+
+type updateJobTool struct{ deps JobsDeps }
+
+func (updateJobTool) Spec() ToolSpec {
+	return ToolSpec{
+		Name:        "update_job",
+		Description: "Update a job. Todo jobs: description/DoD/priority/schedule. Ongoing jobs: progress only.",
+		Parameters: json.RawMessage(`{
+			"type":"object",
+			"properties":{
+				"job_id":{"type":"string"},
+				"description":{"type":"string"},
+				"definition_of_done":{"type":"string"},
+				"priority":{"type":"integer"},
+				"scheduled_at":{"type":"integer"},
+				"due_at":{"type":"integer"},
+				"workspace_path":{"type":"string"},
+				"progress":{"type":"string"}
+			},
+			"required":["job_id"]
+		}`),
+	}
+}
+
+func (t updateJobTool) Execute(ctx context.Context, input json.RawMessage) (Result, error) {
+	if t.deps.Service == nil {
+		return Result{OK: false, Output: "jobs service unavailable"}, nil
+	}
+	var in struct {
+		JobID            string `json:"job_id"`
+		Description      string `json:"description"`
+		DefinitionOfDone string `json:"definition_of_done"`
+		Priority         *int   `json:"priority"`
+		ScheduledAt      *int64 `json:"scheduled_at"`
+		DueAt            *int64 `json:"due_at"`
+		WorkspacePath    string `json:"workspace_path"`
+		Progress         string `json:"progress"`
+	}
+	if err := json.Unmarshal(input, &in); err != nil {
+		return Result{}, err
+	}
+	jobID := strings.TrimSpace(in.JobID)
+	if in.Progress != "" {
+		job, err := t.deps.Service.UpdateProgress(ctx, jobID, in.Progress, t.deps.SessionID)
+		if err != nil {
+			return Result{OK: false, Output: err.Error()}, nil
+		}
+		return Result{OK: true, Output: fmt.Sprintf("Updated progress for job %s", job.ID)}, nil
+	}
+	current, err := t.deps.Service.Get(ctx, jobID)
+	if err != nil {
+		return Result{OK: false, Output: err.Error()}, nil
+	}
+	priority := current.Priority
+	if in.Priority != nil {
+		priority = *in.Priority
+	}
+	desc := current.Description
+	if strings.TrimSpace(in.Description) != "" {
+		desc = in.Description
+	}
+	dod := current.DefinitionOfDone
+	if in.DefinitionOfDone != "" {
+		dod = in.DefinitionOfDone
+	}
+	scheduled := current.ScheduledAt
+	if in.ScheduledAt != nil {
+		scheduled = in.ScheduledAt
+	}
+	due := current.DueAt
+	if in.DueAt != nil {
+		due = in.DueAt
+	}
+	ws := current.WorkspacePath
+	if in.WorkspacePath != "" {
+		ws = in.WorkspacePath
+	}
+	job, err := t.deps.Service.UpdateTodo(ctx, jobID, jobs.UpdateTodoInput{
+		Description:      desc,
+		DefinitionOfDone: dod,
+		Priority:         priority,
+		ScheduledAt:      scheduled,
+		DueAt:            due,
+		WorkspacePath:    ws,
+	}, t.deps.SessionID)
+	if err != nil {
+		return Result{OK: false, Output: err.Error()}, nil
+	}
+	return Result{OK: true, Output: fmt.Sprintf("Updated job %s", job.ID)}, nil
+}
+
+type completeJobTool struct{ deps JobsDeps }
+
+func (completeJobTool) Spec() ToolSpec {
+	return ToolSpec{
+		Name:        "complete_job",
+		Description: "Mark an ongoing job assigned to this session as done.",
+		Parameters: json.RawMessage(`{
+			"type":"object",
+			"properties":{
+				"job_id":{"type":"string"},
+				"progress":{"type":"string"}
+			},
+			"required":["job_id"]
+		}`),
+	}
+}
+
+func (t completeJobTool) Execute(ctx context.Context, input json.RawMessage) (Result, error) {
+	if t.deps.Service == nil || t.deps.SessionID == "" {
+		return Result{OK: false, Output: "jobs service or session unavailable"}, nil
+	}
+	var in struct {
+		JobID    string `json:"job_id"`
+		Progress string `json:"progress"`
+	}
+	if err := json.Unmarshal(input, &in); err != nil {
+		return Result{}, err
+	}
+	job, err := t.deps.Service.Complete(ctx, strings.TrimSpace(in.JobID), t.deps.SessionID, in.Progress)
+	if err != nil {
+		return Result{OK: false, Output: err.Error()}, nil
+	}
+	return Result{OK: true, Output: fmt.Sprintf("Completed job %s", job.ID)}, nil
+}
+
+type releaseJobTool struct{ deps JobsDeps }
+
+func (releaseJobTool) Spec() ToolSpec {
+	return ToolSpec{
+		Name:        "release_job",
+		Description: "Release an ongoing job back to todo.",
+		Parameters: json.RawMessage(`{
+			"type":"object",
+			"properties":{
+				"job_id":{"type":"string"},
+				"reason":{"type":"string"}
+			},
+			"required":["job_id"]
+		}`),
+	}
+}
+
+func (t releaseJobTool) Execute(ctx context.Context, input json.RawMessage) (Result, error) {
+	if t.deps.Service == nil || t.deps.SessionID == "" {
+		return Result{OK: false, Output: "jobs service or session unavailable"}, nil
+	}
+	var in struct {
+		JobID  string `json:"job_id"`
+		Reason string `json:"reason"`
+	}
+	if err := json.Unmarshal(input, &in); err != nil {
+		return Result{}, err
+	}
+	job, err := t.deps.Service.Release(ctx, strings.TrimSpace(in.JobID), t.deps.SessionID, in.Reason)
+	if err != nil {
+		return Result{OK: false, Output: err.Error()}, nil
+	}
+	return Result{OK: true, Output: fmt.Sprintf("Released job %s (status=%s)", job.ID, job.Status)}, nil
+}
+
+// JobPromptIndex returns system prompt guidance for job tools.
+func JobPromptIndex() string {
+	return "\n\n## Global Jobs\nUse `list_jobs` when the user asks about pending work. Use `create_job` to record follow-up tasks. To execute a job, `claim_job` first, then `complete_job` when done or `release_job` to abandon."
+}
+
+// RegisterJobTools adds job tools when deps are configured.
+func RegisterJobTools(r *Registry, deps JobsDeps) {
+	if deps.Service == nil {
+		return
+	}
+	add := func(t Tool) {
+		spec := t.Spec()
+		r.byName[spec.Name] = t
+		r.order = append(r.order, t)
+	}
+	add(listJobsTool{deps: deps})
+	add(createJobTool{deps: deps})
+	add(claimJobTool{deps: deps})
+	add(updateJobTool{deps: deps})
+	add(completeJobTool{deps: deps})
+	add(releaseJobTool{deps: deps})
+}

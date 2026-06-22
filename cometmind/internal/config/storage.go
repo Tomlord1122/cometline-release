@@ -12,6 +12,8 @@ type StorageConfig struct {
 	VacuumAfterPurge bool `json:"vacuum_after_purge" mapstructure:"vacuum_after_purge"`
 	// SubagentRetentionDays purges terminal child session rows after inactivity. 0 keeps until parent delete.
 	SubagentRetentionDays int `json:"subagent_retention_days" mapstructure:"subagent_retention_days"`
+	// DeletedJobPurgeDays hard-deletes soft-deleted jobs older than this many days. 0 disables.
+	DeletedJobPurgeDays int `json:"deleted_job_purge_days" mapstructure:"deleted_job_purge_days"`
 }
 
 func defaultStorageConfig() StorageConfig {
@@ -21,12 +23,18 @@ func defaultStorageConfig() StorageConfig {
 		ArchivedMemoryPurgeDays: 90,
 		VacuumAfterPurge:        true,
 		SubagentRetentionDays:   7,
+		DeletedJobPurgeDays:     30,
 	}
 }
 
 // RetentionEnabled reports whether any session retention rule is active.
 func (s StorageConfig) RetentionEnabled() bool {
 	return s.RetentionDays > 0 || s.MaxSessionsPerWorkspace > 0 || s.SubagentRetentionDays > 0
+}
+
+// JobPurgeEnabled reports whether deleted job purge is active.
+func (s StorageConfig) JobPurgeEnabled() bool {
+	return s.DeletedJobPurgeDays > 0
 }
 
 // MemoryPurgeEnabled reports whether archived memory purge is active.
@@ -48,5 +56,6 @@ func (c *Config) storageConfigured() bool {
 		s.MaxSessionsPerWorkspace != 0 ||
 		s.ArchivedMemoryPurgeDays != 0 ||
 		s.SubagentRetentionDays != 0 ||
+		s.DeletedJobPurgeDays != 0 ||
 		s.VacuumAfterPurge
 }

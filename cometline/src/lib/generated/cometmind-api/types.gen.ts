@@ -540,6 +540,94 @@ export type CompactMemoryPreviewResponse = {
     max_memories: number;
 };
 
+export type JobResource = {
+    id: string;
+    description: string;
+    definition_of_done: string;
+    progress: string;
+    status: 'todo' | 'ongoing' | 'done';
+    priority: number;
+    scheduled_at?: number;
+    due_at?: number;
+    workspace_path?: string;
+    assigned_session_id?: string;
+    lease_expires_at?: number;
+    created_by: string;
+    source_session_id?: string;
+    source_platform?: string;
+    source_channel_id?: string;
+    deleted_at?: number;
+    created_at: number;
+    updated_at: number;
+};
+
+export type JobEventResource = {
+    id: string;
+    job_id: string;
+    action: string;
+    detail: string;
+    actor_session_id?: string;
+    created_at: number;
+};
+
+export type ListJobsResponse = {
+    jobs: Array<JobResource>;
+};
+
+export type ListJobEventsResponse = {
+    events: Array<JobEventResource>;
+};
+
+export type CreateJobRequest = {
+    description: string;
+    definition_of_done?: string;
+    priority?: number;
+    scheduled_at?: number;
+    due_at?: number;
+    workspace_path?: string;
+    created_by?: string;
+    source_session_id?: string;
+    source_platform?: string;
+    source_channel_id?: string;
+};
+
+export type UpdateJobRequest = {
+    description: string;
+    definition_of_done: string;
+    priority: number;
+    scheduled_at?: number;
+    due_at?: number;
+    workspace_path?: string;
+};
+
+export type JobSessionRequest = {
+    session_id: string;
+};
+
+export type JobReleaseRequest = {
+    session_id: string;
+    reason?: string;
+};
+
+export type JobCompleteRequest = {
+    session_id: string;
+    progress?: string;
+};
+
+export type JobNotificationSettings = {
+    enabled?: boolean;
+    on_claimed?: boolean;
+    on_completed?: boolean;
+    on_released?: boolean;
+};
+
+export type JobSettings = {
+    notifications?: JobNotificationSettings;
+    lease_minutes?: number;
+    deleted_purge_days?: number;
+    reconcile_interval_seconds?: number;
+};
+
 export type SimpleErrorResponse = {
     error: string;
 };
@@ -1832,6 +1920,390 @@ export type CompactMemoryPreviewResponses = {
 };
 
 export type CompactMemoryPreviewResponse2 = CompactMemoryPreviewResponses[keyof CompactMemoryPreviewResponses];
+
+export type ListJobsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        status?: 'todo' | 'ongoing' | 'done';
+        ready_only?: boolean;
+        include_deleted?: boolean;
+    };
+    url: '/api/v1/jobs';
+};
+
+export type ListJobsErrors = {
+    /**
+     * Unexpected server error
+     */
+    500: ErrorResponse;
+};
+
+export type ListJobsError = ListJobsErrors[keyof ListJobsErrors];
+
+export type ListJobsResponses = {
+    /**
+     * Job list
+     */
+    200: ListJobsResponse;
+};
+
+export type ListJobsResponse2 = ListJobsResponses[keyof ListJobsResponses];
+
+export type CreateJobData = {
+    body: CreateJobRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/jobs';
+};
+
+export type CreateJobErrors = {
+    /**
+     * Invalid request
+     */
+    400: ErrorResponse;
+    /**
+     * Unexpected server error
+     */
+    500: ErrorResponse;
+};
+
+export type CreateJobError = CreateJobErrors[keyof CreateJobErrors];
+
+export type CreateJobResponses = {
+    /**
+     * Created
+     */
+    201: JobResource;
+};
+
+export type CreateJobResponse = CreateJobResponses[keyof CreateJobResponses];
+
+export type GetJobSettingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/jobs/settings';
+};
+
+export type GetJobSettingsErrors = {
+    /**
+     * Unexpected server error
+     */
+    500: ErrorResponse;
+};
+
+export type GetJobSettingsError = GetJobSettingsErrors[keyof GetJobSettingsErrors];
+
+export type GetJobSettingsResponses = {
+    /**
+     * Settings
+     */
+    200: JobSettings;
+};
+
+export type GetJobSettingsResponse = GetJobSettingsResponses[keyof GetJobSettingsResponses];
+
+export type PutJobSettingsData = {
+    body: JobSettings;
+    path?: never;
+    query?: never;
+    url: '/api/v1/jobs/settings';
+};
+
+export type PutJobSettingsErrors = {
+    /**
+     * Invalid request
+     */
+    400: ErrorResponse;
+    /**
+     * Unexpected server error
+     */
+    500: ErrorResponse;
+};
+
+export type PutJobSettingsError = PutJobSettingsErrors[keyof PutJobSettingsErrors];
+
+export type PutJobSettingsResponses = {
+    /**
+     * Updated settings
+     */
+    200: JobSettings;
+};
+
+export type PutJobSettingsResponse = PutJobSettingsResponses[keyof PutJobSettingsResponses];
+
+export type DeleteJobData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/jobs/{id}';
+};
+
+export type DeleteJobErrors = {
+    /**
+     * Resource not found
+     */
+    404: ErrorResponse;
+    /**
+     * Unexpected server error
+     */
+    500: ErrorResponse;
+};
+
+export type DeleteJobError = DeleteJobErrors[keyof DeleteJobErrors];
+
+export type DeleteJobResponses = {
+    /**
+     * Deleted
+     */
+    204: void;
+};
+
+export type DeleteJobResponse = DeleteJobResponses[keyof DeleteJobResponses];
+
+export type GetJobData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/jobs/{id}';
+};
+
+export type GetJobErrors = {
+    /**
+     * Resource not found
+     */
+    404: ErrorResponse;
+    /**
+     * Unexpected server error
+     */
+    500: ErrorResponse;
+};
+
+export type GetJobError = GetJobErrors[keyof GetJobErrors];
+
+export type GetJobResponses = {
+    /**
+     * Job
+     */
+    200: JobResource;
+};
+
+export type GetJobResponse = GetJobResponses[keyof GetJobResponses];
+
+export type UpdateJobData = {
+    body: UpdateJobRequest;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/jobs/{id}';
+};
+
+export type UpdateJobErrors = {
+    /**
+     * Invalid request
+     */
+    400: ErrorResponse;
+    /**
+     * Resource not found
+     */
+    404: ErrorResponse;
+    /**
+     * State conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unexpected server error
+     */
+    500: ErrorResponse;
+};
+
+export type UpdateJobError = UpdateJobErrors[keyof UpdateJobErrors];
+
+export type UpdateJobResponses = {
+    /**
+     * Updated job
+     */
+    200: JobResource;
+};
+
+export type UpdateJobResponse = UpdateJobResponses[keyof UpdateJobResponses];
+
+export type ListJobEventsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/jobs/{id}/events';
+};
+
+export type ListJobEventsErrors = {
+    /**
+     * Resource not found
+     */
+    404: ErrorResponse;
+    /**
+     * Unexpected server error
+     */
+    500: ErrorResponse;
+};
+
+export type ListJobEventsError = ListJobEventsErrors[keyof ListJobEventsErrors];
+
+export type ListJobEventsResponses = {
+    /**
+     * Events
+     */
+    200: ListJobEventsResponse;
+};
+
+export type ListJobEventsResponse2 = ListJobEventsResponses[keyof ListJobEventsResponses];
+
+export type ClaimJobData = {
+    body: JobSessionRequest;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/jobs/{id}/claim';
+};
+
+export type ClaimJobErrors = {
+    /**
+     * Resource not found
+     */
+    404: ErrorResponse;
+    /**
+     * State conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unexpected server error
+     */
+    500: ErrorResponse;
+};
+
+export type ClaimJobError = ClaimJobErrors[keyof ClaimJobErrors];
+
+export type ClaimJobResponses = {
+    /**
+     * Claimed
+     */
+    200: JobResource;
+};
+
+export type ClaimJobResponse = ClaimJobResponses[keyof ClaimJobResponses];
+
+export type ReleaseJobData = {
+    body: JobReleaseRequest;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/jobs/{id}/release';
+};
+
+export type ReleaseJobErrors = {
+    /**
+     * Resource not found
+     */
+    404: ErrorResponse;
+    /**
+     * State conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unexpected server error
+     */
+    500: ErrorResponse;
+};
+
+export type ReleaseJobError = ReleaseJobErrors[keyof ReleaseJobErrors];
+
+export type ReleaseJobResponses = {
+    /**
+     * Released
+     */
+    200: JobResource;
+};
+
+export type ReleaseJobResponse = ReleaseJobResponses[keyof ReleaseJobResponses];
+
+export type CompleteJobData = {
+    body: JobCompleteRequest;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/jobs/{id}/complete';
+};
+
+export type CompleteJobErrors = {
+    /**
+     * Resource not found
+     */
+    404: ErrorResponse;
+    /**
+     * State conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unexpected server error
+     */
+    500: ErrorResponse;
+};
+
+export type CompleteJobError = CompleteJobErrors[keyof CompleteJobErrors];
+
+export type CompleteJobResponses = {
+    /**
+     * Completed
+     */
+    200: JobResource;
+};
+
+export type CompleteJobResponse = CompleteJobResponses[keyof CompleteJobResponses];
+
+export type HeartbeatJobData = {
+    body: JobSessionRequest;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/jobs/{id}/heartbeat';
+};
+
+export type HeartbeatJobErrors = {
+    /**
+     * Resource not found
+     */
+    404: ErrorResponse;
+    /**
+     * State conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Unexpected server error
+     */
+    500: ErrorResponse;
+};
+
+export type HeartbeatJobError = HeartbeatJobErrors[keyof HeartbeatJobErrors];
+
+export type HeartbeatJobResponses = {
+    /**
+     * Lease extended
+     */
+    204: void;
+};
+
+export type HeartbeatJobResponse = HeartbeatJobResponses[keyof HeartbeatJobResponses];
 
 export type ClientOptions = {
     baseUrl: 'http://127.0.0.1:7700' | (string & {});

@@ -34,6 +34,27 @@ func (e ImageAttachmentMediaType) Valid() bool {
 	}
 }
 
+// Defines values for JobResourceStatus.
+const (
+	JobResourceStatusDone    JobResourceStatus = "done"
+	JobResourceStatusOngoing JobResourceStatus = "ongoing"
+	JobResourceStatusTodo    JobResourceStatus = "todo"
+)
+
+// Valid indicates whether the value is a known member of the JobResourceStatus enum.
+func (e JobResourceStatus) Valid() bool {
+	switch e {
+	case JobResourceStatusDone:
+		return true
+	case JobResourceStatusOngoing:
+		return true
+	case JobResourceStatusTodo:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for McpServerStatusStatus.
 const (
 	Connected    McpServerStatusStatus = "connected"
@@ -250,6 +271,27 @@ func (e WorkspaceFileTextContentKind) Valid() bool {
 	}
 }
 
+// Defines values for ListJobsParamsStatus.
+const (
+	ListJobsParamsStatusDone    ListJobsParamsStatus = "done"
+	ListJobsParamsStatusOngoing ListJobsParamsStatus = "ongoing"
+	ListJobsParamsStatusTodo    ListJobsParamsStatus = "todo"
+)
+
+// Valid indicates whether the value is a known member of the ListJobsParamsStatus enum.
+func (e ListJobsParamsStatus) Valid() bool {
+	switch e {
+	case ListJobsParamsStatusDone:
+		return true
+	case ListJobsParamsStatusOngoing:
+		return true
+	case ListJobsParamsStatusTodo:
+		return true
+	default:
+		return false
+	}
+}
+
 // ChangeSessionWorkspaceRequest defines model for ChangeSessionWorkspaceRequest.
 type ChangeSessionWorkspaceRequest struct {
 	// WorkspacePath Absolute filesystem path for the new workspace root.
@@ -262,6 +304,20 @@ type CompactMemoryPreviewResponse struct {
 	MaxMemories int                `json:"max_memories"`
 	ToForget    []MemoryResource   `json:"to_forget"`
 	ToMerge     [][]MemoryResource `json:"to_merge"`
+}
+
+// CreateJobRequest defines model for CreateJobRequest.
+type CreateJobRequest struct {
+	CreatedBy        *string `json:"created_by,omitempty"`
+	DefinitionOfDone *string `json:"definition_of_done,omitempty"`
+	Description      string  `json:"description"`
+	DueAt            *int64  `json:"due_at,omitempty"`
+	Priority         *int    `json:"priority,omitempty"`
+	ScheduledAt      *int64  `json:"scheduled_at,omitempty"`
+	SourceChannelId  *string `json:"source_channel_id,omitempty"`
+	SourcePlatform   *string `json:"source_platform,omitempty"`
+	SourceSessionId  *string `json:"source_session_id,omitempty"`
+	WorkspacePath    *string `json:"workspace_path,omitempty"`
 }
 
 // CreateMemoryRequest defines model for CreateMemoryRequest.
@@ -338,6 +394,84 @@ type ImageAttachment struct {
 
 // ImageAttachmentMediaType defines model for ImageAttachment.MediaType.
 type ImageAttachmentMediaType string
+
+// JobCompleteRequest defines model for JobCompleteRequest.
+type JobCompleteRequest struct {
+	Progress  *string `json:"progress,omitempty"`
+	SessionId string  `json:"session_id"`
+}
+
+// JobEventResource defines model for JobEventResource.
+type JobEventResource struct {
+	Action         string  `json:"action"`
+	ActorSessionId *string `json:"actor_session_id,omitempty"`
+	CreatedAt      int64   `json:"created_at"`
+	Detail         string  `json:"detail"`
+	Id             string  `json:"id"`
+	JobId          string  `json:"job_id"`
+}
+
+// JobNotificationSettings defines model for JobNotificationSettings.
+type JobNotificationSettings struct {
+	Enabled     *bool `json:"enabled,omitempty"`
+	OnClaimed   *bool `json:"on_claimed,omitempty"`
+	OnCompleted *bool `json:"on_completed,omitempty"`
+	OnReleased  *bool `json:"on_released,omitempty"`
+}
+
+// JobReleaseRequest defines model for JobReleaseRequest.
+type JobReleaseRequest struct {
+	Reason    *string `json:"reason,omitempty"`
+	SessionId string  `json:"session_id"`
+}
+
+// JobResource defines model for JobResource.
+type JobResource struct {
+	AssignedSessionId *string           `json:"assigned_session_id,omitempty"`
+	CreatedAt         int64             `json:"created_at"`
+	CreatedBy         string            `json:"created_by"`
+	DefinitionOfDone  string            `json:"definition_of_done"`
+	DeletedAt         *int64            `json:"deleted_at,omitempty"`
+	Description       string            `json:"description"`
+	DueAt             *int64            `json:"due_at,omitempty"`
+	Id                string            `json:"id"`
+	LeaseExpiresAt    *int64            `json:"lease_expires_at,omitempty"`
+	Priority          int               `json:"priority"`
+	Progress          string            `json:"progress"`
+	ScheduledAt       *int64            `json:"scheduled_at,omitempty"`
+	SourceChannelId   *string           `json:"source_channel_id,omitempty"`
+	SourcePlatform    *string           `json:"source_platform,omitempty"`
+	SourceSessionId   *string           `json:"source_session_id,omitempty"`
+	Status            JobResourceStatus `json:"status"`
+	UpdatedAt         int64             `json:"updated_at"`
+	WorkspacePath     *string           `json:"workspace_path,omitempty"`
+}
+
+// JobResourceStatus defines model for JobResource.Status.
+type JobResourceStatus string
+
+// JobSessionRequest defines model for JobSessionRequest.
+type JobSessionRequest struct {
+	SessionId string `json:"session_id"`
+}
+
+// JobSettings defines model for JobSettings.
+type JobSettings struct {
+	DeletedPurgeDays         *int                     `json:"deleted_purge_days,omitempty"`
+	LeaseMinutes             *int                     `json:"lease_minutes,omitempty"`
+	Notifications            *JobNotificationSettings `json:"notifications,omitempty"`
+	ReconcileIntervalSeconds *int                     `json:"reconcile_interval_seconds,omitempty"`
+}
+
+// ListJobEventsResponse defines model for ListJobEventsResponse.
+type ListJobEventsResponse struct {
+	Events []JobEventResource `json:"events"`
+}
+
+// ListJobsResponse defines model for ListJobsResponse.
+type ListJobsResponse struct {
+	Jobs []JobResource `json:"jobs"`
+}
 
 // ListMcpServersResponse defines model for ListMcpServersResponse.
 type ListMcpServersResponse struct {
@@ -732,6 +866,16 @@ type TurnStatusEvent struct {
 // TurnStatusEventPhase defines model for TurnStatusEvent.Phase.
 type TurnStatusEventPhase string
 
+// UpdateJobRequest defines model for UpdateJobRequest.
+type UpdateJobRequest struct {
+	DefinitionOfDone string  `json:"definition_of_done"`
+	Description      string  `json:"description"`
+	DueAt            *int64  `json:"due_at,omitempty"`
+	Priority         int     `json:"priority"`
+	ScheduledAt      *int64  `json:"scheduled_at,omitempty"`
+	WorkspacePath    *string `json:"workspace_path,omitempty"`
+}
+
 // UpdateMemoryRequest defines model for UpdateMemoryRequest.
 type UpdateMemoryRequest struct {
 	BaseWeight *float32 `json:"base_weight,omitempty"`
@@ -821,6 +965,9 @@ type SessionId = string
 // BadRequest defines model for BadRequest.
 type BadRequest = ErrorResponse
 
+// Conflict defines model for Conflict.
+type Conflict = ErrorResponse
+
 // Forbidden defines model for Forbidden.
 type Forbidden = ErrorResponse
 
@@ -829,6 +976,16 @@ type InternalError = ErrorResponse
 
 // NotFound defines model for NotFound.
 type NotFound = ErrorResponse
+
+// ListJobsParams defines parameters for ListJobs.
+type ListJobsParams struct {
+	Status         *ListJobsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+	ReadyOnly      *bool                 `form:"ready_only,omitempty" json:"ready_only,omitempty"`
+	IncludeDeleted *bool                 `form:"include_deleted,omitempty" json:"include_deleted,omitempty"`
+}
+
+// ListJobsParamsStatus defines parameters for ListJobs.
+type ListJobsParamsStatus string
 
 // ListSessionsParams defines parameters for ListSessions.
 type ListSessionsParams struct {
@@ -897,6 +1054,27 @@ type ReadWorkspaceFileContentParams struct {
 	// Path Workspace-relative file path.
 	Path string `form:"path" json:"path"`
 }
+
+// CreateJobJSONRequestBody defines body for CreateJob for application/json ContentType.
+type CreateJobJSONRequestBody = CreateJobRequest
+
+// PutJobSettingsJSONRequestBody defines body for PutJobSettings for application/json ContentType.
+type PutJobSettingsJSONRequestBody = JobSettings
+
+// UpdateJobJSONRequestBody defines body for UpdateJob for application/json ContentType.
+type UpdateJobJSONRequestBody = UpdateJobRequest
+
+// ClaimJobJSONRequestBody defines body for ClaimJob for application/json ContentType.
+type ClaimJobJSONRequestBody = JobSessionRequest
+
+// CompleteJobJSONRequestBody defines body for CompleteJob for application/json ContentType.
+type CompleteJobJSONRequestBody = JobCompleteRequest
+
+// HeartbeatJobJSONRequestBody defines body for HeartbeatJob for application/json ContentType.
+type HeartbeatJobJSONRequestBody = JobSessionRequest
+
+// ReleaseJobJSONRequestBody defines body for ReleaseJob for application/json ContentType.
+type ReleaseJobJSONRequestBody = JobReleaseRequest
 
 // CreateMemoryJSONRequestBody defines body for CreateMemory for application/json ContentType.
 type CreateMemoryJSONRequestBody = CreateMemoryRequest

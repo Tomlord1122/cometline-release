@@ -12,11 +12,14 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
+	"time"
 
 	cometsdk "github.com/cometline/comet-sdk"
 	"github.com/cometline/cometmind/internal/acp"
 	"github.com/cometline/cometmind/internal/agent"
 	"github.com/cometline/cometmind/internal/config"
+	"github.com/cometline/cometmind/internal/jobs"
 	"github.com/cometline/cometmind/internal/memory"
 	mcppkg "github.com/cometline/cometmind/internal/mcp"
 	"github.com/cometline/cometmind/internal/paths"
@@ -41,11 +44,15 @@ type Runtime struct {
 	DB           *sql.DB
 	Sessions     *session.Service
 	Memory       *memory.Service
+	Jobs         *jobs.Service
+	jobSettings  jobs.Settings
+	jobSettingsMu sync.RWMutex
 	SystemPrompt string
 	acpMgr       *acp.SessionManager
 	mcpMgr       *mcppkg.Manager
 	subagentOrch *subagent.Orchestrator
 	memorySem    chan struct{} // bounds concurrent memory-extraction goroutines
+	isRunning    func(sessionID string) bool
 }
 
 // New builds a Runtime from the environment and filesystem.
@@ -75,7 +82,10 @@ func New(ctx context.Context) (*Runtime, error) {
 		Sessions:     sessions,
 		SystemPrompt: systemPrompt,
 		memorySem:    make(chan struct{}, memoryExtractionConcurrency),
+		jobSettings:  cfg.JobsSettings(),
 	}
+	notifier := jobs.NewNotifier(r.jobSettingsSnapshot)
+	r.Jobs = jobs.NewService(sqlDB, r.jobSettingsSnapshot, notifier)
 	if cfg.MemoryRuntimeEnabled() {
 		p, err := provider.New(cfg)
 		if err == nil {
@@ -85,21 +95,26 @@ func New(ctx context.Context) (*Runtime, error) {
 			}
 		}
 	}
-	runRetention(ctx, sqlDB, sessions, r.Memory, cfg.EffectiveStorageConfig())
+	runRetention(ctx, sqlDB, sessions, r.Memory, r.Jobs, cfg.EffectiveStorageConfig(), nil)
+	if _, err := r.Jobs.Reconcile(ctx, nil); err != nil {
+		log.Printf("cometmind: jobs reconcile on startup failed: %v", err)
+	}
 	r.mcpMgr = mcppkg.NewManager(cfg.MCPSettings())
 	r.mcpMgr.Start(ctx)
 	return r, nil
 }
 
-func runRetention(ctx context.Context, db *sql.DB, sessions *session.Service, mem *memory.Service, cfg config.StorageConfig) {
-	if !cfg.RetentionEnabled() && !cfg.MemoryPurgeEnabled() {
+func runRetention(ctx context.Context, db *sql.DB, sessions *session.Service, mem *memory.Service, jobSvc *jobs.Service, cfg config.StorageConfig, isRunning func(string) bool) {
+	if !cfg.RetentionEnabled() && !cfg.MemoryPurgeEnabled() && !cfg.JobPurgeEnabled() {
 		return
 	}
 	rr := &retention.Runner{
 		DB:       db,
 		Sessions: sessions,
 		Memory:   mem,
+		Jobs:     jobSvc,
 		Config:   cfg,
+		IsRunning: isRunning,
 	}
 	if _, err := rr.Run(ctx); err != nil {
 		log.Printf("cometmind: retention failed: %v", err)
@@ -118,7 +133,64 @@ func loadSystemPrompt(path string) (string, error) {
 	return strings.TrimSpace(string(raw)), nil
 }
 
-// Close releases runtime resources.
+// SetSessionRunningChecker sets the callback used to detect in-flight agent turns.
+func (r *Runtime) SetSessionRunningChecker(fn func(sessionID string) bool) {
+	if r == nil {
+		return
+	}
+	r.isRunning = fn
+}
+
+// StartJobsMaintenance runs periodic orphan reconcile and optional purge.
+func (r *Runtime) StartJobsMaintenance(ctx context.Context) {
+	if r == nil || r.Jobs == nil {
+		return
+	}
+	interval := time.Duration(r.jobSettingsSnapshot().ReconcileIntervalS) * time.Second
+	if interval <= 0 {
+		interval = jobs.DefaultReconcileInterval
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if _, err := r.Jobs.Reconcile(ctx, r.isRunning); err != nil {
+					log.Printf("cometmind: jobs reconcile failed: %v", err)
+				}
+				cfg := r.Config.EffectiveStorageConfig()
+				if cfg.JobPurgeEnabled() {
+					if _, err := r.Jobs.PurgeDeleted(ctx, cfg.DeletedJobPurgeDays); err != nil {
+						log.Printf("cometmind: jobs purge failed: %v", err)
+					}
+				}
+			}
+		}
+	}()
+}
+
+func (r *Runtime) jobSettingsSnapshot() jobs.Settings {
+	if r == nil {
+		return jobs.DefaultSettings()
+	}
+	r.jobSettingsMu.RLock()
+	defer r.jobSettingsMu.RUnlock()
+	return r.jobSettings
+}
+
+// SetJobSettings updates runtime job settings.
+func (r *Runtime) SetJobSettings(s jobs.Settings) {
+	if r == nil {
+		return
+	}
+	r.jobSettingsMu.Lock()
+	r.jobSettings = s
+	r.jobSettingsMu.Unlock()
+}
+
 func (r *Runtime) Close() error {
 	if r.mcpMgr != nil {
 		_ = r.mcpMgr.Close()
@@ -179,11 +251,12 @@ func (r *Runtime) RunnerFor(sess session.Session, workspacePath string) (*agent.
 		Provider:     p,
 		Sessions:     r.Sessions,
 		Memory:       r.Memory,
-		Registry:     r.toolRegistry(workspacePath, skillRegistry),
+		Registry:     r.toolRegistry(workspacePath, skillRegistry, sess.ID),
 		MaxSteps:     r.Config.MaxSteps,
 		MaxTokens:    r.Config.MaxTokens,
 		SystemPrompt: r.SystemPrompt,
 		SkillIndex:   skillRegistry.PromptIndex(),
+		JobIndex:     tools.JobPromptIndex(),
 		MemorySem:    r.memorySem,
 		Compactor:    &agent.ContextCompactor{Sessions: r.Sessions, Config: r.Config},
 	}, nil
@@ -208,15 +281,47 @@ func (r *Runtime) SubagentRunnerFor(child session.Session, workspacePath string,
 	}, nil
 }
 
-func (r *Runtime) toolRegistry(workspacePath string, skillRegistry skills.Registry) *tools.Registry {
+// RunnerForGateway is like RunnerFor but tags job tool metadata for a gateway channel.
+func (r *Runtime) RunnerForGateway(sess session.Session, workspacePath, platform, sourceChannelID string) (*agent.Runner, error) {
+	p, err := r.ProviderForSession(sess)
+	if err != nil {
+		return nil, err
+	}
+	skillRegistry := r.SkillsForWorkspace(workspacePath)
+
+	return &agent.Runner{
+		Config:       r.Config,
+		Provider:     p,
+		Sessions:     r.Sessions,
+		Memory:       r.Memory,
+		Registry:     r.toolRegistryWithJobMeta(workspacePath, skillRegistry, sess.ID, platform, sourceChannelID),
+		MaxSteps:     r.Config.MaxSteps,
+		MaxTokens:    r.Config.MaxTokens,
+		SystemPrompt: r.SystemPrompt,
+		SkillIndex:   skillRegistry.PromptIndex(),
+		JobIndex:     tools.JobPromptIndex(),
+		MemorySem:    r.memorySem,
+		Compactor:    &agent.ContextCompactor{Sessions: r.Sessions, Config: r.Config},
+	}, nil
+}
+
+func (r *Runtime) toolRegistry(workspacePath string, skillRegistry skills.Registry, sessionID string) *tools.Registry {
+	return r.toolRegistryWithJobMeta(workspacePath, skillRegistry, sessionID, jobs.PlatformDesktop, "")
+}
+
+func (r *Runtime) toolRegistryWithJobMeta(workspacePath string, skillRegistry skills.Registry, sessionID, platform, sourceChannelID string) *tools.Registry {
 	sub := r.Config.EffectiveSubagentSettings()
 	return tools.NewRegistry(workspacePath, tools.RegistryOptions{
-		Sessions:     r.Sessions,
-		ACP:          r.Config.ACPSettings(),
-		ACPMgr:       r.ACPManager(),
-		Skills:       &skillRegistry,
-		MCP:          r.mcpMgr,
-		Orchestrator: r.SubagentOrchestrator(),
+		Sessions:           r.Sessions,
+		ACP:                r.Config.ACPSettings(),
+		ACPMgr:             r.ACPManager(),
+		Skills:             &skillRegistry,
+		MCP:                r.mcpMgr,
+		Orchestrator:       r.SubagentOrchestrator(),
+		Jobs:               r.Jobs,
+		SessionID:          sessionID,
+		JobPlatform:        platform,
+		JobSourceChannelID: sourceChannelID,
 		RunnerFactory: func(child session.Session, workspaceRoot string, maxSteps int) (tools.AgentLoopRunner, error) {
 			return r.SubagentRunnerFor(child, workspaceRoot, maxSteps)
 		},

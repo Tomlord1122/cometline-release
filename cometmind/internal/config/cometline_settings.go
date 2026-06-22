@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/cometline/cometmind/internal/jobs"
 )
 
 type cometlineProviderJSON struct {
@@ -57,6 +59,7 @@ type cometlineStorageJSON struct {
 	RetentionDays           int  `json:"retentionDays"`
 	MaxSessionsPerWorkspace int  `json:"maxSessionsPerWorkspace"`
 	ArchivedMemoryPurgeDays int  `json:"archivedMemoryPurgeDays"`
+	DeletedJobPurgeDays     int  `json:"deletedJobPurgeDays"`
 	VacuumAfterPurge        bool `json:"vacuumAfterPurge"`
 }
 
@@ -86,6 +89,20 @@ type cometlineMCPJSON struct {
 	Servers []cometlineMCPServerJSON `json:"servers"`
 }
 
+type cometlineJobsNotificationsJSON struct {
+	Enabled     bool `json:"enabled"`
+	OnClaimed   bool `json:"onClaimed"`
+	OnCompleted bool `json:"onCompleted"`
+	OnReleased  bool `json:"onReleased"`
+}
+
+type cometlineJobsJSON struct {
+	Notifications            cometlineJobsNotificationsJSON `json:"notifications"`
+	LeaseMinutes             int                            `json:"leaseMinutes"`
+	DeletedPurgeDays         int                            `json:"deletedPurgeDays"`
+	ReconcileIntervalSeconds int                            `json:"reconcileIntervalSeconds"`
+}
+
 type cometlineCometmindJSON struct {
 	SystemPromptPath   string              `json:"systemPromptPath"`
 	MaxTokens          int                 `json:"maxTokens"`
@@ -104,6 +121,7 @@ type cometlineCometmindJSON struct {
 		Discord cometlineDiscordJSON `json:"discord"`
 	} `json:"gateway"`
 	MCP cometlineMCPJSON `json:"mcp"`
+	Jobs cometlineJobsJSON `json:"jobs"`
 }
 
 type cometlineSettingsJSON struct {
@@ -216,7 +234,19 @@ func adaptCometlineSettings(raw cometlineSettingsJSON) (*Config, error) {
 			RetentionDays:           cm.Storage.RetentionDays,
 			MaxSessionsPerWorkspace: cm.Storage.MaxSessionsPerWorkspace,
 			ArchivedMemoryPurgeDays: cm.Storage.ArchivedMemoryPurgeDays,
+			DeletedJobPurgeDays:     cm.Storage.DeletedJobPurgeDays,
 			VacuumAfterPurge:        cm.Storage.VacuumAfterPurge,
+		},
+		Jobs: JobsConfig{
+			Notifications: jobs.NotificationSettings{
+				Enabled:     cm.Jobs.Notifications.Enabled,
+				OnClaimed:   cm.Jobs.Notifications.OnClaimed,
+				OnCompleted: cm.Jobs.Notifications.OnCompleted,
+				OnReleased:  cm.Jobs.Notifications.OnReleased,
+			},
+			LeaseMinutes:             cm.Jobs.LeaseMinutes,
+			DeletedPurgeDays:         cm.Jobs.DeletedPurgeDays,
+			ReconcileIntervalSeconds: cm.Jobs.ReconcileIntervalSeconds,
 		},
 		Gateway: GatewayConfig{
 			Discord: DiscordGatewayConfig{

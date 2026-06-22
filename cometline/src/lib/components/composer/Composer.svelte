@@ -14,7 +14,7 @@
 	import MessageQueuePanel from '$lib/components/composer/MessageQueuePanel.svelte';
 	import ModelPicker from '$lib/components/composer/ModelPicker.svelte';
 	import SlashCommandMenu from '$lib/components/composer/SlashCommandMenu.svelte';
-	import { listSkills, listWorkspaces, forkSession, clearSession, deleteWorkspace } from '$lib/client/cometmind';
+	import { listSkills, listWorkspaces, forkSession, clearSession, deleteWorkspace, listJobs, claimJob, buildJobExecutionPrompt } from '$lib/client/cometmind';
 	import {
 		filterFileIndex,
 		getFileIndex,
@@ -34,6 +34,8 @@
 		parseChangeCommand,
 		parseClearCommand,
 		parseModelCommand,
+		parseJobCommand,
+		filterJobOptions,
 		type SlashMenuOption,
 		type WorkspaceMenuOption
 	} from '$lib/skills/slash-commands';
@@ -46,6 +48,7 @@
 	import { workspaceLabel } from '$lib/sessions/group-by-workspace';
 	import { isSupportedImageFile, readImageAttachments } from '$lib/files/images';
 	import type { ImageAttachment, SkillResource } from '$lib/types';
+	import type { JobResource } from '$lib/generated/cometmind-api';
 
 	let {
 		onSend,
@@ -173,6 +176,16 @@
 			group.options.push(option);
 		}
 		return groups;
+	});
+	let readyJobs = $state<JobResource[]>([]);
+	let jobsLoading = $state(false);
+	let jobsLoaded = $state(false);
+	let jobCommand = $derived(parseJobCommand(value));
+	let jobCommandMenuOpen = $derived(Boolean(jobCommand));
+	let jobCommandQuery = $derived(jobCommand?.query ?? '');
+	let jobCommandHighlight = $state(0);
+	let filteredJobOptions = $derived.by(() => {
+		return filterJobOptions(jobCommandQuery, readyJobs);
 	});
 	let skillNames = $derived([
 		...BUILTIN_SLASH_COMMANDS.map((cmd) => cmd.name),
@@ -317,6 +330,10 @@
 			void handleModelCommandSubmit();
 			return;
 		}
+		if (jobCommand) {
+			void handleJobCommandSubmit();
+			return;
+		}
 		const expanded = expandBuiltinSlashCommand(trimmed) ?? expandSkillCommand(trimmed);
 		if (!canSubmit || disabled || !modelStore.selected) return;
 		const filePaths = input?.getFilePaths() ?? [];
@@ -333,6 +350,7 @@
 	function onKeydown(e: KeyboardEvent) {
 		if (handleWorkspaceMenuKeydown(e)) return;
 		if (handleModelCommandMenuKeydown(e)) return;
+		if (handleJobCommandMenuKeydown(e)) return;
 		if (handleSkillMenuKeydown(e)) return;
 		if (handleMentionMenuKeydown(e)) return;
 		if (matchesShortcut(e, settingsStore.settings.shortcuts.stopResponse) && streaming) {
@@ -607,6 +625,88 @@
 		}
 		input?.clear();
 		value = '';
+	}
+
+	async function ensureReadyJobsLoaded() {
+		if (jobsLoaded || jobsLoading) return;
+		jobsLoading = true;
+		try {
+			const res = await listJobs({ ready_only: true });
+			readyJobs = res.jobs ?? [];
+			jobsLoaded = true;
+		} catch {
+			readyJobs = [];
+			jobsLoaded = true;
+		} finally {
+			jobsLoading = false;
+		}
+	}
+
+	$effect(() => {
+		if (jobCommandMenuOpen) {
+			void ensureReadyJobsLoaded();
+			jobCommandHighlight = 0;
+		}
+	});
+
+	async function selectJobCommandOption(job: JobResource) {
+		if (!sessionId) return;
+		try {
+			const claimed = await claimJob(job.id, sessionId);
+			let prompt = buildJobExecutionPrompt(claimed);
+			const jobPath = claimed.workspace_path?.trim();
+			const sessionPath = shellStore.workspacePath?.trim();
+			if (jobPath && sessionPath && jobPath !== sessionPath) {
+				prompt +=
+					`\n\nNote: this job targets workspace \`${jobPath}\` but this session uses \`${sessionPath}\`. Consider /change to fork into the correct workspace before editing files.`;
+			}
+			input?.clear();
+			value = '';
+			onSend(prompt);
+		} catch (err) {
+			dropMessage = err instanceof Error ? err.message : 'Failed to claim job';
+		}
+	}
+
+	function handleJobCommandSubmit() {
+		const option = filteredJobOptions[jobCommandHighlight];
+		if (option) {
+			void selectJobCommandOption(option);
+			return;
+		}
+		input?.clear();
+		value = '';
+	}
+
+	function handleJobCommandMenuKeydown(e: KeyboardEvent): boolean {
+		if (!jobCommandMenuOpen) return false;
+		if (e.key === 'Escape') {
+			e.preventDefault();
+			input?.clear();
+			value = '';
+			return true;
+		}
+		if (e.key === 'ArrowDown') {
+			e.preventDefault();
+			if (filteredJobOptions.length > 0) {
+				jobCommandHighlight = (jobCommandHighlight + 1) % filteredJobOptions.length;
+			}
+			return true;
+		}
+		if (e.key === 'ArrowUp') {
+			e.preventDefault();
+			if (filteredJobOptions.length > 0) {
+				jobCommandHighlight =
+					(jobCommandHighlight - 1 + filteredJobOptions.length) % filteredJobOptions.length;
+			}
+			return true;
+		}
+		if (e.key === 'Enter' && !e.shiftKey) {
+			e.preventDefault();
+			void handleJobCommandSubmit();
+			return true;
+		}
+		return false;
 	}
 
 	function handleSkillMenuKeydown(e: KeyboardEvent): boolean {
@@ -1065,6 +1165,41 @@
 							</button>
 						{/each}
 					</div>
+				{/each}
+			{/if}
+		</SlashCommandMenu>
+	{:else if jobCommandMenuOpen}
+		<SlashCommandMenu ariaLabel="Select job" class="job-command-menu">
+			<div class="workspace-search-hint" aria-hidden="true">
+				<Search size={13} stroke-width={2} />
+				{#if jobCommandQuery}
+					<span class="workspace-search-value">{jobCommandQuery}</span>
+				{:else}
+					<span class="workspace-search-placeholder">Type to filter jobs…</span>
+				{/if}
+			</div>
+			{#if jobsLoading && !jobsLoaded}
+				<p class="skill-command-empty">Loading jobs…</p>
+			{:else if filteredJobOptions.length === 0}
+				<p class="skill-command-empty">No ready jobs.</p>
+			{:else}
+				{#each filteredJobOptions as job, index (job.id)}
+					<button
+						type="button"
+						class="skill-command-option"
+						class:highlighted={index === jobCommandHighlight}
+						role="option"
+						aria-selected={index === jobCommandHighlight}
+						onpointerenter={() => {
+							jobCommandHighlight = index;
+						}}
+						onclick={() => {
+							void selectJobCommandOption(job);
+						}}
+					>
+						<span class="skill-command-name">{job.description}</span>
+						<span class="skill-command-description">p={job.priority} · {job.id.slice(0, 8)}</span>
+					</button>
 				{/each}
 			{/if}
 		</SlashCommandMenu>
