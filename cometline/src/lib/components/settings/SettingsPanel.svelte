@@ -63,7 +63,7 @@
 		anthropic: 'Anthropic',
 		'opencode-go': 'OpenCode Go',
 		codex: 'ChatGPT Codex',
-		'openai-compatible': 'OpenAI-compatible'
+		'openai-compatible': 'OpenAI Compatible'
 	};
 
 	const DEFAULT_PROVIDER_IDS = new Set([

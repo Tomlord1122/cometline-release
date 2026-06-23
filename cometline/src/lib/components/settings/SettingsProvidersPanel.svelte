@@ -10,7 +10,7 @@
 		anthropic: 'Anthropic',
 		'opencode-go': 'OpenCode Go',
 		codex: 'ChatGPT Codex',
-		'openai-compatible': 'OpenAI-compatible'
+		'openai-compatible': 'OpenAI Compatible'
 	};
 
 	const DEFAULT_PROVIDER_IDS = new Set([
@@ -164,7 +164,7 @@
 						<option value="openai">OpenAI</option>
 						<option value="anthropic">Anthropic</option>
 						<option value="opencode-go">OpenCode Go</option>
-						<option value="openai-compatible">OpenAI-compatible</option>
+						<option value="openai-compatible">OpenAI Compatible</option>
 					</select>
 				</label>
 

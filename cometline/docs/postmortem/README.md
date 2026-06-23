@@ -24,6 +24,7 @@ Short write-ups of non-obvious bugs in the Cometline UI layer (and cross-cutting
 | 2026-06-17 | Session switch: in-flight response lost, stuck, or replayed                  | [session-switch-in-flight-response-lost-and-rerender.md](./session-switch-in-flight-response-lost-and-rerender.md) |
 | 2026-06-17 | Streaming avatar disappears and spinner jumps between turns                  | [streaming-avatar-disappears-spinner-jumps.md](./streaming-avatar-disappears-spinner-jumps.md)                     |
 | 2026-06-21 | Reload: reasoning-less tool/memory rows become loose, ungrouped pills        | [reload-loose-tool-memory-pills-no-reasoning.md](./reload-loose-tool-memory-pills-no-reasoning.md)                 |
+| 2026-06-23 | Provider label casing inconsistency ("OpenAI Compatible" vs "OpenAI-compatible") | [provider-label-casing-inconsistency.md](./provider-label-casing-inconsistency.md)                                 |
 
 ## When to add a postmortem
 
