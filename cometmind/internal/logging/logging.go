@@ -1,14 +1,44 @@
 package logging
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
-var logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+var logger = newLogger(slog.LevelError)
+
+func newLogger(level slog.Level) *slog.Logger {
+	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+}
+
+// ParseLevel maps a log level name to slog.Level.
+func ParseLevel(raw string) (slog.Level, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "debug":
+		return slog.LevelDebug, nil
+	case "info":
+		return slog.LevelInfo, nil
+	case "warn", "warning":
+		return slog.LevelWarn, nil
+	case "error":
+		return slog.LevelError, nil
+	case "":
+		return slog.LevelError, nil
+	default:
+		return slog.LevelError, fmt.Errorf("unknown log level %q (want debug, info, warn, or error)", raw)
+	}
+}
+
+// Init replaces the process-wide logger at the given level and sets slog.Default.
+func Init(level slog.Level) {
+	logger = newLogger(level)
+	slog.SetDefault(logger)
+}
 
 // L returns the process-wide structured logger.
 func L() *slog.Logger { return logger }

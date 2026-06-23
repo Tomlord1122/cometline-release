@@ -136,9 +136,22 @@ export interface CometMindJobsSettings {
 	reconcileIntervalSeconds: number;
 }
 
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+const LOG_LEVELS: LogLevel[] = ['debug', 'info', 'warn', 'error'];
+
+function normalizeLogLevel(value: unknown): LogLevel {
+	const raw = String(value ?? '').trim().toLowerCase();
+	if (LOG_LEVELS.includes(raw as LogLevel)) {
+		return raw as LogLevel;
+	}
+	return 'error';
+}
+
 export interface CometMindSettings {
 	systemPromptPath: string;
 	maxTokens: number;
+	logLevel: LogLevel;
 	contextWindowLimit: ContextWindowLimit;
 	titleProviderId: string;
 	titleModelId: string;
@@ -389,6 +402,7 @@ export function defaultCometMindSettings(workspacePath = ''): CometMindSettings 
 	return {
 		systemPromptPath: '',
 		maxTokens: 2048,
+		logLevel: 'error',
 		contextWindowLimit: DEFAULT_CONTEXT_WINDOW_LIMIT,
 		titleProviderId: '',
 		titleModelId: '',
@@ -458,6 +472,7 @@ export function normalizeCometMindSettings(
 	return {
 		systemPromptPath: String(input?.systemPromptPath ?? defaults.systemPromptPath).trim(),
 		maxTokens: normalizePositiveInt(input?.maxTokens, defaults.maxTokens),
+		logLevel: normalizeLogLevel(input?.logLevel ?? defaults.logLevel),
 		contextWindowLimit: normalizeContextWindowLimit(
 			input?.contextWindowLimit ?? defaults.contextWindowLimit
 		),
@@ -575,6 +590,7 @@ export function cloneCometMindSettings(settings: CometMindSettings): CometMindSe
 	return {
 		systemPromptPath: settings.systemPromptPath,
 		maxTokens: settings.maxTokens,
+		logLevel: settings.logLevel,
 		contextWindowLimit: settings.contextWindowLimit,
 		titleProviderId: settings.titleProviderId,
 		titleModelId: settings.titleModelId,
@@ -919,6 +935,7 @@ const providerSettingsSchema = z.object({
 	cometmind: z.object({
 		systemPromptPath: z.string(),
 		maxTokens: z.number().int().positive(),
+		logLevel: z.enum(['debug', 'info', 'warn', 'error']),
 		contextWindowLimit: z.union([z.literal(128_000), z.literal(256_000)]),
 		titleProviderId: z.string(),
 		titleModelId: z.string(),

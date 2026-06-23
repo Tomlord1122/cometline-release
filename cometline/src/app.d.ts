@@ -181,6 +181,7 @@ declare global {
 	interface CometMindSettings {
 		systemPromptPath: string;
 		maxTokens: number;
+		logLevel: 'debug' | 'info' | 'warn' | 'error';
 		contextWindowLimit: 128_000 | 256_000;
 		titleProviderId: string;
 		titleModelId: string;

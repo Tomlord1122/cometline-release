@@ -334,6 +334,19 @@
 				and cost.
 			</p>
 		</label>
+		<label>
+			<span>Log level</span>
+			<select bind:value={cometmind.logLevel}>
+				<option value="error">Error</option>
+				<option value="warn">Warn</option>
+				<option value="info">Info</option>
+				<option value="debug">Debug</option>
+			</select>
+			<p class="settings-field-hint">
+				Controls what CometMind writes to <code>~/.cometmind/cometline.log</code> and
+				<code>cometline-gateway.log</code>. CometMind restarts when you save changes.
+			</p>
+		</label>
 	</div>
 
 	<div class="settings-section">

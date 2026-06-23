@@ -9,7 +9,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"sync"
@@ -20,6 +19,7 @@ import (
 	"github.com/cometline/cometmind/internal/agent"
 	"github.com/cometline/cometmind/internal/config"
 	"github.com/cometline/cometmind/internal/jobs"
+	"github.com/cometline/cometmind/internal/logging"
 	"github.com/cometline/cometmind/internal/memory"
 	mcppkg "github.com/cometline/cometmind/internal/mcp"
 	"github.com/cometline/cometmind/internal/paths"
@@ -97,7 +97,7 @@ func New(ctx context.Context) (*Runtime, error) {
 	}
 	runRetention(ctx, sqlDB, sessions, r.Memory, r.Jobs, cfg.EffectiveStorageConfig(), nil)
 	if _, err := r.Jobs.Reconcile(ctx, nil); err != nil {
-		log.Printf("cometmind: jobs reconcile on startup failed: %v", err)
+		logging.L().Warn("jobs.reconcile.startup_failed", "error", err)
 	}
 	r.mcpMgr = mcppkg.NewManager(cfg.MCPSettings())
 	r.mcpMgr.Start(ctx)
@@ -117,7 +117,7 @@ func runRetention(ctx context.Context, db *sql.DB, sessions *session.Service, me
 		IsRunning: isRunning,
 	}
 	if _, err := rr.Run(ctx); err != nil {
-		log.Printf("cometmind: retention failed: %v", err)
+		logging.L().Warn("retention.failed", "error", err)
 	}
 }
 
@@ -159,12 +159,12 @@ func (r *Runtime) StartJobsMaintenance(ctx context.Context) {
 				return
 			case <-ticker.C:
 				if _, err := r.Jobs.Reconcile(ctx, r.isRunning); err != nil {
-					log.Printf("cometmind: jobs reconcile failed: %v", err)
+					logging.L().Warn("jobs.reconcile.failed", "error", err)
 				}
 				cfg := r.Config.EffectiveStorageConfig()
 				if cfg.JobPurgeEnabled() {
 					if _, err := r.Jobs.PurgeDeleted(ctx, cfg.DeletedJobPurgeDays); err != nil {
-						log.Printf("cometmind: jobs purge failed: %v", err)
+						logging.L().Warn("jobs.purge.failed", "error", err)
 					}
 				}
 			}

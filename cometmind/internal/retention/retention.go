@@ -3,12 +3,12 @@ package retention
 import (
 	"context"
 	"database/sql"
-	"log"
 	"time"
 
 	"github.com/cometline/cometmind/internal/config"
 	"github.com/cometline/cometmind/internal/db"
 	"github.com/cometline/cometmind/internal/jobs"
+	"github.com/cometline/cometmind/internal/logging"
 	"github.com/cometline/cometmind/internal/memory"
 	"github.com/cometline/cometmind/internal/session"
 )
@@ -76,14 +76,13 @@ func (r *Runner) Run(ctx context.Context) (Result, error) {
 	}
 
 	if out.SessionsDeleted > 0 || out.SubagentsDeleted > 0 || out.MemoriesPurged > 0 || out.JobsPurged > 0 {
-		log.Printf(
-			"cometmind: retention complete sessions_deleted=%d subagents_deleted=%d memories_purged=%d memory_events_purged=%d jobs_purged=%d vacuumed=%v",
-			out.SessionsDeleted,
-			out.SubagentsDeleted,
-			out.MemoriesPurged,
-			out.MemoryEventsPurged,
-			out.JobsPurged,
-			out.Vacuumed,
+		logging.L().Info("retention.complete",
+			"sessions_deleted", out.SessionsDeleted,
+			"subagents_deleted", out.SubagentsDeleted,
+			"memories_purged", out.MemoriesPurged,
+			"memory_events_purged", out.MemoryEventsPurged,
+			"jobs_purged", out.JobsPurged,
+			"vacuumed", out.Vacuumed,
 		)
 	}
 	return out, nil

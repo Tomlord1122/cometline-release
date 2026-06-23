@@ -3,11 +3,11 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 
 	"github.com/cometline/cometmind/internal/jobs"
+	"github.com/cometline/cometmind/internal/logging"
 )
 
 type cometlineProviderJSON struct {
@@ -168,7 +168,7 @@ func adaptCometlineSettings(raw cometlineSettingsJSON) (*Config, error) {
 	// error from the provider factory instead of a TCP connection refused.
 	noProviders := len(runtimeProviders) == 0
 	if noProviders {
-		log.Printf("cometmind: no enabled providers with models configured — open Settings to add one")
+		logging.L().Info("config.no_providers_configured")
 	}
 
 	var active cometlineProviderJSON

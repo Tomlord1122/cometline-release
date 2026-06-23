@@ -4296,6 +4296,14 @@ function providerNameOrDefault(provider, fallback, id) {
   if (fallbackName) return fallbackName;
   return BUILTIN_PROVIDER_NAMES[id] ?? "Provider";
 }
+var LOG_LEVELS = ["debug", "info", "warn", "error"];
+function normalizeLogLevel(value) {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (LOG_LEVELS.includes(raw)) {
+    return raw;
+  }
+  return "error";
+}
 var DEFAULT_PROVIDERS = [
   {
     id: "codex",
@@ -4484,6 +4492,7 @@ function defaultCometMindSettings(workspacePath = "") {
   return {
     systemPromptPath: "",
     maxTokens: 2048,
+    logLevel: "error",
     contextWindowLimit: DEFAULT_CONTEXT_WINDOW_LIMIT,
     titleProviderId: "",
     titleModelId: "",
@@ -4545,6 +4554,7 @@ function normalizeCometMindSettings(input, fallbackWorkspacePath = "") {
   return {
     systemPromptPath: String(input?.systemPromptPath ?? defaults.systemPromptPath).trim(),
     maxTokens: normalizePositiveInt(input?.maxTokens, defaults.maxTokens),
+    logLevel: normalizeLogLevel(input?.logLevel ?? defaults.logLevel),
     contextWindowLimit: normalizeContextWindowLimit(
       input?.contextWindowLimit ?? defaults.contextWindowLimit
     ),
@@ -4639,6 +4649,7 @@ function cloneCometMindSettings(settings) {
   return {
     systemPromptPath: settings.systemPromptPath,
     maxTokens: settings.maxTokens,
+    logLevel: settings.logLevel,
     contextWindowLimit: settings.contextWindowLimit,
     titleProviderId: settings.titleProviderId,
     titleModelId: settings.titleModelId,
@@ -4905,6 +4916,7 @@ var providerSettingsSchema = external_exports.object({
   cometmind: external_exports.object({
     systemPromptPath: external_exports.string(),
     maxTokens: external_exports.number().int().positive(),
+    logLevel: external_exports.enum(["debug", "info", "warn", "error"]),
     contextWindowLimit: external_exports.union([external_exports.literal(128e3), external_exports.literal(256e3)]),
     titleProviderId: external_exports.string(),
     titleModelId: external_exports.string(),

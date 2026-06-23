@@ -772,6 +772,7 @@ function providerEnv() {
 		COMETMIND_PROVIDER: active.id,
 		COMETMIND_MODEL: active.enabledModels[0] || active.selectedModel || active.models[0] || '',
 		COMETMIND_MAX_TOKENS: String(settings.cometmind?.maxTokens ?? 2048),
+		COMETMIND_LOG_LEVEL: settings.cometmind?.logLevel ?? 'error',
 		COMETMIND_SYSTEM_PROMPT_PATH: resolveSystemPromptPath(getIconVariant())
 	};
 	if (active.baseURL) env.COMETMIND_BASE_URL = active.baseURL;

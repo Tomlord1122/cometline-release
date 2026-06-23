@@ -81,10 +81,9 @@
 	// top of the viewport once (revealing the assistant avatar/response below).
 	let lastScrolledUserId: string | null = null;
 	// Gap left above the freshly-sent user message. The first turn pins close to
-	// the top; follow-up turns sit a little lower (upper-middle) so the message
-	// reads naturally and leaves the bulk of the screen for the reply below.
+	// the top; follow-up turns sit at ~25% from the top of the viewport so the
+	// message reads naturally and leaves the bulk of the screen for the reply below.
 	const USER_SEND_TOP_OFFSET = 24;
-	const USER_SEND_FOLLOWUP_OFFSET = 24;
 	// ChatGPT-style: reserve empty space below the latest turn so a freshly-sent
 	// user message can always scroll up to the top, leaving room for the
 	// assistant avatar/response to appear below it (never clipped).
@@ -636,13 +635,31 @@
 	// When the user sends a new message, scroll that message close to the top of
 	// the viewport so the assistant avatar and its incoming response are visible
 	// below it. This is the one deliberate auto-scroll in the thread.
+	// Walk the offsetParent chain to get an element's top offset relative to
+	// a given ancestor (the scroll container).
+	function offsetTopRelativeTo(el: HTMLElement, ancestor: HTMLElement): number {
+		let top = 0;
+		let cur: HTMLElement | null = el;
+		while (cur && cur !== ancestor) {
+			top += cur.offsetTop;
+			cur = cur.offsetParent as HTMLElement | null;
+		}
+		return top;
+	}
+
 	function scrollUserMessageToTop(userId: string) {
 		if (!scroller) return;
 		const target = scroller.querySelector<HTMLElement>(`[data-user-item-id="${userId}"]`);
 		if (!target) return;
-		const offset = userMessageCount > 1 ? USER_SEND_FOLLOWUP_OFFSET : USER_SEND_TOP_OFFSET;
-		const top = Math.max(0, target.offsetTop - scroller.offsetTop - offset);
-		scroller.scrollTo({ top, behavior: 'smooth' });
+		// Get the element's true absolute top within the scroll container.
+		const absoluteTop = offsetTopRelativeTo(target, scroller);
+		if (userMessageCount > 1) {
+			// Follow-up: place the message ~15% from the top (upper-right feel).
+			const followupOffset = viewportHeight > 0 ? Math.round(viewportHeight * 0.15) : 80;
+			scroller.scrollTo({ top: Math.max(0, absoluteTop - followupOffset), behavior: 'smooth' });
+		} else {
+			scroller.scrollTo({ top: Math.max(0, absoluteTop - USER_SEND_TOP_OFFSET), behavior: 'smooth' });
+		}
 		updateJumpToBottom();
 	}
 

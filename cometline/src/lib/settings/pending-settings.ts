@@ -62,6 +62,7 @@ function agentSectionSnapshot(settings: ProviderSettings): string {
 	return JSON.stringify({
 		systemPromptPath: cometmind.systemPromptPath,
 		maxTokens: cometmind.maxTokens,
+		logLevel: cometmind.logLevel,
 		acp: cometmind.acp,
 		skills: cometmind.skills,
 		mcp: cometmind.mcp,

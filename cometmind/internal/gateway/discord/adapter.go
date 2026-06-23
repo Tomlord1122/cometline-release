@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	"github.com/cometline/cometmind/internal/config"
 	"github.com/cometline/cometmind/internal/gateway"
 	"github.com/cometline/cometmind/internal/jobs"
+	"github.com/cometline/cometmind/internal/logging"
 	skillpkg "github.com/cometline/cometmind/internal/skills"
 )
 
@@ -156,9 +156,9 @@ func (a *Adapter) Start(ctx context.Context) error {
 	a.Session.AddHandler(a.onInteractionCreate)
 	a.Session.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
 		if err := a.registerCommands(s, r); err != nil {
-			log.Printf("discord: slash command registration failed: %v", err)
+			logging.L().Error("discord.slash_commands.register_failed", "error", err)
 		} else {
-			log.Printf("discord: slash commands registered (thread, create-skill, change, jobs, create-job)")
+			logging.L().Info("discord.slash_commands.registered")
 		}
 	})
 	if err := a.Session.Open(); err != nil {
@@ -404,7 +404,7 @@ func (a *Adapter) handleChangeAutocomplete(s *discordgo.Session, i *discordgo.In
 
 	paths, err := a.onSuggest(context.Background(), query)
 	if err != nil {
-		log.Printf("discord: workspace autocomplete failed: %v", err)
+		logging.L().Warn("discord.autocomplete.workspace_failed", "error", err)
 		paths = nil
 	}
 
@@ -446,7 +446,7 @@ func (a *Adapter) handleJobsAutocomplete(s *discordgo.Session, i *discordgo.Inte
 	}
 	items, err := a.jobSuggest(context.Background(), query)
 	if err != nil {
-		log.Printf("discord: job autocomplete failed: %v", err)
+		logging.L().Warn("discord.autocomplete.job_failed", "error", err)
 		items = nil
 	}
 	choices := make([]*discordgo.ApplicationCommandOptionChoice, 0, len(items))
@@ -609,7 +609,7 @@ func (a *Adapter) handleThreadCommand(s *discordgo.Session, i *discordgo.Interac
 	welcome := "New CometMind session started in this thread. Send a message here to talk to the agent."
 	parentChannelID, thread, parentType, err := createCometMindThread(s, i.ChannelID, threadName, welcome)
 	if err != nil {
-		log.Printf("discord: thread create failed: %v", err)
+		logging.L().Error("discord.thread.create_failed", "error", err)
 		_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
@@ -622,7 +622,7 @@ func (a *Adapter) handleThreadCommand(s *discordgo.Session, i *discordgo.Interac
 
 	if !isForumLikeChannelType(parentType) {
 		if _, err := s.ChannelMessageSend(thread.ID, welcome); err != nil {
-			log.Printf("discord: thread welcome message failed: %v", err)
+			logging.L().Warn("discord.thread.welcome_failed", "error", err)
 		}
 	}
 
@@ -630,7 +630,7 @@ func (a *Adapter) handleThreadCommand(s *discordgo.Session, i *discordgo.Interac
 		userID := interactionUserID(i)
 		if userID != "" {
 			if err := a.onThread(context.Background(), userID, parentChannelID, thread.ID); err != nil {
-				log.Printf("discord: thread session setup failed: %v", err)
+				logging.L().Error("discord.thread.session_setup_failed", "error", err)
 			}
 		}
 	}
@@ -671,36 +671,35 @@ func (a *Adapter) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCrea
 	}
 	routingChannelID, threadID := discordRoutingIDs(m.ChannelID, parentChannelID)
 	if a.Config.RequireMention && !mentioned && threadID == "" {
-		log.Printf("discord: ignoring message in channel %s (mention required)", m.ChannelID)
+		logging.L().Info("discord.message.ignored", "channel", m.ChannelID, "reason", "mention_required")
 		return
 	}
 
 	text := strings.TrimSpace(stripBotMentions(m.Content, s.State))
 	images, err := imageAttachments(context.Background(), m.Attachments)
 	if err != nil {
-		log.Printf("discord: ignoring message in channel %s (attachments unsupported: %v)", m.ChannelID, err)
+		logging.L().Info("discord.message.ignored", "channel", m.ChannelID, "reason", "attachments_unsupported", "error", err)
 		return
 	}
 	if text == "" && len(images) == 0 {
 		if strings.TrimSpace(m.Content) != "" {
-			log.Printf("discord: ignoring message in channel %s (only mentions, no text)", m.ChannelID)
+			logging.L().Info("discord.message.ignored", "channel", m.ChannelID, "reason", "only_mentions")
 		} else if m.GuildID != "" {
-			log.Printf(
-				"discord: ignoring guild message in channel %s (empty content); enable Message Content Intent in the Discord Developer Portal",
-				m.ChannelID,
+			logging.L().Info("discord.message.ignored",
+				"channel", m.ChannelID,
+				"reason", "empty_content_enable_message_content_intent",
 			)
 		}
 		return
 	}
-	log.Printf(
-		"discord: inbound user=%s channel=%s thread=%s parent=%s guild=%s text=%q images=%d",
-		m.Author.ID,
-		routingChannelID,
-		threadID,
-		parentChannelID,
-		m.GuildID,
-		truncateLog(text, 80),
-		len(images),
+	logging.L().Info("discord.message.inbound",
+		"user", m.Author.ID,
+		"channel", routingChannelID,
+		"thread", threadID,
+		"parent", parentChannelID,
+		"guild", m.GuildID,
+		"text", truncateLog(text, 80),
+		"images", len(images),
 	)
 	a.onInbound(context.Background(), gateway.InboundMessage{
 		Platform:        platformName,

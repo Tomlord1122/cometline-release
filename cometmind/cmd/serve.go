@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/cometline/cometmind/internal/jobs"
+	"github.com/cometline/cometmind/internal/logging"
 	"github.com/cometline/cometmind/internal/runtime"
 	"github.com/cometline/cometmind/internal/session"
 	"github.com/cometline/cometmind/server"
@@ -53,7 +53,7 @@ func runServe(_ *cobra.Command, _ []string) error {
 	if pruned, err := rt.Sessions.PruneMissingWorkspaces(ctx); err != nil {
 		return fmt.Errorf("prune missing workspaces: %w", err)
 	} else if pruned > 0 {
-		fmt.Fprintf(os.Stderr, "pruned %d missing workspace(s) with no sessions\n", pruned)
+		logging.L().Info("workspace.pruned", "count", pruned)
 	}
 
 	runs := server.NewRunManager()

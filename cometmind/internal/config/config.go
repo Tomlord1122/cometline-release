@@ -3,11 +3,11 @@ package config
 import (
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/cometline/cometmind/internal/logging"
 	"github.com/spf13/viper"
 )
 
@@ -127,7 +127,10 @@ func Load() (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
-		log.Printf("cometmind: loaded legacy %s; migrate to %s via Cometline Settings", legacyTomlPath, settingsPath)
+		logging.L().Info("config.legacy_toml_loaded",
+			"legacy_path", legacyTomlPath,
+			"settings_path", settingsPath,
+		)
 	default:
 		if err := writeMinimalCometlineSettingsJSON(settingsPath, def); err != nil {
 			return nil, err

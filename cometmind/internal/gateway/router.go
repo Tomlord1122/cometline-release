@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	"github.com/cometline/cometmind/internal/config"
 	"github.com/cometline/cometmind/internal/event"
 	"github.com/cometline/cometmind/internal/jobs"
+	"github.com/cometline/cometmind/internal/logging"
 	"github.com/cometline/cometmind/internal/session"
 )
 
@@ -46,7 +46,11 @@ func (r *Router) HandleInbound(ctx context.Context, msg InboundMessage) error {
 	}
 	if !r.allowed(msg) {
 		if reason := r.blockReason(msg); reason != "" {
-			log.Printf("discord: ignoring message from user=%s channel=%s: %s", msg.UserID, msg.ChannelID, reason)
+			logging.L().Info("discord.message.ignored",
+				"user", msg.UserID,
+				"channel", msg.ChannelID,
+				"reason", reason,
+			)
 		}
 		return nil
 	}
@@ -100,7 +104,7 @@ func (r *Router) HandleInbound(ctx context.Context, msg InboundMessage) error {
 		defer stopTyping()
 	}
 
-	log.Printf("discord: running agent turn session=%s workspace=%s", sess.ID, runPath)
+	logging.L().Info("discord.agent_turn.start", "session", sess.ID, "workspace", runPath)
 	var reply strings.Builder
 	var jobProposal *JobProposalPayload
 	sourceChannelID := deliveryChannelID(msg)
@@ -125,7 +129,11 @@ func (r *Router) HandleInbound(ctx context.Context, msg InboundMessage) error {
 	var text string
 	if err != nil {
 		text = fmt.Sprintf("Error: %v", err)
-		log.Printf("discord: agent turn failed user=%s channel=%s: %v", msg.UserID, msg.ChannelID, err)
+		logging.L().Error("discord.agent_turn.failed",
+			"user", msg.UserID,
+			"channel", msg.ChannelID,
+			"error", err,
+		)
 	} else {
 		text = strings.TrimSpace(reply.String())
 		if text == "" {
@@ -133,7 +141,7 @@ func (r *Router) HandleInbound(ctx context.Context, msg InboundMessage) error {
 		}
 	}
 	if r.onReply != nil {
-		log.Printf("discord: replying to channel=%s (%d bytes)", msg.ChannelID, len(text))
+		logging.L().Info("discord.reply", "channel", msg.ChannelID, "bytes", len(text))
 		if err := r.onReply(ctx, OutboundMessage{
 			Platform:  msg.Platform,
 			UserID:    msg.UserID,
@@ -147,7 +155,7 @@ func (r *Router) HandleInbound(ctx context.Context, msg InboundMessage) error {
 	if jobProposal != nil && r.JobProposals != nil && r.DeliverJobProposal != nil {
 		paths, pathErr := r.SuggestWorkspacePaths(ctx, "", 25)
 		if pathErr != nil {
-			log.Printf("discord: job proposal workspace paths: %v", pathErr)
+			logging.L().Warn("discord.job_proposal.workspace_paths", "error", pathErr)
 			paths = nil
 		}
 		if runPath != "" {
@@ -170,7 +178,7 @@ func (r *Router) HandleInbound(ctx context.Context, msg InboundMessage) error {
 			ThreadID:  msg.ThreadID,
 		}
 		if err := r.DeliverJobProposal(ctx, out, pending, paths); err != nil {
-			log.Printf("discord: deliver job proposal failed: %v", err)
+			logging.L().Error("discord.job_proposal.deliver_failed", "error", err)
 		}
 	}
 	return nil

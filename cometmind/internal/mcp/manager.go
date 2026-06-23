@@ -2,9 +2,10 @@ package mcp
 
 import (
 	"context"
-	"log"
 	"sync"
 	"time"
+
+	"github.com/cometline/cometmind/internal/logging"
 )
 
 // ServerStatus is the runtime connection state for one MCP server.
@@ -103,7 +104,7 @@ func (m *Manager) Start(ctx context.Context) {
 		go func(id string) {
 			defer wg.Done()
 			if err := m.connectOne(ctx, id); err != nil {
-				log.Printf("cometmind: mcp server %q connect failed: %v", id, err)
+				logging.L().Error("mcp.connect_failed", "server", id, "error", err)
 			}
 		}(srv.ID)
 	}

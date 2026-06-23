@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"log"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -11,6 +10,7 @@ import (
 	"github.com/cometline/cometmind/internal/gateway"
 	discordgw "github.com/cometline/cometmind/internal/gateway/discord"
 	"github.com/cometline/cometmind/internal/jobs"
+	"github.com/cometline/cometmind/internal/logging"
 	"github.com/cometline/cometmind/internal/runtime"
 	"github.com/cometline/cometmind/internal/session"
 	"github.com/spf13/cobra"
@@ -123,7 +123,7 @@ func runGateway(_ *cobra.Command, _ []string) error {
 		)
 		adapter.SetInboundHandler(func(ctx context.Context, msg gateway.InboundMessage) {
 			if err := router.HandleInbound(ctx, msg); err != nil {
-				log.Printf("discord: handle inbound failed: %v", err)
+				logging.L().Error("discord.handle_inbound.failed", "error", err)
 			}
 		})
 		if err := adapter.Start(ctx); err != nil {
