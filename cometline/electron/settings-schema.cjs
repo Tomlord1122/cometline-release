@@ -4703,7 +4703,7 @@ function defaultAppearance() {
   };
 }
 function defaultAppSettings() {
-  return { openAtLogin: false, hasSeenIntro: false, iconVariant: "default" };
+  return { openAtLogin: false, hasSeenIntro: false, hasCompletedSetup: false, iconVariant: "default" };
 }
 function normalizeIconVariant(value) {
   return value === "man" ? "man" : "default";
@@ -4826,6 +4826,7 @@ function normalizeSettings(next, options = {}) {
     app: {
       openAtLogin: typeof next.app?.openAtLogin === "boolean" ? next.app.openAtLogin : defaultAppSettings().openAtLogin,
       hasSeenIntro: typeof next.app?.hasSeenIntro === "boolean" ? next.app.hasSeenIntro : defaultAppSettings().hasSeenIntro,
+      hasCompletedSetup: typeof next.app?.hasCompletedSetup === "boolean" ? next.app.hasCompletedSetup : defaultAppSettings().hasCompletedSetup,
       iconVariant: normalizeIconVariant(next.app?.iconVariant)
     },
     cometmind
@@ -4898,6 +4899,7 @@ var providerSettingsSchema = external_exports.object({
   app: external_exports.object({
     openAtLogin: external_exports.boolean(),
     hasSeenIntro: external_exports.boolean(),
+    hasCompletedSetup: external_exports.boolean(),
     iconVariant: external_exports.enum(["default", "man"])
   }),
   cometmind: external_exports.object({

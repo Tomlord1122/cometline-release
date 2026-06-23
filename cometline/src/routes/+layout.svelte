@@ -4,6 +4,7 @@
 	import AppShell from '$lib/components/AppShell.svelte';
 	import { connectionState } from '$lib/stores/runtime.svelte';
 	import { settingsStore } from '$lib/stores/settings.svelte';
+	import { runtimeProviders } from '$lib/stores/settings.svelte';
 	import { sessionStore } from '$lib/stores/session.svelte';
 	import { shellStore } from '$lib/stores/shell.svelte';
 	import { heroComposerCssVars } from '$lib/hero-composer-appearance';
@@ -11,6 +12,10 @@
 	import { startJobNotificationPoller } from '$lib/jobs/job-notifications';
 
 	let { children } = $props();
+
+	let settingsLoaded = $state(false);
+	// Prevents the setup wizard from re-opening after the user skips it.
+	let setupAutoTriggered = false;
 
 	onMount(() => {
 		connectionState.startPolling();
@@ -21,6 +26,7 @@
 			}
 		});
 		void settingsStore.load().then(() => {
+			settingsLoaded = true;
 			// The sync localStorage read in shell.svelte.ts already sets introOpen
 			// correctly for the first frame. This IPC result is the authoritative
 			// source and handles edge cases:
@@ -39,6 +45,18 @@
 			connectionState.stopPolling();
 			stopJobNotifications();
 		};
+	});
+
+	// Auto-open the setup wizard once when the intro has finished and the user
+	// hasn't completed setup, or when no provider is configured (state fallback).
+	$effect(() => {
+		if (!settingsLoaded || shellStore.introOpen || shellStore.setupOpen) return;
+		if (setupAutoTriggered) return;
+		const hasProvider = runtimeProviders(settingsStore.settings).length > 0;
+		if (!settingsStore.settings.app.hasCompletedSetup || !hasProvider) {
+			setupAutoTriggered = true;
+			shellStore.openSetup();
+		}
 	});
 
 	$effect(() => {

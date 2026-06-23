@@ -105,6 +105,7 @@
 			app: {
 				openAtLogin: settings.app?.openAtLogin ?? false,
 				hasSeenIntro: settings.app?.hasSeenIntro ?? false,
+				hasCompletedSetup: settings.app?.hasCompletedSetup ?? false,
 				iconVariant: settings.app?.iconVariant ?? 'default'
 			},
 			cometmind: cloneCometMindSettings(normalizeCometMindSettings(settings.cometmind))
@@ -196,6 +197,9 @@
 			(activeSection === 'memory' && memoryPanel?.isBusy?.())
 	);
 
+	// Soft warning when no enabled model is selected. We no longer hard-block
+	// save (the backend validates on persist), but we surface the reason so the
+	// user understands why messages can't be sent yet.
 	let modelsSectionWarning = $derived(
 		activeSection === 'models' && hasPendingChanges && enabledModelCount === 0
 			? 'Enable at least one model to send messages.'
@@ -368,6 +372,11 @@
 	function replayIntro() {
 		shellStore.closeSettings();
 		shellStore.openIntro();
+	}
+
+	function runSetupWizard() {
+		shellStore.closeSettings();
+		shellStore.openSetup();
 	}
 
 	function updateProvider(providerId: string, patch: Partial<ProviderConfig>) {
@@ -1110,6 +1119,20 @@
 									</div>
 								</div>
 								<div class="settings-row">
+									<div class="settings-row-copy">
+										<span class="settings-row-label">Setup wizard</span>
+										<span class="settings-row-hint"
+											>Guided provider and model configuration</span
+										>
+									</div>
+									<div class="settings-row-actions">
+										<button class="secondary" onclick={runSetupWizard}>
+											<Sparkles size={14} />
+											Run setup wizard
+										</button>
+									</div>
+								</div>
+								<div class="settings-row">
 									<span class="settings-row-label ">Version</span>
 									<span class="settings-row-value mr-2">{appVersion || '—'}</span>
 								</div>
@@ -1131,10 +1154,10 @@
 				{#if settingsStore.isSaving}
 					Saving changes…
 				{:else}
-				{#if hasPendingChanges}<strong>Unsaved changes ·</strong>{/if}
-				Save applies all tabs. Close without saving discards pending edits.
+					{#if hasPendingChanges}<strong>Unsaved changes ·</strong>{/if}
+					Save applies all tabs. Close without saving discards pending edits.
+				{/if}
 				{#if modelsSectionWarning}<span class="settings-footer-warning">{modelsSectionWarning}</span>{/if}
-			{/if}
 			</p>
 			<SettingsButton variant="secondary" onclick={discardSettings}>Discard</SettingsButton>
 			<SettingsButton variant="primary" onclick={save} disabled={saveDisabled}>

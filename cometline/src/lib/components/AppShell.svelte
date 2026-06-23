@@ -4,6 +4,7 @@
 	import RuntimeOverlay from './RuntimeOverlay.svelte';
 	import SettingsModal from './SettingsModal.svelte';
 	import IntroAnimation from './IntroAnimation.svelte';
+	import SetupWizard from './onboarding/SetupWizard.svelte';
 	import UpdateButton from './UpdateButton.svelte';
 	import WebPanel from './WebPanel.svelte';
 	import { shellStore } from '$lib/stores/shell.svelte';
@@ -213,6 +214,9 @@
 	<UpdateButton />
 	{#if shellStore.introOpen}
 		<IntroAnimation />
+	{/if}
+	{#if shellStore.setupOpen}
+		<SetupWizard />
 	{/if}
 </div>
 

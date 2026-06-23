@@ -52,6 +52,22 @@ export function readHasSeenIntroSync(): boolean {
 	}
 }
 
+/**
+ * Synchronously reads hasCompletedSetup from localStorage. Used to set the
+ * initial setup-wizard state so the first frame is already correct (no flash
+ * for returning users who already configured a provider).
+ */
+export function readHasCompletedSetupSync(): boolean {
+	try {
+		const raw = localStorage.getItem(LOCAL_SETTINGS_KEY);
+		if (!raw) return false;
+		const parsed = JSON.parse(raw) as { app?: { hasCompletedSetup?: unknown } };
+		return parsed?.app?.hasCompletedSetup === true;
+	} catch {
+		return false;
+	}
+}
+
 function writeLocalSettings(settings: ProviderSettings) {
 	localStorage.setItem(LOCAL_SETTINGS_KEY, JSON.stringify(settings));
 }
@@ -129,6 +145,15 @@ function createSettingsStore() {
 		const next: ProviderSettings = {
 			...settings,
 			app: { ...settings.app, hasSeenIntro: true }
+		};
+		await save(next, { restartCometMind: false });
+	}
+
+	async function markSetupComplete() {
+		if (settings.app.hasCompletedSetup) return;
+		const next: ProviderSettings = {
+			...settings,
+			app: { ...settings.app, hasCompletedSetup: true }
 		};
 		await save(next, { restartCometMind: false });
 	}
@@ -236,6 +261,7 @@ function createSettingsStore() {
 		fetchModelsFor,
 		save,
 		markIntroSeen,
+		markSetupComplete,
 		saveShortcuts,
 		setActiveProvider,
 		updateProvider,

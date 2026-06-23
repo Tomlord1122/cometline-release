@@ -86,6 +86,7 @@ export type IconVariant = 'default' | 'man';
 export interface AppSettings {
 	openAtLogin: boolean;
 	hasSeenIntro: boolean;
+	hasCompletedSetup: boolean;
 	iconVariant: IconVariant;
 }
 

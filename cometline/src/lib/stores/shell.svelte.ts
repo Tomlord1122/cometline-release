@@ -23,6 +23,9 @@ function createShellStore() {
 	// has the correct value — no IPC round-trip needed. New users (no stored
 	// flag) get true; returning users get false. Zero flash either way.
 	let introOpen = $state(!readHasSeenIntroSync());
+	// Setup wizard: separate from the cinematic intro. A new user who hasn't
+	// completed provider configuration sees the wizard after the intro ends.
+	let setupOpen = $state(false);
 	let composerPhase = $state<'centered' | 'docked'>('centered');
 	/** Persisted default workspace (Settings); survives restarts. */
 	let defaultWorkspacePath = $state('/');
@@ -72,6 +75,9 @@ function createShellStore() {
 		},
 		get introOpen() {
 			return introOpen;
+		},
+		get setupOpen() {
+			return setupOpen;
 		},
 		get composerPhase() {
 			return composerPhase;
@@ -189,6 +195,12 @@ function createShellStore() {
 		},
 		closeIntro() {
 			introOpen = false;
+		},
+		openSetup() {
+			setupOpen = true;
+		},
+		closeSetup() {
+			setupOpen = false;
 		},
 		dockComposer() {
 			composerPhase = 'docked';
