@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { fly, slide } from 'svelte/transition';
+	import { fade, slide } from 'svelte/transition';
 	import { flip } from 'svelte/animate';
 	import {
 		Brain,
@@ -45,7 +45,8 @@
 		sessionId = '',
 		onNotifyAgent,
 		onStartJob,
-		maxVisibleReasoning = 0
+		maxVisibleReasoning = 0,
+		cycling = false
 	}: {
 		assistant: Extract<ChatItem, { type: 'assistant' }>;
 		assistantId: string;
@@ -78,6 +79,7 @@
 		onNotifyAgent?: (payload: ChatTurnPayload) => void | Promise<void>;
 		onStartJob?: (job: JobResource) => void | Promise<void>;
 		maxVisibleReasoning?: number;
+		cycling?: boolean;
 	} = $props();
 
 	let firstEntry = $derived(timeline[0]);
@@ -146,22 +148,22 @@
 		</button>
 		{#if parentExpanded}
 			<div class="fold-body activity-group-body" transition:slide={FOLD_IN}>
-				{#if firstEntry.kind === 'reasoning'}
-					{@const key = segmentKey(firstEntry)}
-					<ThinkingBlock
-						text={firstEntry.text}
-						pending={firstEntry.pending}
-						expanded={true}
-						showSpinner={thinkingActive(firstEntry.pending) && showThinkingSpinner}
-						contentOnly={true}
-						onToggle={() =>
-							toggleThinking(
-								assistant,
-								key,
-								firstEntry.segmentIndex,
-								firstEntry.pending
-							)}
-					/>
+			{#if firstEntry.kind === 'reasoning'}
+				{@const key = segmentKey(firstEntry)}
+				<ThinkingBlock
+					text={firstEntry.text}
+					pending={firstEntry.pending}
+					expanded={thinkingExpanded(assistant, key, firstEntry.segmentIndex, firstEntry.pending)}
+					showSpinner={thinkingActive(firstEntry.pending) && showThinkingSpinner}
+					nested={true}
+					onToggle={() =>
+						toggleThinking(
+							assistant,
+							key,
+							firstEntry.segmentIndex,
+							firstEntry.pending
+						)}
+				/>
 				{:else if firstEntry.kind === 'memory'}
 					<MemoryCard
 						memories={firstEntry.memories}
@@ -169,6 +171,7 @@
 						contentOnly={true}
 						nested={true}
 						onToggle={() => {}}
+						{cycling}
 					/>
 				{:else if firstEntry.kind === 'tool'}
 					<ToolFoldPanel
@@ -192,9 +195,9 @@
 				{#each visibleChildren as entry (timelineEntryKey(entry))}
 					<div
 						class="timeline-child"
-						in:fly={{ y: 12, duration: 220 }}
-						out:fly={{ y: -12, duration: 180 }}
-						animate:flip={{ duration: 200 }}
+					in:fade={{ duration: 500 }}
+					out:fade={{ duration: 400 }}
+					animate:flip={{ duration: 400 }}
 					>
 						{#if entry.kind === 'reasoning'}
 							{@const key = segmentKey(entry)}
@@ -219,6 +222,7 @@
 								expanded={memoryInThinkingExpanded(memoryKey)}
 								nested={true}
 								onToggle={() => toggleMemoryInThinking(memoryKey)}
+								{cycling}
 							/>
 						{:else if entry.kind === 'tool'}
 							<ToolFoldPanel
@@ -242,7 +246,7 @@
 					</div>
 				{/each}
 				{#if hiddenCount > 0}
-					<div class="hidden-indicator" transition:fly={{ y: 8, duration: 160 }}>
+					<div class="hidden-indicator" transition:fade={{ duration: 400 }}>
 						+{hiddenCount} more
 					</div>
 				{/if}
@@ -254,6 +258,17 @@
 <style>
 	/* Base .fold-panel / .fold-toggle / .fold-body styles live in
 	   src/lib/styles/fold-panel.css. Only component-specific overrides here. */
+
+	/* Let the activity-group toggle pill grow to its natural label width. */
+	.activity-group-toggle {
+		max-width: none;
+	}
+
+	.activity-group-toggle > span {
+		overflow: visible;
+		text-overflow: clip;
+	}
+
 	.activity-group-body {
 		display: flex;
 		flex-direction: column;

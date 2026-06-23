@@ -91,6 +91,7 @@
 	let viewportHeight = $state(0);
 	let expandedToolOutput = $state(new Set<string>());
 	let proposeJobAutoExpanded = $state(new Set<string>());
+	let memoryCycleTick = $state(0);
 
 	$effect(() => {
 		if (!isSessionSynced) return;
@@ -355,6 +356,18 @@
 		return () => {
 			if (copyResetTimer) clearTimeout(copyResetTimer);
 		};
+	});
+
+	$effect(() => {
+		const hasMemory = threadItems.some(
+			(item) => item.type === 'memory' && !isMemoryInBuffer(item)
+		);
+		if (!hasMemory) {
+			memoryCycleTick = 0;
+			return;
+		}
+		const timer = setInterval(() => memoryCycleTick++, 5000);
+		return () => clearInterval(timer);
 	});
 
 	$effect(() => {
@@ -668,6 +681,7 @@
 	<div class="assistant-stack">
 		{#if grouped}
 			{@const maxVisible = item.id === streamingAssistantId && sessionStreaming ? 3 : 0}
+			{@const cycling = item.id === streamingAssistantId && sessionStreaming}
 			<AssistantActivityGroup
 				assistant={item}
 				assistantId={item.id}
@@ -691,6 +705,7 @@
 				{onNotifyAgent}
 				{onStartJob}
 				maxVisibleReasoning={maxVisible}
+				{cycling}
 			/>
 		{:else}
 			{#each timeline as entry (timelineEntryKey(entry))}
@@ -967,15 +982,21 @@
 							<div class="row event-row">
 								<div class="event-card memory-card">
 									<div class="event-title">
-										<Brain size={14} /><span>Memories used</span>
+										<Brain size={14} /><span>Memories used · {item.memories.length}</span>
 									</div>
-									<div class="memory-chips">
-										{#each item.memories as mem (mem.id)}
-											<span class="memory-chip" title={mem.content}
+									{#if item.memories.length > 0}
+										{#key memoryCycleTick}
+											{@const mem = item.memories[memoryCycleTick % item.memories.length]}
+											<div class="memory-chip-rotator">
+												<span
+													class="memory-chip memory-chip-cycling"
+													in:fade={{ duration: 500 }}
+													title={mem.content}
 												>{mem.kind}: {mem.content}</span
-											>
-										{/each}
-									</div>
+												>
+											</div>
+										{/key}
+									{/if}
 								</div>
 							</div>
 						{:else if item.type === 'status'}
@@ -1017,6 +1038,7 @@
 		position: absolute;
 		inset: 0;
 		overflow-y: auto;
+		overflow-x: hidden;
 		padding: 32px var(--chat-gutter) var(--thread-padding-bottom);
 		scrollbar-width: thin;
 	}
@@ -1164,6 +1186,17 @@
 	.assistant-stack :global(.tool-fold-panel) {
 		align-self: stretch;
 		width: 100%;
+		min-width: 0;
+	}
+
+	.assistant-stack :global(.activity-group) {
+		align-self: stretch;
+		width: 100%;
+		min-width: 0;
+	}
+
+	.assistant-stack :global(.activity-group > .fold-body) {
+		width: 80%;
 	}
 
 	.message-actions {
@@ -1240,6 +1273,7 @@
 	}
 
 	.event-card {
+		min-width: 0;
 		width: 100%;
 		max-width: 100%;
 		border: 1px solid var(--border-soft);
@@ -1264,24 +1298,30 @@
 		flex-shrink: 0;
 	}
 
-	.memory-chips {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-	}
-
 	.memory-chip {
+		display: block;
+		width: 100%;
 		min-width: 0;
-		max-width: 100%;
-		overflow-wrap: anywhere;
-		word-break: break-word;
-		white-space: normal;
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
 		padding: 5px 10px;
 		border-radius: 10px;
 		background: rgba(0, 102, 204, 0.08);
 		color: var(--text-main);
 		font-size: 11px;
 		line-height: 1.45;
+	}
+
+	.memory-chip-rotator {
+		display: grid;
+		min-width: 0;
+		width: 100%;
+	}
+
+	.memory-chip-cycling {
+		grid-column: 1;
+		grid-row: 1;
 	}
 
 	.error-card p {

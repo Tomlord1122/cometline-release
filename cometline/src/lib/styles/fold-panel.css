@@ -67,6 +67,8 @@
 
 /* Default expandable body. Components may override background/padding. */
 .fold-body {
+	min-width: 0;
+	overflow: hidden;
 	border: 1px solid var(--border-soft);
 	background: rgba(255, 255, 255, 0.68);
 	border-radius: 12px;

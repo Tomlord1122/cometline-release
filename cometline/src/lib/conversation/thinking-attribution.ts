@@ -276,17 +276,13 @@ export function isAssistantResponseActive(
 	);
 }
 
-/** Default thinking fold: segment 0 stays open while the response is active; later segments stay folded. */
+/** Default thinking fold: all segments start collapsed; user expands manually. */
 export function defaultThinkingExpanded(
-	segmentIndex: number,
+	_segmentIndex: number,
 	_pending: boolean | undefined,
-	assistant: AssistantItem,
-	streamingAssistantId: string | null,
-	sessionStreaming: boolean
+	_assistant: AssistantItem,
+	_streamingAssistantId: string | null,
+	_sessionStreaming: boolean
 ): boolean {
-	if (!isAssistantResponseActive(assistant, streamingAssistantId, sessionStreaming)) {
-		return false;
-	}
-	if (segmentIndex !== 0) return false;
-	return true;
+	return false;
 }
