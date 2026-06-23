@@ -1,11 +1,26 @@
 <script lang="ts">
 	import { fade, scale } from 'svelte/transition';
 	import { untrack } from 'svelte';
-	import { Check, ChevronRight, ChevronLeft, LoaderCircle, Sparkles, X } from '@lucide/svelte';
+	import { Check, ChevronRight, ChevronLeft, LoaderCircle, LogIn, RefreshCw, Sparkles, X } from '@lucide/svelte';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { shellStore } from '$lib/stores/shell.svelte';
 	import { connectionState } from '$lib/stores/runtime.svelte';
 	import { cloneProvider } from '$lib/settings/schema';
+	import SettingsButton from '$lib/components/settings/SettingsButton.svelte';
+	import {
+		buildEmbeddingDropdownOptions,
+		embeddingKeyForFields,
+		embeddingOptionKey,
+		embeddingProviderForMethod,
+		mergeEmbeddingFields,
+		savedEmbeddingFromApi,
+		type SavedEmbeddingRef
+	} from '$lib/embedding-models';
+	import {
+		defaultMemorySettings,
+		getMemorySettings,
+		type MemorySettings
+	} from '$lib/client/cometmind';
 	import type { ProviderConfig, ProviderMethod, ProviderSettings } from '$lib/types';
 
 	const METHOD_LABELS: Record<ProviderMethod, string> = {
@@ -13,7 +28,7 @@
 		anthropic: 'Anthropic',
 		'opencode-go': 'OpenCode Go',
 		codex: 'ChatGPT Codex',
-		'openai-compatible': 'OpenAI-compatible'
+		'openai-compatible': 'OpenAI Compatible'
 	};
 
 	function methodNeedsApiKey(method: ProviderMethod) {
@@ -29,12 +44,13 @@
 		);
 	}
 
-	type Step = 'provider' | 'apikey' | 'model' | 'connect';
-	const STEP_ORDER: Step[] = ['provider', 'apikey', 'model', 'connect'];
+	type Step = 'provider' | 'apikey' | 'model' | 'embedding' | 'connect';
+	const STEP_ORDER: Step[] = ['provider', 'apikey', 'model', 'embedding', 'connect'];
 	const STEP_TITLES: Record<Step, string> = {
 		provider: 'Choose a provider',
 		apikey: 'Connect your account',
 		model: 'Pick a model',
+		embedding: 'Memory embeddings (optional)',
 		connect: 'Ready to go'
 	};
 
@@ -44,6 +60,24 @@
 	let connecting = $state(false);
 	let manualModel = $state('');
 	let showApiKey = $state(false);
+
+	// Codex browser-session auth state (mirrors SettingsProvidersPanel).
+	type CodexAuthStatus = {
+		authenticated: boolean;
+		authPath: string;
+		accountID?: string;
+		error?: string;
+	};
+	let codexAuthStatus = $state<CodexAuthStatus | undefined>();
+	let checkingCodexAuth = $state(false);
+	let startingCodexLogin = $state(false);
+
+	// Memory embedding state.
+	let memorySettings = $state<MemorySettings | null>(null);
+	let memoryLoading = $state(false);
+	let memoryError = $state('');
+	let selectedEmbeddingKey = $state('');
+	let savedEmbedding = $state<SavedEmbeddingRef | undefined>();
 
 	// Draft built from current settings so the wizard edits don't leak if
 	// the user cancels.
@@ -62,11 +96,24 @@
 	let stepIndex = $derived(STEP_ORDER.indexOf(step));
 	let canAdvance = $derived.by(() => {
 		if (step === 'provider') return Boolean(selectedProvider);
-		if (step === 'apikey')
-			return Boolean(selectedProvider) && (!methodNeedsApiKey(selectedProvider.method) || selectedProvider.apiKey.trim().length > 0);
+		if (step === 'apikey') {
+			if (!selectedProvider) return false;
+			// Codex needs a signed-in browser session, not an API key.
+			if (selectedProvider.method === 'codex') {
+				return Boolean(codexAuthStatus?.authenticated);
+			}
+			return selectedProvider.apiKey.trim().length > 0;
+		}
 		if (step === 'model') return Boolean(selectedProvider) && selectedProvider.enabledModels.length > 0;
+		// Embedding step is always skippable.
+		if (step === 'embedding') return true;
 		return true;
 	});
+
+	// Embedding dropdown options derived from enabled providers.
+	let embeddingOptions = $derived(
+		buildEmbeddingDropdownOptions(draft.providers, savedEmbedding, memorySettings?.embedding)
+	);
 
 	function patchSelected(patch: Partial<ProviderConfig>) {
 		if (!selectedProvider) return;
@@ -88,12 +135,11 @@
 	function next() {
 		const idx = STEP_ORDER.indexOf(step);
 		if (idx < STEP_ORDER.length - 1) {
-			// Skip the apikey step for codex (no key needed).
 			const nextStep = STEP_ORDER[idx + 1];
-			if (nextStep === 'apikey' && selectedProvider && !methodNeedsApiKey(selectedProvider.method)) {
-				step = 'model';
-			} else {
-				step = nextStep;
+			step = nextStep;
+			// Auto-check Codex auth status when entering the apikey step for codex.
+			if (nextStep === 'apikey' && selectedProvider?.method === 'codex') {
+				void refreshCodexAuthStatus();
 			}
 		}
 	}
@@ -101,12 +147,7 @@
 	function back() {
 		const idx = STEP_ORDER.indexOf(step);
 		if (idx > 0) {
-			const prevStep = STEP_ORDER[idx - 1];
-			if (prevStep === 'apikey' && selectedProvider && !methodNeedsApiKey(selectedProvider.method)) {
-				step = 'provider';
-			} else {
-				step = prevStep;
-			}
+			step = STEP_ORDER[idx - 1];
 		}
 	}
 
@@ -139,6 +180,86 @@
 		manualModel = '';
 	}
 
+	// --- Codex browser-session auth ---
+
+	async function refreshCodexAuthStatus() {
+		if (!window.electronAPI?.getCodexAuthStatus || checkingCodexAuth) return;
+		checkingCodexAuth = true;
+		try {
+			codexAuthStatus = await window.electronAPI.getCodexAuthStatus();
+		} finally {
+			checkingCodexAuth = false;
+		}
+	}
+
+	async function startCodexLogin() {
+		if (!window.electronAPI?.startCodexLogin || startingCodexLogin) return;
+		startingCodexLogin = true;
+		try {
+			await window.electronAPI.startCodexLogin();
+			// Give the browser a moment, then refresh status.
+			setTimeout(() => void refreshCodexAuthStatus(), 1500);
+		} catch (err) {
+			codexAuthStatus = {
+				authenticated: false,
+				authPath: '',
+				error: err instanceof Error ? err.message : 'Failed to start Codex login.'
+			};
+		} finally {
+			startingCodexLogin = false;
+		}
+	}
+
+	// --- Memory embedding ---
+
+	async function loadMemorySettings() {
+		if (memoryLoading || memorySettings) return;
+		memoryLoading = true;
+		memoryError = '';
+		try {
+			const s = await getMemorySettings();
+			memorySettings = s;
+			savedEmbedding = savedEmbeddingFromApi(s.embedding);
+			selectedEmbeddingKey = embeddingKeyForFields(
+				draft.providers,
+				mergeEmbeddingFields(s.embedding, savedEmbedding),
+				savedEmbedding
+			);
+		} catch (err) {
+			memoryError = err instanceof Error ? err.message : 'Failed to load memory settings';
+			memorySettings = defaultMemorySettings();
+		} finally {
+			memoryLoading = false;
+		}
+	}
+
+	function selectEmbedding(key: string) {
+		selectedEmbeddingKey = key;
+	}
+
+	function applyEmbeddingSelection(): MemorySettings | null {
+		if (!memorySettings) return null;
+		if (!selectedEmbeddingKey) {
+			// No selection — clear embedding fields.
+			return {
+				...memorySettings,
+				embedding: { provider_id: '', provider: '', model: '', base_url: '', api_key: '' }
+			};
+		}
+		const option = embeddingOptions.find((opt) => embeddingOptionKey(opt) === selectedEmbeddingKey);
+		if (!option) return memorySettings;
+		return {
+			...memorySettings,
+			embedding: {
+				provider_id: option.providerId,
+				provider: embeddingProviderForMethod(option.method),
+				model: option.model,
+				base_url: option.baseURL,
+				api_key: option.apiKey
+			}
+		};
+	}
+
 	async function saveAndConnect() {
 		if (!selectedProvider) return;
 		// Enable the chosen provider and set it as active + default.
@@ -155,10 +276,17 @@
 			defaultModelId: selectedProvider.enabledModels[0] ?? selectedProvider.selectedModel
 		};
 
+		// Apply embedding selection (may be empty = skipped).
+		const memoryPayload = applyEmbeddingSelection();
+		const hasEmbedding = Boolean(memoryPayload?.embedding.model.trim());
+
 		saving = true;
 		saveError = '';
 		try {
-			await settingsStore.save(finalDraft, { restartCometMind: true });
+			await settingsStore.save(finalDraft, {
+				restartCometMind: true,
+				memory: hasEmbedding ? memoryPayload ?? undefined : undefined
+			});
 			draft = JSON.parse(JSON.stringify(settingsStore.settings)) as ProviderSettings;
 			// Poll until the sidecar is healthy after restart.
 			connecting = true;
@@ -190,6 +318,13 @@
 	function skip() {
 		shellStore.closeSetup();
 	}
+
+	// Load memory settings when the embedding step is entered.
+	$effect(() => {
+		if (step === 'embedding') {
+			void loadMemorySettings();
+		}
+	});
 
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Escape') {
@@ -241,8 +376,40 @@
 						</button>
 					{/each}
 				</div>
-			{:else if step === 'apikey'}
-				{#if selectedProvider}
+		{:else if step === 'apikey'}
+			{#if selectedProvider}
+				{#if selectedProvider.method === 'codex'}
+					<p class="step-intro">
+						Sign in with your ChatGPT Plus/Pro browser session. Cometline stores a
+						local Codex-compatible session at <code>~/.codex/auth.json</code>. No API key
+						or Codex CLI install is required.
+					</p>
+					{#if codexAuthStatus}
+						<p class="codex-status" class:ok={codexAuthStatus.authenticated}>
+							{codexAuthStatus.authenticated
+								? 'Signed in with ChatGPT browser session.'
+								: (codexAuthStatus.error ?? 'Not signed in.')}
+						</p>
+					{/if}
+					<div class="inline-actions">
+						<SettingsButton
+							variant="primary"
+							onclick={startCodexLogin}
+							disabled={startingCodexLogin || !window.electronAPI?.startCodexLogin}
+						>
+							{#if startingCodexLogin}<LoaderCircle size={14} class="spin" />{:else}<LogIn size={14} />{/if}
+							Sign in with ChatGPT
+						</SettingsButton>
+						<SettingsButton
+							variant="secondary"
+							onclick={refreshCodexAuthStatus}
+							disabled={checkingCodexAuth || !window.electronAPI?.getCodexAuthStatus}
+						>
+							{#if checkingCodexAuth}<LoaderCircle size={14} class="spin" />{:else}<RefreshCw size={14} />{/if}
+							Check session
+						</SettingsButton>
+					</div>
+				{:else}
 					<p class="step-intro">
 						Enter your API key for {selectedProvider.name || METHOD_LABELS[selectedProvider.method]}.
 						It's stored locally and never sent anywhere except the provider.
@@ -253,9 +420,8 @@
 							<input
 								type={showApiKey ? 'text' : 'password'}
 								class="field-input"
-								placeholder={methodNeedsApiKey(selectedProvider.method) ? 'Paste your API key' : 'Not required'}
+								placeholder="Paste your API key"
 								value={selectedProvider.apiKey}
-								disabled={!methodNeedsApiKey(selectedProvider.method)}
 								oninput={(e) => patchSelected({ apiKey: e.currentTarget.value })}
 							/>
 							<button
@@ -277,6 +443,7 @@
 						/>
 					</label>
 				{/if}
+			{/if}
 			{:else if step === 'model'}
 				{#if selectedProvider}
 					<p class="step-intro">
@@ -330,6 +497,34 @@
 						</button>
 					</div>
 				{/if}
+			{:else if step === 'embedding'}
+				<p class="step-intro">
+					Cometline can store and retrieve memories across sessions using an embedding model.
+					Pick one from your enabled providers, or skip this step — you can configure it later
+					in Settings → Memory.
+				</p>
+				{#if memoryLoading}
+					<p class="embedding-loading"><LoaderCircle size={14} class="spin" /> Loading memory settings…</p>
+				{:else if memoryError}
+					<p class="wizard-error">{memoryError}</p>
+					<p class="step-intro">You can skip this step and configure memory later in Settings.</p>
+				{:else if embeddingOptions.length === 0}
+					<p class="step-intro">
+						No embedding models are available from your enabled providers. To use memory,
+						enable a provider with an embedding model (e.g. OpenAI's
+						<code>text-embedding-3-small</code>) in Settings later.
+					</p>
+				{:else}
+					<label class="field">
+						<span class="field-label">Embedding model</span>
+						<select class="field-input" value={selectedEmbeddingKey} onchange={(e) => selectEmbedding(e.currentTarget.value)}>
+							<option value="">— Skip (configure later) —</option>
+							{#each embeddingOptions as opt (embeddingOptionKey(opt))}
+								<option value={embeddingOptionKey(opt)}>{opt.providerName} · {opt.model}</option>
+							{/each}
+						</select>
+					</label>
+				{/if}
 			{:else if step === 'connect'}
 				<p class="step-intro">
 					{selectedProvider?.name || 'Your provider'} is ready to go. Save your settings and
@@ -346,7 +541,11 @@
 					</div>
 					<div class="review-row">
 						<span>API key</span>
-						<strong>{methodNeedsApiKey(selectedProvider?.method ?? 'anthropic') ? (selectedProvider?.apiKey ? 'Set' : 'Missing') : 'Not required'}</strong>
+						<strong>{selectedProvider?.method === 'codex' ? (codexAuthStatus?.authenticated ? 'ChatGPT session' : 'Not signed in') : (selectedProvider?.apiKey ? 'Set' : 'Missing')}</strong>
+					</div>
+					<div class="review-row">
+						<span>Embedding</span>
+						<strong>{selectedEmbeddingKey ? embeddingOptions.find((o) => embeddingOptionKey(o) === selectedEmbeddingKey)?.model ?? '—' : 'Skipped'}</strong>
 					</div>
 				</div>
 				{#if saveError}
@@ -356,24 +555,24 @@
 		</div>
 
 		<footer>
-			<button class="wizard-btn secondary" onclick={skip}>Skip setup</button>
+			<SettingsButton variant="secondary" onclick={skip}>Skip setup</SettingsButton>
 			<div class="footer-right">
 				{#if stepIndex > 0}
-					<button class="wizard-btn secondary" onclick={back}>
+					<SettingsButton variant="secondary" onclick={back}>
 						<ChevronLeft size={14} />
 						Back
-					</button>
+					</SettingsButton>
 				{/if}
 				{#if step !== 'connect'}
-					<button class="wizard-btn primary" onclick={next} disabled={!canAdvance}>
+					<SettingsButton variant="primary" onclick={next} disabled={!canAdvance}>
 						Next
 						<ChevronRight size={14} />
-					</button>
+					</SettingsButton>
 				{:else}
-					<button class="wizard-btn primary" onclick={saveAndConnect} disabled={saving || connecting}>
+					<SettingsButton variant="primary" onclick={saveAndConnect} disabled={saving || connecting}>
 						{#if saving || connecting}<LoaderCircle size={14} class="spin" />{/if}
 						{connecting ? 'Connecting…' : saving ? 'Saving…' : 'Save & connect'}
-					</button>
+					</SettingsButton>
 				{/if}
 			</div>
 		</footer>
@@ -695,6 +894,30 @@
 		color: #b42318;
 	}
 
+	.codex-status {
+		margin: 0 0 14px;
+		font-size: 13px;
+		color: #b42318;
+	}
+
+	.codex-status.ok {
+		color: #067647;
+	}
+
+	.inline-actions {
+		display: flex;
+		gap: 10px;
+		flex-wrap: wrap;
+	}
+
+	.embedding-loading {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		font-size: 13px;
+		color: var(--text-muted);
+	}
+
 	footer {
 		display: flex;
 		align-items: center;
@@ -707,39 +930,6 @@
 	.footer-right {
 		display: flex;
 		gap: 8px;
-	}
-
-	.wizard-btn {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		padding: 8px 14px;
-		border: 1px solid var(--border-soft);
-		border-radius: 8px;
-		font: inherit;
-		font-size: 13px;
-		font-weight: 600;
-		cursor: pointer;
-	}
-
-	.wizard-btn.secondary {
-		background: var(--panel-bg, #fff);
-		color: var(--text-main);
-	}
-
-	.wizard-btn.secondary:hover {
-		border-color: rgba(15, 23, 42, 0.18);
-	}
-
-	.wizard-btn.primary {
-		background: var(--accent);
-		color: white;
-		border-color: transparent;
-	}
-
-	.wizard-btn.primary:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
 	}
 
 	:global(.spin) {
