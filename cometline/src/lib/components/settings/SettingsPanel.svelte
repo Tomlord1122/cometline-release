@@ -193,8 +193,13 @@
 		settingsStore.isSaving ||
 			settingsStore.isFetchingModels ||
 			!hasPendingChanges ||
-			(activeSection === 'models' && enabledModelCount === 0) ||
 			(activeSection === 'memory' && memoryPanel?.isBusy?.())
+	);
+
+	let modelsSectionWarning = $derived(
+		activeSection === 'models' && hasPendingChanges && enabledModelCount === 0
+			? 'Enable at least one model to send messages.'
+			: ''
 	);
 
 	$effect(() => {
@@ -1126,9 +1131,10 @@
 				{#if settingsStore.isSaving}
 					Saving changes…
 				{:else}
-					{#if hasPendingChanges}<strong>Unsaved changes ·</strong>{/if}
-					Save applies all tabs. Close without saving discards pending edits.
-				{/if}
+				{#if hasPendingChanges}<strong>Unsaved changes ·</strong>{/if}
+				Save applies all tabs. Close without saving discards pending edits.
+				{#if modelsSectionWarning}<span class="settings-footer-warning">{modelsSectionWarning}</span>{/if}
+			{/if}
 			</p>
 			<SettingsButton variant="secondary" onclick={discardSettings}>Discard</SettingsButton>
 			<SettingsButton variant="primary" onclick={save} disabled={saveDisabled}>
@@ -1204,6 +1210,13 @@
 	footer p,
 	.message {
 		margin: 0;
+	}
+
+	.settings-footer-warning {
+		display: block;
+		margin-top: 4px;
+		color: #b42318;
+		font-size: 12px;
 	}
 
 	header h2 {
