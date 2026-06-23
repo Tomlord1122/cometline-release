@@ -3,19 +3,17 @@
 	import SettingsButton from './SettingsButton.svelte';
 	import SettingsField from './SettingsField.svelte';
 	import {
-		formatIdList,
-		parseIdList,
 		type CometMindMCPSettings,
 		type MCPServerConfig,
 		type MCPTransport
 	} from '$lib/cometmind-settings';
 	import { mergeImportedMcpServers, parseCursorMcpJson } from '$lib/settings/cursor-mcp-import';
+	import { normalizeServerConnection } from '$lib/settings/mcp-url';
 	import {
 		listMcpServers,
 		listMcpTools,
 		reconnectMcpServer,
 		startMcpOAuth,
-		testMcpServer,
 		type McpServerStatus,
 		type McpToolInfo
 	} from '$lib/client/cometmind';
@@ -44,9 +42,14 @@
 	let envTexts = $state<Record<string, string>>({});
 	let headerTexts = $state<Record<string, string>>({});
 	let argsTexts = $state<Record<string, string>>({});
-	let allowedToolsTexts = $state<Record<string, string>>({});
 	let expandedServerId = $state<string | null>(null);
-	let advancedOpen = $state<Record<string, boolean>>({});
+	/**
+	 * Tools we have ever seen for a server during this Settings session, keyed by
+	 * server id. Seeded from discovered tools (toolPreview) and each server's
+	 * saved allow-list so toggles stay visible even after a tool is disallowed
+	 * (the backend stops reporting disallowed tools). UI-only; not persisted.
+	 */
+	let knownToolsByServer = $state<Record<string, { name: string; description: string }[]>>({});
 
 	function setTextField(map: Record<string, string>, id: string, value: string) {
 		return { ...map, [id]: value };
@@ -56,17 +59,14 @@
 		const nextEnv: Record<string, string> = {};
 		const nextHeaders: Record<string, string> = {};
 		const nextArgs: Record<string, string> = {};
-		const nextAllowed: Record<string, string> = {};
 		for (const server of mcp.servers ?? []) {
 			nextEnv[server.id] = formatEnv(server.env);
 			nextHeaders[server.id] = formatEnv(server.headers);
 			nextArgs[server.id] = (server.args ?? []).join(' ');
-			nextAllowed[server.id] = formatIdList(server.allowedTools ?? []);
 		}
 		envTexts = nextEnv;
 		headerTexts = nextHeaders;
 		argsTexts = nextArgs;
-		allowedToolsTexts = nextAllowed;
 	}
 
 	$effect(() => {
@@ -172,16 +172,95 @@
 		expandedServerId = expandedServerId === serverId ? null : serverId;
 	}
 
-	function toggleAdvanced(serverId: string) {
-		advancedOpen = { ...advancedOpen, [serverId]: !advancedOpen[serverId] };
-	}
-
 	function statusFor(serverId: string): McpServerStatus | undefined {
 		return serverStatuses.find((item) => item.id === serverId);
 	}
 
 	function toolsForServer(serverId: string): McpToolInfo[] {
 		return (toolPreview ?? []).filter((tool) => tool.server_id === serverId);
+	}
+
+	/**
+	 * Pure reader: merge the remembered tools with the server's saved allow-list
+	 * and return the sorted list to render as toggles. Remembering happens in
+	 * {@link rememberDiscoveredTools}; this never mutates state so it is safe to
+	 * call from the template.
+	 */
+	function knownToolsFor(server: MCPServerConfig): { name: string; description: string }[] {
+		const byName = new Map<string, string>();
+		for (const existing of knownToolsByServer[server.id] ?? []) {
+			byName.set(existing.name, existing.description);
+		}
+		for (const name of server.allowedTools ?? []) {
+			const clean = name.trim();
+			if (clean && !byName.has(clean)) byName.set(clean, '');
+		}
+		return [...byName.entries()]
+			.map(([name, description]) => ({ name, description }))
+			.sort((a, b) => a.name.localeCompare(b.name));
+	}
+
+	/**
+	 * Fold the currently discovered tools (toolPreview) into the session-scoped
+	 * known-tools memory. Called after the tool list refreshes. Disallowed tools
+	 * drop out of the backend's discovered list, so once seen we keep them.
+	 */
+	function rememberDiscoveredTools() {
+		let changed = false;
+		const next = { ...knownToolsByServer };
+		for (const server of mcp.servers ?? []) {
+			const byName = new Map<string, string>();
+			for (const existing of next[server.id] ?? []) byName.set(existing.name, existing.description);
+			for (const tool of toolsForServer(server.id)) {
+				const name = tool.tool_name?.trim();
+				if (!name) continue;
+				byName.set(name, tool.description || byName.get(name) || '');
+			}
+			for (const name of server.allowedTools ?? []) {
+				const clean = name.trim();
+				if (clean && !byName.has(clean)) byName.set(clean, '');
+			}
+			const merged = [...byName.entries()]
+				.map(([name, description]) => ({ name, description }))
+				.sort((a, b) => a.name.localeCompare(b.name));
+			const prev = next[server.id] ?? [];
+			if (prev.length !== merged.length || prev.some((t, i) => t.name !== merged[i]?.name)) {
+				next[server.id] = merged;
+				changed = true;
+			}
+		}
+		if (changed) knownToolsByServer = next;
+	}
+
+	/** A tool is allowed when the allow-list is empty (expose all) or contains it. */
+	function isToolAllowed(server: MCPServerConfig, toolName: string): boolean {
+		const allow = server.allowedTools ?? [];
+		return allow.length === 0 || allow.includes(toolName);
+	}
+
+	/**
+	 * Toggle a single tool on/off. An empty allow-list means "all allowed", so the
+	 * first time a user turns one tool off we materialize the full known list minus
+	 * that tool. If every known tool ends up enabled again, collapse back to an
+	 * empty list (the "expose everything" default, including tools discovered later).
+	 */
+	function toggleTool(serverId: string, toolName: string) {
+		const server = mcp.servers.find((item) => item.id === serverId);
+		if (!server) return;
+		const known = (knownToolsByServer[serverId] ?? []).map((tool) => tool.name);
+		const current = server.allowedTools ?? [];
+		const currentlyAllowed = current.length === 0 ? new Set(known) : new Set(current);
+
+		if (currentlyAllowed.has(toolName)) {
+			currentlyAllowed.delete(toolName);
+		} else {
+			currentlyAllowed.add(toolName);
+		}
+
+		const allEnabled =
+			known.length > 0 && known.every((name) => currentlyAllowed.has(name));
+		const next = allEnabled ? [] : known.filter((name) => currentlyAllowed.has(name));
+		updateServer(serverId, { allowedTools: next });
 	}
 
 	function statusLabel(status: McpServerStatus | undefined, server: MCPServerConfig): string {
@@ -219,6 +298,7 @@
 			const [servers, tools] = await Promise.all([listMcpServers(), listMcpTools()]);
 			serverStatuses = servers ?? [];
 			toolPreview = tools ?? [];
+			rememberDiscoveredTools();
 			const oauthEntries = await Promise.all(
 				mcp.servers.map(async (server) => {
 					const status = await window.electronAPI?.getMcpOAuthStatus?.(server.id);
@@ -228,21 +308,6 @@
 			oauthStatus = Object.fromEntries(oauthEntries);
 		} catch (err) {
 			mcpStatus = err instanceof Error ? err.message : 'Failed to load MCP status';
-		} finally {
-			mcpBusy = false;
-		}
-	}
-
-	async function onTestServer(serverId: string) {
-		mcpBusy = true;
-		mcpStatus = '';
-		try {
-			const result = await testMcpServer(serverId);
-			mcpStatus = result.ok
-				? `Connected: ${result.tool_count} tool(s) discovered. Save settings to apply permanently.`
-				: result.error || 'Connection test failed';
-		} catch (err) {
-			mcpStatus = err instanceof Error ? err.message : 'Connection test failed';
 		} finally {
 			mcpBusy = false;
 		}
@@ -295,7 +360,6 @@
 					.filter(Boolean),
 				env: parseEnv(envTexts[server.id] ?? ''),
 				headers: parseEnv(headerTexts[server.id] ?? ''),
-				allowedTools: parseIdList(allowedToolsTexts[server.id] ?? ''),
 				oauth: server.oauth
 			}))
 		});
@@ -308,9 +372,29 @@
 				.map((part) => part.trim())
 				.filter(Boolean),
 			env: parseEnv(envTexts[serverId] ?? ''),
-			headers: parseEnv(headerTexts[serverId] ?? ''),
-			allowedTools: parseIdList(allowedToolsTexts[serverId] ?? '')
+			headers: parseEnv(headerTexts[serverId] ?? '')
 		});
+	}
+
+	/**
+	 * For HTTP/SSE servers, fold a misplaced API-key header into the URL query
+	 * string. Some servers (e.g. Typefully) only accept the key as a query
+	 * parameter or `Authorization: Bearer`, and silently reject a custom header
+	 * named after the key with HTTP 400 ("Bad Request" on initialize).
+	 */
+	function normalizeConnection(serverId: string) {
+		const current = mcp.servers.find((server) => server.id === serverId);
+		if (!current) return;
+		const normalized = normalizeServerConnection(current);
+		if (normalized === current) return;
+		updateServer(serverId, { url: normalized.url, headers: normalized.headers });
+		headerTexts = setTextField(headerTexts, serverId, formatEnv(normalized.headers));
+		const moved = Object.keys(current.headers ?? {}).filter(
+			(name) => !(name in (normalized.headers ?? {}))
+		);
+		if (moved.length > 0) {
+			mcpStatus = `Moved ${moved.join(', ')} into the server URL (this server authenticates via the URL).`;
+		}
 	}
 </script>
 
@@ -421,7 +505,6 @@
 					{/if}
 
 					{#if expanded}
-						{@const serverTools = toolsForServer(server.id)}
 						<div class="mcp-server-editor">
 							<SettingsField label="Display name">
 								<input
@@ -472,22 +555,23 @@
 									/>
 								</SettingsField>
 							{:else}
-								<SettingsField label="Server URL">
+								<SettingsField
+									label="Server URL"
+									note="Paste the full URL. If the server authenticates with a key in the URL (e.g. ?API_KEY=…), keep it here — not in a header."
+								>
 									<input
 										type="text"
 										value={server.url ?? ''}
 										oninput={(e) => updateServer(server.id, { url: e.currentTarget.value })}
-										placeholder="https://example.com/mcp"
+										onblur={() => normalizeConnection(server.id)}
+										placeholder="https://example.com/mcp?API_KEY=…"
 										spellcheck="false"
 									/>
 								</SettingsField>
 							{/if}
 
-							<div class="editor-actions">
-								<SettingsButton variant="primary" disabled={mcpBusy} onclick={() => onTestServer(server.id)}>
-									Test connection
-								</SettingsButton>
-								{#if statusLabel(status, server) === 'error' || statusLabel(status, server) === 'disconnected'}
+							{#if statusLabel(status, server) === 'error' || statusLabel(status, server) === 'disconnected'}
+								<div class="editor-actions">
 									<SettingsButton
 										variant="secondary"
 										disabled={mcpBusy}
@@ -495,123 +579,106 @@
 									>
 										Reconnect
 									</SettingsButton>
-								{/if}
-								<SettingsButton variant="danger" onclick={() => removeServer(server.id)}>
-									Remove
-								</SettingsButton>
-							</div>
+								</div>
+							{/if}
 
 							{#if status?.last_error}
 								<p class="settings-field-hint error">{status.last_error}</p>
 							{/if}
 
-							{#if serverTools.length > 0}
-								<div class="server-tools">
-									<div class="server-tools-header">
-										<span>Discovered tools</span>
-										<strong>{serverTools.length}</strong>
+							{#if server.transport === 'stdio'}
+								<SettingsField label="Environment variables" note="One KEY=value per line.">
+									<textarea
+										value={envTexts[server.id] ?? ''}
+										oninput={(e) => {
+											envTexts = setTextField(envTexts, server.id, e.currentTarget.value);
+										}}
+										onchange={() => syncServerLists(server.id)}
+										onblur={() => syncServerLists(server.id)}
+										rows="3"
+										spellcheck="false"
+									></textarea>
+								</SettingsField>
+							{:else}
+								<SettingsField
+									label="Headers"
+									note="One KEY=value per line. Use Authorization=Bearer … for token auth. A key whose name matches the URL's query parameter is moved into the URL automatically."
+								>
+									<textarea
+										value={headerTexts[server.id] ?? ''}
+										oninput={(e) => {
+											headerTexts = setTextField(headerTexts, server.id, e.currentTarget.value);
+										}}
+										onchange={() => syncServerLists(server.id)}
+										onblur={() => {
+											syncServerLists(server.id);
+											normalizeConnection(server.id);
+										}}
+										rows="3"
+										spellcheck="false"
+									></textarea>
+								</SettingsField>
+
+								<div class="oauth-block">
+									<p class="advanced-label">OAuth</p>
+									<p class="settings-field-hint">
+										For servers that require sign-in (e.g. Atlassian), click Connect to authorize
+										in your browser. Cometline handles discovery and registration automatically —
+										no client ID or URLs needed. Tokens are stored in
+										<code>~/.cometmind/mcp-oauth/</code>, not in settings JSON.
+									</p>
+									<div class="oauth-actions">
+										<SettingsButton
+											variant="secondary"
+											disabled={mcpBusy}
+											onclick={() => onConnectOAuth(server)}
+										>
+											Connect with OAuth
+										</SettingsButton>
+										<span class="oauth-status">
+											{oauthStatus[server.id] ? 'OAuth token saved' : 'Not connected'}
+										</span>
 									</div>
-									{#each serverTools as tool (tool.registry_name)}
-										<div class="tool-row">
-											<strong>{tool.tool_name}</strong>
-											<p>{tool.description || tool.registry_name}</p>
-										</div>
-									{/each}
 								</div>
 							{/if}
 
-							<button
-								type="button"
-								class="advanced-toggle"
-								aria-expanded={advancedOpen[server.id] ?? false}
-								onclick={() => toggleAdvanced(server.id)}
+							<SettingsField
+								label="Allowed tools"
+								note="Turn tools off to hide them from the agent. All on (the default) exposes every tool."
 							>
-								{#if advancedOpen[server.id]}
-									<ChevronDown size={14} strokeWidth={2} />
-								{:else}
-									<ChevronRight size={14} strokeWidth={2} />
-								{/if}
-								Advanced settings
-							</button>
-
-							{#if advancedOpen[server.id]}
-								<div class="advanced-panel">
-									<SettingsField label="Server ID" note="Used in tool names like mcp_{server.id}_tool_name.">
-										<input type="text" value={server.id} readonly spellcheck="false" />
-									</SettingsField>
-
-									{#if server.transport === 'stdio'}
-										<SettingsField label="Environment variables" note="One KEY=value per line.">
-											<textarea
-												value={envTexts[server.id] ?? ''}
-												oninput={(e) => {
-													envTexts = setTextField(envTexts, server.id, e.currentTarget.value);
-												}}
-												onchange={() => syncServerLists(server.id)}
-												onblur={() => syncServerLists(server.id)}
-												rows="3"
-												spellcheck="false"
-											></textarea>
-										</SettingsField>
-									{:else}
-										<SettingsField label="Headers" note="One KEY=value per line. Use for API keys or Bearer tokens.">
-											<textarea
-												value={headerTexts[server.id] ?? ''}
-												oninput={(e) => {
-													headerTexts = setTextField(headerTexts, server.id, e.currentTarget.value);
-												}}
-												onchange={() => syncServerLists(server.id)}
-												onblur={() => syncServerLists(server.id)}
-												rows="3"
-												spellcheck="false"
-											></textarea>
-										</SettingsField>
-
-										<div class="oauth-block">
-											<p class="advanced-label">OAuth</p>
-											<p class="settings-field-hint">
-												For servers that require sign-in (e.g. Atlassian), click Connect to
-												authorize in your browser. Cometline handles discovery and registration
-												automatically — no client ID or URLs needed. Tokens are stored in
-												<code>~/.cometmind/mcp-oauth/</code>, not in settings JSON.
-											</p>
-											<div class="oauth-actions">
-												<SettingsButton
-													variant="secondary"
-													disabled={mcpBusy}
-													onclick={() => onConnectOAuth(server)}
-												>
-													Connect with OAuth
-												</SettingsButton>
-												<span class="oauth-status">
-													{oauthStatus[server.id] ? 'OAuth token saved' : 'Not connected'}
+								{@const knownTools = knownToolsFor(server)}
+								{#if knownTools.length > 0}
+									<div class="tool-toggles">
+										{#each knownTools as tool (tool.name)}
+											<button
+												type="button"
+												class="tool-toggle"
+												role="switch"
+												aria-checked={isToolAllowed(server, tool.name)}
+												onclick={() => toggleTool(server.id, tool.name)}
+											>
+												<input
+													type="checkbox"
+													tabindex="-1"
+													checked={isToolAllowed(server, tool.name)}
+													onclick={(e) => e.preventDefault()}
+												/>
+												<span class="tool-toggle-text">
+													<strong>{tool.name}</strong>
+													{#if tool.description}
+														<span class="tool-toggle-desc">{tool.description}</span>
+													{/if}
 												</span>
-											</div>
-										</div>
-									{/if}
-
-									<SettingsField
-										label="Allowed tools"
-										note="Optional filter. Leave empty to expose every tool from this server."
-									>
-										<textarea
-											value={allowedToolsTexts[server.id] ?? ''}
-											oninput={(e) => {
-												allowedToolsTexts = setTextField(
-													allowedToolsTexts,
-													server.id,
-													e.currentTarget.value
-												);
-											}}
-											onchange={() => syncServerLists(server.id)}
-											onblur={() => syncServerLists(server.id)}
-											rows="2"
-											placeholder="tool_one&#10;tool_two"
-											spellcheck="false"
-										></textarea>
-									</SettingsField>
-								</div>
-							{/if}
+											</button>
+										{/each}
+									</div>
+								{:else}
+									<p class="settings-field-hint">
+										No tools discovered yet. Save settings, then use Test connection to load this
+										server's tools — they'll appear here as toggles.
+									</p>
+								{/if}
+							</SettingsField>
 						</div>
 					{/if}
 				</div>
@@ -805,69 +872,60 @@
 		color: #b42318;
 	}
 
-	.server-tools {
+	.tool-toggles {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
 		border: 1px solid rgba(0, 0, 0, 0.08);
 		border-radius: 10px;
-		overflow: auto;
-		max-height: 180px;
+		overflow: hidden;
 	}
 
-	.server-tools-header {
+	.tool-toggle {
 		display: flex;
-		justify-content: space-between;
-		padding: 7px 10px;
-		border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-		font-size: 11px;
-		font-weight: 650;
-		background: rgba(250, 248, 244, 0.9);
-	}
-
-	.tool-row {
-		padding: 7px 10px;
+		align-items: flex-start;
+		gap: 10px;
+		width: 100%;
+		margin: 0;
+		padding: 8px 10px;
+		border: 0;
 		border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-	}
-
-	.tool-row:last-child {
-		border-bottom: 0;
-	}
-
-	.tool-row strong {
-		display: block;
-		font-size: 12px;
-	}
-
-	.tool-row p {
-		margin: 2px 0 0;
-		font-size: 11px;
-		color: var(--text-muted);
-	}
-
-	.advanced-toggle {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		padding: 0;
-		border: none;
 		background: transparent;
+		text-align: left;
 		font: inherit;
-		font-size: 12px;
-		font-weight: 600;
-		color: var(--text-muted);
+		color: inherit;
 		cursor: pointer;
 	}
 
-	.advanced-toggle:hover {
-		color: var(--text-main);
+	.tool-toggle:last-child {
+		border-bottom: 0;
 	}
 
-	.advanced-panel {
+	.tool-toggle:hover {
+		background: rgba(0, 0, 0, 0.03);
+	}
+
+	.tool-toggle input {
+		flex: 0 0 auto;
+		width: 14px;
+		height: 14px;
+		margin: 2px 0 0;
+		pointer-events: none;
+	}
+
+	.tool-toggle-text {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
-		padding: 12px;
-		border: 1px dashed rgba(0, 0, 0, 0.1);
-		border-radius: 10px;
-		background: rgba(255, 255, 255, 0.5);
+		gap: 2px;
+	}
+
+	.tool-toggle-text strong {
+		font-size: 12px;
+	}
+
+	.tool-toggle-desc {
+		font-size: 11px;
+		color: var(--text-muted);
 	}
 
 	.advanced-label {
