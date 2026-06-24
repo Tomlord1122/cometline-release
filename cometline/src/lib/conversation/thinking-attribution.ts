@@ -237,6 +237,21 @@ export function buildAssistantTimeline(
 	return timeline;
 }
 
+/** Nested activity-group rows stay closed until a segment/tool/subagent settles. */
+export function isTimelineEntryToggleDisabled(entry: TimelineEntry): boolean {
+	if (entry.kind === 'reasoning') return entry.pending === true;
+	if (entry.kind === 'tool') return entry.tool.pending === true;
+	if (entry.kind === 'subagent') {
+		const subagent = entry.subagent;
+		return (
+			subagent.pending === true ||
+			subagent.status === 'running' ||
+			subagent.status === 'pending'
+		);
+	}
+	return false;
+}
+
 /** Collapse pre-response timeline into one parent block once activity grows or final text exists. */
 export function shouldGroupAssistantTimeline(
 	assistant: AssistantItem,

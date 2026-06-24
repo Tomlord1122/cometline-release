@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { fade, slide } from 'svelte/transition';
-	import { flip } from 'svelte/animate';
+	import { cubicOut } from 'svelte/easing';
 	import {
 		Brain,
 		ChevronDown,
@@ -17,12 +17,11 @@
 	import SubagentPanel from '$lib/components/chat/SubagentPanel.svelte';
 	import type { ChatItem } from '$lib/stores/chat.svelte';
 	import type { TimelineEntry, InjectedMemory } from '$lib/conversation/thinking-attribution';
+	import { isTimelineEntryToggleDisabled } from '$lib/conversation/thinking-attribution';
 	import { subagentProgressLabel } from '$lib/conversation/subagent-display';
 
 	import type { ChatTurnPayload } from '$lib/actions/start-chat';
 	import type { JobResource } from '$lib/client/cometmind';
-
-	const FOLD_IN = { duration: 180 };
 
 	let {
 		assistant,
@@ -107,7 +106,70 @@
 	function segmentKey(entry: Extract<TimelineEntry, { kind: 'reasoning' }>) {
 		return `${assistantId}-seg-${entry.segmentIndex}`;
 	}
+
+	const CHILD_FADE = { duration: 500 };
+	const CHILD_SLIDE_IN = { duration: 350, easing: cubicOut };
+	const CHILD_SLIDE_OUT = { duration: 280, easing: cubicOut };
+
+	function timelineChildTransition(
+		node: Element,
+		{ memory, animate }: { memory: boolean; animate: boolean },
+		options: { direction: 'in' | 'out' | 'both' }
+	) {
+		if (!animate) {
+			return { duration: 0 };
+		}
+		if (options.direction === 'out') {
+			return slide(node, CHILD_SLIDE_OUT);
+		}
+		return memory ? fade(node, CHILD_FADE) : slide(node, CHILD_SLIDE_IN);
+	}
 </script>
+
+{#snippet timelineChild(entry: TimelineEntry)}
+	{@const toggleDisabled = isTimelineEntryToggleDisabled(entry)}
+	{#if entry.kind === 'reasoning'}
+		{@const key = segmentKey(entry)}
+		<ThinkingBlock
+			text={entry.text}
+			pending={entry.pending}
+			expanded={thinkingExpanded(assistant, key, entry.segmentIndex, entry.pending)}
+			showSpinner={thinkingActive(entry.pending) && showThinkingSpinner}
+			nested={true}
+			{toggleDisabled}
+			onToggle={() => toggleThinking(assistant, key, entry.segmentIndex, entry.pending)}
+		/>
+	{:else if entry.kind === 'memory'}
+		{@const memoryKey = `${assistantId}-memory`}
+		<MemoryCard
+			memories={entry.memories}
+			expanded={memoryInThinkingExpanded(memoryKey)}
+			nested={true}
+			onToggle={() => toggleMemoryInThinking(memoryKey)}
+			{cycling}
+		/>
+	{:else if entry.kind === 'tool'}
+		<ToolFoldPanel
+			item={entry.tool}
+			label={toolFoldLabel(entry.tool)}
+			expanded={toolOutputExpanded(entry.tool)}
+			nested={true}
+			{toggleDisabled}
+			onToggle={() => toggleToolOutput(entry.tool.id)}
+			{sessionId}
+			{onNotifyAgent}
+			{onStartJob}
+		/>
+	{:else}
+		<SubagentPanel
+			item={entry.subagent}
+			expanded={subagentExpanded(entry.subagent.id)}
+			nested={true}
+			{toggleDisabled}
+			onToggle={() => toggleSubagent(entry.subagent.id)}
+		/>
+	{/if}
+{/snippet}
 
 {#if firstEntry}
 	<div class="fold-panel activity-group">
@@ -147,7 +209,7 @@
 			<ChevronDown size={13} class={parentExpanded ? 'expanded' : ''} />
 		</button>
 		{#if parentExpanded}
-			<div class="fold-body activity-group-body scrollbar-none" transition:slide={FOLD_IN}>
+			<div class="fold-body activity-group-body scrollbar-none">
 			{#if firstEntry.kind === 'reasoning'}
 				{@const key = segmentKey(firstEntry)}
 				<ThinkingBlock
@@ -156,6 +218,7 @@
 					expanded={thinkingExpanded(assistant, key, firstEntry.segmentIndex, firstEntry.pending)}
 					showSpinner={thinkingActive(firstEntry.pending) && showThinkingSpinner}
 					nested={true}
+					toggleDisabled={isTimelineEntryToggleDisabled(firstEntry)}
 					onToggle={() =>
 						toggleThinking(
 							assistant,
@@ -179,6 +242,7 @@
 						label={toolFoldLabel(firstEntry.tool)}
 						expanded={toolOutputExpanded(firstEntry.tool)}
 						nested={true}
+						toggleDisabled={isTimelineEntryToggleDisabled(firstEntry)}
 						onToggle={() => toggleToolOutput(firstEntry.tool.id)}
 						{sessionId}
 						{onNotifyAgent}
@@ -189,64 +253,23 @@
 						item={firstEntry.subagent}
 						expanded={subagentExpanded(firstEntry.subagent.id)}
 						nested={true}
+						toggleDisabled={isTimelineEntryToggleDisabled(firstEntry)}
 						onToggle={() => toggleSubagent(firstEntry.subagent.id)}
 					/>
 				{/if}
 				{#each visibleChildren as entry (timelineEntryKey(entry))}
 					<div
 						class="timeline-child"
-					in:fade={{ duration: 500 }}
-					out:fade={{ duration: 400 }}
-					animate:flip={{ duration: 400 }}
+						transition:timelineChildTransition={{
+							memory: entry.kind === 'memory',
+							animate: slidingWindow
+						}}
 					>
-						{#if entry.kind === 'reasoning'}
-							{@const key = segmentKey(entry)}
-							<ThinkingBlock
-								text={entry.text}
-								pending={entry.pending}
-								expanded={thinkingExpanded(
-									assistant,
-									key,
-									entry.segmentIndex,
-									entry.pending
-								)}
-								showSpinner={thinkingActive(entry.pending) && showThinkingSpinner}
-								nested={true}
-								onToggle={() =>
-									toggleThinking(assistant, key, entry.segmentIndex, entry.pending)}
-							/>
-						{:else if entry.kind === 'memory'}
-							{@const memoryKey = `${assistantId}-memory`}
-							<MemoryCard
-								memories={entry.memories}
-								expanded={memoryInThinkingExpanded(memoryKey)}
-								nested={true}
-								onToggle={() => toggleMemoryInThinking(memoryKey)}
-								{cycling}
-							/>
-						{:else if entry.kind === 'tool'}
-							<ToolFoldPanel
-								item={entry.tool}
-								label={toolFoldLabel(entry.tool)}
-								expanded={toolOutputExpanded(entry.tool)}
-								nested={true}
-								onToggle={() => toggleToolOutput(entry.tool.id)}
-								{sessionId}
-								{onNotifyAgent}
-								{onStartJob}
-							/>
-						{:else}
-							<SubagentPanel
-								item={entry.subagent}
-								expanded={subagentExpanded(entry.subagent.id)}
-								nested={true}
-								onToggle={() => toggleSubagent(entry.subagent.id)}
-							/>
-						{/if}
+						{@render timelineChild(entry)}
 					</div>
 				{/each}
 				{#if hiddenCount > 0}
-					<div class="hidden-indicator" transition:fade={{ duration: 400 }}>
+					<div class="hidden-indicator" in:slide={CHILD_SLIDE_IN}>
 						+{hiddenCount} more
 					</div>
 				{/if}
@@ -274,8 +297,15 @@
 		flex-direction: column;
 		gap: 8px;
 		align-self: stretch;
+		align-items: stretch;
+		min-width: 0;
 		max-height: 400px;
-		overflow-y: auto;
+		overflow: hidden auto;
+	}
+
+	.activity-group-body > :global(*) {
+		flex: 0 0 auto;
+		min-width: 0;
 	}
 
 	.activity-group-body :global(.thinking-panel.content-only .fold-body) {
@@ -283,6 +313,14 @@
 		background: transparent;
 		box-shadow: none;
 		padding: 0;
+	}
+
+	.timeline-child {
+		display: flex;
+		flex-direction: column;
+		flex: 0 0 auto;
+		min-width: 0;
+		overflow: clip;
 	}
 
 	.hidden-indicator {

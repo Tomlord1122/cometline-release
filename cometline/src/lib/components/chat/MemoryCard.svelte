@@ -4,6 +4,7 @@
 	import type { InjectedMemory } from '$lib/conversation/thinking-attribution';
 
 	const FOLD_IN = { duration: 180 };
+	const CHIP_FADE = { duration: 400 };
 
 	let {
 		memories,
@@ -30,6 +31,31 @@
 	});
 </script>
 
+{#snippet memoryBodyContent()}
+	{#if cycling && memories.length > 0}
+		{#key cycleTick}
+			{@const mem = memories[cycleTick % memories.length]}
+			<div class="memory-chip-cycling-wrap">
+				<div
+					class="memory-chip memory-chip-cycling"
+					in:fade={CHIP_FADE}
+					title={mem.content}
+				>
+					{mem.kind}: {mem.content}
+				</div>
+			</div>
+		{/key}
+	{:else}
+		<div class="memory-chips">
+			{#each memories as mem (mem.id)}
+				<span class="memory-chip" title={mem.content}>
+					{mem.kind}: {mem.content}
+				</span>
+			{/each}
+		</div>
+	{/if}
+{/snippet}
+
 <div class="fold-panel memory-panel" class:nested class:content-only={contentOnly}>
 	{#if !contentOnly}
 		<button
@@ -43,30 +69,13 @@
 			<ChevronDown size={13} class={expanded ? 'expanded' : ''} />
 		</button>
 	{/if}
-	{#if contentOnly || expanded}
+	{#if contentOnly}
+		<div class="fold-body memory-body">
+			{@render memoryBodyContent()}
+		</div>
+	{:else if expanded}
 		<div class="fold-body memory-body" transition:slide={FOLD_IN}>
-	{#if cycling && memories.length > 0}
-			{#key cycleTick}
-				{@const mem = memories[cycleTick % memories.length]}
-				<div class="memory-chip-cycling-wrap">
-					<div
-						class="memory-chip memory-chip-cycling"
-						in:fade={{ duration: 500 }}
-						title={mem.content}
-					>
-						{mem.kind}: {mem.content}
-					</div>
-				</div>
-			{/key}
-			{:else}
-				<div class="memory-chips">
-					{#each memories as mem (mem.id)}
-						<span class="memory-chip" title={mem.content}>
-							{mem.kind}: {mem.content}
-						</span>
-					{/each}
-				</div>
-			{/if}
+			{@render memoryBodyContent()}
 		</div>
 	{/if}
 </div>
@@ -74,6 +83,11 @@
 <style>
 	/* Base .fold-panel / .fold-toggle / .fold-body styles live in
 	   src/lib/styles/fold-panel.css. Only component-specific overrides here. */
+	.memory-panel {
+		min-width: 0;
+		max-width: 100%;
+	}
+
 	.fold-panel.nested {
 		align-self: stretch;
 	}
@@ -89,6 +103,8 @@
 	}
 
 	.memory-body {
+		width: 100%;
+		box-sizing: border-box;
 		min-width: 0;
 		border: 1px solid var(--border-soft);
 		border-radius: 10px;

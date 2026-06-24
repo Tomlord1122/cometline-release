@@ -29,6 +29,7 @@
 		onToggle,
 		nested = false,
 		contentOnly = false,
+		toggleDisabled = false,
 		sessionId = '',
 		onNotifyAgent,
 		onStartJob
@@ -39,6 +40,7 @@
 		onToggle: () => void;
 		nested?: boolean;
 		contentOnly?: boolean;
+		toggleDisabled?: boolean;
 		sessionId?: string;
 		onNotifyAgent?: (payload: ChatTurnPayload) => void | Promise<void>;
 		onStartJob?: (job: JobResource) => void | Promise<void>;
@@ -88,7 +90,8 @@
 		<button
 			type="button"
 			class="fold-toggle tool-fold-toggle"
-			aria-expanded={expanded}
+			aria-expanded={expanded && !toggleDisabled}
+			disabled={toggleDisabled}
 			onclick={onToggle}
 		>
 			<Terminal size={13} />
@@ -100,10 +103,10 @@
 			{:else}
 				<CircleCheck size={12} />
 			{/if}
-			<ChevronDown size={13} class={expanded ? 'expanded' : ''} />
+			<ChevronDown size={13} class={expanded && !toggleDisabled ? 'expanded' : ''} />
 		</button>
 	{/if}
-	{#if expanded}
+	{#if expanded && !toggleDisabled}
 		<div class="fold-body tool-output-body" transition:slide={FOLD_IN}>
 			{#if jobProposal && sessionId && !proposalDismissed}
 				<JobProposeCard

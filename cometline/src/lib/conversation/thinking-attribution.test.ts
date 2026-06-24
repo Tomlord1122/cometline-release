@@ -4,6 +4,7 @@ import {
 	buildThinkingAttribution,
 	defaultActivityGroupExpanded,
 	defaultThinkingExpanded,
+	isTimelineEntryToggleDisabled,
 	pinnedJobProposalToolIds,
 	pinnedJobProposalsForAssistant,
 	shouldGroupAssistantTimeline
@@ -572,5 +573,68 @@ describe('defaultThinkingExpanded', () => {
 		};
 		expect(defaultThinkingExpanded(0, false, done, null, false)).toBe(false);
 		expect(defaultThinkingExpanded(0, true, done, null, false)).toBe(false);
+	});
+});
+
+describe('isTimelineEntryToggleDisabled', () => {
+	it('locks reasoning, tool, and running subagent rows until they settle', () => {
+		expect(
+			isTimelineEntryToggleDisabled({
+				kind: 'reasoning',
+				segmentIndex: 0,
+				text: 'thinking',
+				pending: true
+			})
+		).toBe(true);
+		expect(
+			isTimelineEntryToggleDisabled({
+				kind: 'tool',
+				tool: {
+					id: 't1',
+					type: 'tool',
+					toolName: 'read',
+					input: {},
+					pending: true
+				}
+			})
+		).toBe(true);
+		expect(
+			isTimelineEntryToggleDisabled({
+				kind: 'subagent',
+				subagent: {
+					id: 's1',
+					type: 'subagent',
+					childSessionId: 'child',
+					purpose: 'research',
+					agentName: 'codex',
+					status: 'running',
+					progress: [],
+					pending: true
+				}
+			})
+		).toBe(true);
+	});
+
+	it('unlocks completed or failed rows', () => {
+		expect(
+			isTimelineEntryToggleDisabled({
+				kind: 'reasoning',
+				segmentIndex: 0,
+				text: 'done',
+				pending: false
+			})
+		).toBe(false);
+		expect(
+			isTimelineEntryToggleDisabled({
+				kind: 'tool',
+				tool: {
+					id: 't1',
+					type: 'tool',
+					toolName: 'read',
+					input: {},
+					error: 'boom'
+				}
+			})
+		).toBe(false);
 	});
 });

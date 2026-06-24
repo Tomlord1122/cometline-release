@@ -22,6 +22,7 @@
 		buildThinkingAttribution,
 		defaultActivityGroupExpanded,
 		defaultThinkingExpanded,
+		isTimelineEntryToggleDisabled,
 		pinnedJobProposalToolIds,
 		pinnedJobProposalsForAssistant,
 		shouldGroupAssistantTimeline,
@@ -726,6 +727,7 @@
 			/>
 		{:else}
 			{#each timeline as entry (timelineEntryKey(entry))}
+				{@const toggleDisabled = isTimelineEntryToggleDisabled(entry)}
 				{#if entry.kind === 'reasoning'}
 					{@const segmentKey = `${item.id}-seg-${entry.segmentIndex}`}
 					<ThinkingBlock
@@ -735,6 +737,7 @@
 						showSpinner={thinkingActive(entry.pending) &&
 							!item.text.trim() &&
 							!(item.id === streamingAssistantId && sessionStreaming)}
+						{toggleDisabled}
 						onToggle={() =>
 							toggleThinking(item, segmentKey, entry.segmentIndex, entry.pending)}
 					/>
@@ -750,6 +753,7 @@
 						item={entry.tool}
 						label={toolFoldLabel(entry.tool)}
 						expanded={toolOutputExpanded(entry.tool)}
+						{toggleDisabled}
 						onToggle={() => toggleToolOutput(entry.tool.id)}
 						{sessionId}
 						{onNotifyAgent}
@@ -759,6 +763,7 @@
 					<SubagentPanel
 						item={entry.subagent}
 						expanded={subagentExpanded(entry.subagent.id)}
+						{toggleDisabled}
 						onToggle={() => toggleSubagent(entry.subagent.id)}
 					/>
 				{/if}
@@ -836,7 +841,10 @@
 								flightTarget="avatar"
 							/>
 							{#if firstAssistantItem && showAssistantRow(firstAssistantItem)}
-								<div class:first-turn-destination-hidden={hideFirstTurnDestination()}>
+								<div
+									class="assistant-column"
+									class:first-turn-destination-hidden={hideFirstTurnDestination()}
+								>
 									{@render assistantStack(firstAssistantItem)}
 								</div>
 							{:else if sessionStreaming}
@@ -927,7 +935,10 @@
 										flightTarget="avatar"
 									/>
 									{#if firstAssistantItem && showAssistantRow(firstAssistantItem)}
-										<div class:first-turn-destination-hidden={hideFirstTurnDestination()}>
+										<div
+											class="assistant-column"
+											class:first-turn-destination-hidden={hideFirstTurnDestination()}
+										>
 											{@render assistantStack(firstAssistantItem)}
 										</div>
 									{:else if sessionStreaming}
@@ -959,7 +970,10 @@
 								{:else}
 									<ThreadAvatar variant="gutter" {iconVariant} />
 								{/if}
-								<div class:first-turn-destination-hidden={hideAssistantAvatarForFirstTurn(item)}>
+								<div
+									class="assistant-column"
+									class:first-turn-destination-hidden={hideAssistantAvatarForFirstTurn(item)}
+								>
 									{@render assistantStack(item)}
 								</div>
 							</div>
@@ -1166,7 +1180,8 @@
 		align-items: flex-start;
 	}
 
-	.tool-stack {
+	.tool-stack,
+	.assistant-column {
 		min-width: 0;
 		flex: 1;
 		max-width: var(--chat-assistant-column);
@@ -1193,26 +1208,35 @@
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
+		width: 100%;
 		max-width: var(--chat-assistant-column);
 		min-width: 0;
 		flex: 0 1 auto;
 		align-items: flex-start;
+		--assistant-activity-width: 80%;
 	}
 
-	.assistant-stack :global(.tool-fold-panel) {
-		align-self: stretch;
-		width: 100%;
+	.assistant-stack > :global(.memory-panel),
+	.assistant-stack > :global(.tool-fold-panel),
+	.assistant-stack > :global(.thinking-panel),
+	.assistant-stack > :global(.subagent-panel),
+	.assistant-stack :global(.activity-group > .fold-body) {
+		align-self: flex-start;
+		width: var(--assistant-activity-width);
+		max-width: 100%;
 		min-width: 0;
+		box-sizing: border-box;
+	}
+
+	.assistant-stack > :global(.memory-panel .memory-body) {
+		width: 100%;
+		box-sizing: border-box;
 	}
 
 	.assistant-stack :global(.activity-group) {
 		align-self: stretch;
 		width: 100%;
 		min-width: 0;
-	}
-
-	.assistant-stack :global(.activity-group > .fold-body) {
-		width: 80%;
 	}
 
 	.message-actions {

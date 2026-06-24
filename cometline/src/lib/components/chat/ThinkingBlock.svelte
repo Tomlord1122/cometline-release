@@ -12,7 +12,8 @@
 		showSpinner = false,
 		onToggle,
 		nested = false,
-		contentOnly = false
+		contentOnly = false,
+		toggleDisabled = false
 	}: {
 		text: string;
 		pending?: boolean;
@@ -21,6 +22,7 @@
 		onToggle: () => void;
 		nested?: boolean;
 		contentOnly?: boolean;
+		toggleDisabled?: boolean;
 	} = $props();
 
 	function autoScrollBottom(node: HTMLElement, value: string) {
@@ -42,7 +44,8 @@
 		<button
 			type="button"
 			class="fold-toggle thinking-toggle"
-			aria-expanded={expanded}
+			aria-expanded={expanded && !toggleDisabled}
+			disabled={toggleDisabled}
 			onclick={onToggle}
 		>
 			<Brain size={13} />
@@ -50,10 +53,10 @@
 			{#if showSpinner}
 				<ThinkingSpinner size={12} label="Thinking" />
 			{/if}
-			<ChevronDown size={13} class={expanded ? 'expanded' : ''} />
+			<ChevronDown size={13} class={expanded && !toggleDisabled ? 'expanded' : ''} />
 		</button>
 	{/if}
-	{#if expanded}
+	{#if expanded && !toggleDisabled}
 		<div class="fold-body thinking-body" transition:slide={FOLD_IN}>
 			<div class="thinking-reasoning">
 				<p class="scrollbar-none" use:autoScrollBottom={text}>

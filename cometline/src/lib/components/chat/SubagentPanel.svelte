@@ -19,13 +19,15 @@
 		expanded,
 		onToggle,
 		nested = false,
-		contentOnly = false
+		contentOnly = false,
+		toggleDisabled = false
 	}: {
 		item: Extract<ChatItem, { type: 'subagent' }>;
 		expanded: boolean;
 		onToggle: () => void;
 		nested?: boolean;
 		contentOnly?: boolean;
+		toggleDisabled?: boolean;
 	} = $props();
 
 	function subagentVisibleProgress(subagent: Extract<ChatItem, { type: 'subagent' }>) {
@@ -44,7 +46,8 @@
 			<button
 				type="button"
 				class="fold-toggle subagent-toggle"
-				aria-expanded={expanded}
+				aria-expanded={expanded && !toggleDisabled}
+				disabled={toggleDisabled}
 				onclick={onToggle}
 			>
 				<Terminal size={13} />
@@ -60,7 +63,7 @@
 				{:else}
 					<CircleCheck size={12} />
 				{/if}
-				<ChevronDown size={13} class={expanded ? 'expanded' : ''} />
+				<ChevronDown size={13} class={expanded && !toggleDisabled ? 'expanded' : ''} />
 			</button>
 			{#if item.pending}
 				<button
@@ -83,7 +86,7 @@
 			</button>
 		</div>
 	{/if}
-	{#if expanded}
+	{#if expanded && !toggleDisabled}
 		{@const visibleProgress = subagentVisibleProgress(item)}
 		<div class="fold-body subagent-body" transition:slide={FOLD_IN}>
 			<p class="subagent-purpose">{item.purpose}</p>
