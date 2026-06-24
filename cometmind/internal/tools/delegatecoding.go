@@ -119,7 +119,7 @@ func (d DelegateCodingTask) Execute(ctx context.Context, input json.RawMessage) 
 				return Result{OK: false, Output: err.Error()}, nil
 			}
 		}
-		go d.finishDelegation(runCtx, parentID, child.ID, mgr, runOpts, emit)
+		go d.finishDelegation(runCtx, parentID, child.ID, mgr, runOpts, emit, cancel)
 		out := fmt.Sprintf("child_session_id: %s\nstatus: running\nagent: %s\n\nasync delegation started",
 			child.ID, d.ACP.Command)
 		return Result{OK: true, Output: out}, nil
@@ -136,7 +136,9 @@ func (d DelegateCodingTask) finishDelegation(
 	mgr *acp.SessionManager,
 	runOpts acp.RunOptions,
 	emit func(event.Event),
+	cancel context.CancelFunc,
 ) {
+	defer cancel()
 	result, runErr := mgr.Run(ctx, runOpts)
 	_, status, summary := d.buildResult(ctx, parentID, childID, result, runErr, emit)
 	if d.Orchestrator != nil {
