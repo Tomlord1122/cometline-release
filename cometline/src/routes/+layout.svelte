@@ -4,7 +4,6 @@
 	import AppShell from '$lib/components/AppShell.svelte';
 	import { connectionState } from '$lib/stores/runtime.svelte';
 	import { settingsStore, readHasDismissedSetupWizardSync } from '$lib/stores/settings.svelte';
-	import { runtimeProviders } from '$lib/stores/settings.svelte';
 	import { sessionStore } from '$lib/stores/session.svelte';
 	import { shellStore } from '$lib/stores/shell.svelte';
 	import { heroComposerCssVars } from '$lib/hero-composer-appearance';
