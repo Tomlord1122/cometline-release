@@ -120,6 +120,11 @@
 		z-index: 1;
 	}
 
+	/* Popovers live inside the slot; lift it above the ring while any menu is open. */
+	.hero-composer-frame:has(:global(.model-menu, .skill-command-menu)) .hero-composer-slot {
+		z-index: 3;
+	}
+
 	.hero-composer-slot :global(.composer) {
 		width: 100%;
 	}

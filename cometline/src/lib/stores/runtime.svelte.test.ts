@@ -43,4 +43,17 @@ describe('connectionState', () => {
 		expect(connectionState.status).toBe('connecting');
 		expect(connectionState.message).toBe('');
 	});
+
+	it('recovers to ready after an initial fetch failure', async () => {
+		vi.mocked(fetch)
+			.mockRejectedValueOnce(new Error('Failed to fetch'))
+			.mockResolvedValueOnce(new Response('ok', { status: 200 }));
+		const { connectionState } = await import('./runtime.svelte');
+		await connectionState.check();
+		expect(connectionState.status).toBe('error');
+		expect(connectionState.message).toBe('Failed to fetch');
+		await connectionState.check();
+		expect(connectionState.status).toBe('ready');
+		expect(connectionState.message).toBe('');
+	});
 });

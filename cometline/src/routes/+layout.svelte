@@ -67,25 +67,30 @@
 		}
 	});
 
+	$effect(() => {
+		if (connectionState.status !== 'ready') return;
+		if (shellStore.bootMessage) {
+			shellStore.setBootMessage('');
+		}
+		if (!sessionsLoaded) {
+			sessionsLoaded = true;
+			void loadSessions();
+		}
+	});
+
 	let sessionsLoaded = false;
 	let lastEnsuredWorkspace = '';
 
 	$effect(() => {
 		const workspacePath = shellStore.workspacePath;
 		if (!workspacePath || workspacePath === '/') return;
+		if (connectionState.status !== 'ready') return;
 		// Register the workspace in the background (needed for forks / new
 		// chats) without blocking the session list or transcript loads. Only
 		// re-register when the path actually changes.
 		if (workspacePath !== lastEnsuredWorkspace) {
 			lastEnsuredWorkspace = workspacePath;
 			void ensureWorkspace(workspacePath).catch(() => {});
-		}
-		// The session list spans every workspace, so it does not depend on the
-		// current workspace path — load it once. Subsequent new/fork/delete
-		// mutate sessionStore locally and stay in sync without a refetch.
-		if (!sessionsLoaded) {
-			sessionsLoaded = true;
-			void loadSessions();
 		}
 	});
 
@@ -106,6 +111,12 @@
 			sessionStore.setSessions(result.sessions);
 			shellStore.setBootMessage('');
 		} catch (err) {
+			if (connectionState.status === 'connecting') {
+				// Let the runtime overlay own startup copy while the sidecar is still
+				// warming up; we'll retry automatically once it reports healthy.
+				sessionsLoaded = false;
+				return;
+			}
 			// Allow a later workspace/effect tick to retry (e.g. backend not
 			// healthy yet at startup).
 			sessionsLoaded = false;

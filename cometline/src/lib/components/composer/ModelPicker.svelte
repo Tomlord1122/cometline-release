@@ -178,7 +178,7 @@
 		padding: 8px;
 		border: 1px solid var(--border-soft);
 		border-radius: 14px;
-		background: rgba(246, 249, 252, 0.98);
+		background: var(--panel-bg);
 		box-shadow: var(--shadow-card);
 	}
 
@@ -187,7 +187,7 @@
 		margin-bottom: 8px;
 		border: 1px solid var(--border-soft);
 		border-radius: 9px;
-		background: rgba(255, 255, 255, 0.76);
+		background: var(--panel-bg);
 		padding: 8px 10px;
 		font: inherit;
 		font-size: 12px;
