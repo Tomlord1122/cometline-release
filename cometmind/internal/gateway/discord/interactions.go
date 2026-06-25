@@ -6,8 +6,30 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/cometline/cometmind/internal/gateway"
 )
+
+func (a *Adapter) onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	switch i.Type {
+	case discordgo.InteractionApplicationCommandAutocomplete:
+		a.handleAutocomplete(s, i)
+	case discordgo.InteractionApplicationCommand:
+		data := i.ApplicationCommandData()
+		switch data.Name {
+		case "thread":
+			a.handleThreadCommand(s, i, data)
+		case "create-skill":
+			a.handleCreateSkillCommand(s, i, data)
+		case "change":
+			a.handleChangeCommand(s, i, data)
+		case "jobs":
+			a.handleJobsCommand(s, i, data)
+		case "create-job":
+			a.handleCreateJobCommand(s, i, data)
+		}
+	case discordgo.InteractionMessageComponent:
+		a.handleJobProposalComponent(s, i)
+	}
+}
 
 func createJobApplicationCommand() *discordgo.ApplicationCommand {
 	return &discordgo.ApplicationCommand{
@@ -104,20 +126,4 @@ func (a *Adapter) handleCreateJobAutocomplete(s *discordgo.Session, i *discordgo
 		Type: discordgo.InteractionApplicationCommandAutocompleteResult,
 		Data: &discordgo.InteractionResponseData{Choices: choices},
 	})
-}
-
-// SetCreateJobHandler registers the callback used for /create-job slash commands.
-func (a *Adapter) SetCreateJobHandler(fn func(context.Context, gateway.InboundMessage, string, string, string) (string, error)) {
-	a.onCreateJob = fn
-}
-
-// SetJobProposalHandlers registers callbacks for job proposal component interactions.
-func (a *Adapter) SetJobProposalHandlers(
-	onSelect func(string, string) (string, error),
-	onConfirm func(context.Context, gateway.InboundMessage, string) (string, error),
-	onCancel func(string) error,
-) {
-	a.onJobProposalSelect = onSelect
-	a.onJobProposalConfirm = onConfirm
-	a.onJobProposalCancel = onCancel
 }
