@@ -13,7 +13,7 @@ import (
 
 // WaitSubagents blocks until selected child subagents finish.
 type WaitSubagents struct {
-	Sessions       *session.Service
+	Sessions       session.ChildSessionReader
 	Orchestrator   *subagent.Orchestrator
 	SubagentConfig SubagentToolConfig
 }

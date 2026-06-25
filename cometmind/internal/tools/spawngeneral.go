@@ -14,7 +14,7 @@ import (
 // SpawnGeneralAgent runs a restricted CometMind agent loop in a background child session.
 type SpawnGeneralAgent struct {
 	Workspace      Workspace
-	Sessions       *session.Service
+	Sessions       session.ChildSessionReader
 	Orchestrator   *subagent.Orchestrator
 	RunnerFactory  ChildRunnerFactory
 	SubagentConfig SubagentToolConfig

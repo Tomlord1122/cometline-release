@@ -23,7 +23,7 @@ type Runner interface {
 
 // Router maps platform identities to CometMind sessions and runs turns.
 type Router struct {
-	Sessions           *session.Service
+	Sessions           session.SessionStore
 	Config             *config.Config
 	Jobs               *jobs.Service
 	Runner             Runner

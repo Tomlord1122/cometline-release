@@ -27,7 +27,7 @@ Output plain text only with short sections when helpful.`
 
 // ContextCompactor performs rolling transcript compaction for long sessions.
 type ContextCompactor struct {
-	Sessions *session.Service
+	Sessions session.CompactorStore
 	Config   *config.Config
 }
 

@@ -22,7 +22,7 @@ type ChildRunnerFactory func(child session.Session, workspaceRoot string, maxSte
 
 // RegistryOptions configures optional registry capabilities.
 type RegistryOptions struct {
-	Sessions       *session.Service
+	Sessions       session.ChildSessionReader
 	ACP            acp.Config
 	ACPMgr         *acp.SessionManager
 	Skills         *skills.Registry

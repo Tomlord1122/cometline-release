@@ -470,7 +470,9 @@ func (s *Service) UpdateContextSummary(ctx context.Context, sessionID, summary, 
 	})
 }
 
-// WorkspacePath resolves the filesystem root for a workspace id.
+// WorkspacePath resolves the filesystem root for a workspace id. This method
+// is intentionally duplicated from the WorkspaceStore interface seam so the
+// full *Service can satisfy it.
 func (s *Service) WorkspacePath(ctx context.Context, workspaceID string) (string, error) {
 	w, err := s.q.GetWorkspace(ctx, workspaceID)
 	if err != nil {

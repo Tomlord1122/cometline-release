@@ -37,7 +37,7 @@ type extractor struct {
 	store     *store
 	retriever *retriever
 	updater   *updater
-	sessions  *session.Service
+	sessions  session.TranscriptReader
 	provider  cometsdk.Provider
 	settings  Settings
 }

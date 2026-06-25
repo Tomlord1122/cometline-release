@@ -16,7 +16,7 @@ import (
 // DelegateCodingTask hands coding work to an external ACP agent such as OpenCode.
 type DelegateCodingTask struct {
 	Workspace    Workspace
-	Sessions     *session.Service
+	Sessions     session.ChildSessionReader
 	ACP          acp.Config
 	ACPMgr       *acp.SessionManager
 	Orchestrator *subagent.Orchestrator

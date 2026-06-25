@@ -26,7 +26,8 @@ type Service struct {
 }
 
 // NewService wires memory subsystems. provider is used for extraction/compaction LLM calls.
-func NewService(dbConn *sql.DB, settings Settings, provider cometsdk.Provider, sessions *session.Service) (*Service, error) {
+// sessions is narrowed to the transcript-reading seam so memory can be tested without a live SQLite store.
+func NewService(dbConn *sql.DB, settings Settings, provider cometsdk.Provider, sessions session.TranscriptReader) (*Service, error) {
 	if settings.MaxRetrieved <= 0 {
 		settings.MaxRetrieved = 5
 	}
