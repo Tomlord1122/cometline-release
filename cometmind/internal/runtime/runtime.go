@@ -243,77 +243,71 @@ func (r *Runtime) SubagentOrchestrator() *subagent.Orchestrator {
 	return r.subagentOrch
 }
 
+// RunnerOptions controls how a runner is assembled. Most callers should use
+// RunnerFor, SubagentRunnerFor, or RunnerForGateway instead.
+type RunnerOptions struct {
+	MaxSteps        int
+	Platform        string
+	SourceChannelID string
+	Subagent        bool
+}
+
 // RunnerFor returns an agent runner wired for a specific session and workspace.
 func (r *Runtime) RunnerFor(sess session.Session, workspacePath string) (*agent.Runner, error) {
-	p, err := r.ProviderForSession(sess)
-	if err != nil {
-		return nil, err
-	}
-	skillRegistry := r.SkillsForWorkspace(workspacePath)
-
-	return &agent.Runner{
-		Config:       r.Config,
-		Provider:     p,
-		Sessions:     r.Sessions,
-		Memory:       r.Memory,
-		Registry:     r.toolRegistry(workspacePath, skillRegistry, sess.ID),
-		Jobs:         r.Jobs,
-		MaxSteps:     r.Config.MaxSteps,
-		MaxTokens:    r.Config.MaxTokens,
-		SystemPrompt: r.SystemPrompt,
-		SkillIndex:   skillRegistry.PromptIndex(),
-		JobIndex:     tools.JobPromptIndex(workspacePath, jobs.PlatformDesktop),
-		MemorySem:    r.memorySem,
-		Compactor:    &agent.ContextCompactor{Sessions: r.Sessions, Config: r.Config},
-	}, nil
+	return r.runnerFor(sess, workspacePath, RunnerOptions{})
 }
 
 // SubagentRunnerFor returns a restricted runner for a general subagent child session.
 func (r *Runtime) SubagentRunnerFor(child session.Session, workspacePath string, maxSteps int) (*agent.Runner, error) {
-	p, err := r.ProviderForSession(child)
-	if err != nil {
-		return nil, err
-	}
-	skillRegistry := r.SkillsForWorkspace(workspacePath)
-	return &agent.Runner{
-		Config:       r.Config,
-		Provider:     p,
-		Sessions:     r.Sessions,
-		Registry:     tools.NewSubagentRegistry(workspacePath, &skillRegistry),
-		MaxSteps:     maxSteps,
-		MaxTokens:    r.Config.MaxTokens,
-		SystemPrompt: r.SystemPrompt,
-		SkillIndex:   skillRegistry.PromptIndex(),
-	}, nil
+	return r.runnerFor(child, workspacePath, RunnerOptions{MaxSteps: maxSteps, Subagent: true})
 }
 
 // RunnerForGateway is like RunnerFor but tags job tool metadata for a gateway channel.
 func (r *Runtime) RunnerForGateway(sess session.Session, workspacePath, platform, sourceChannelID string) (*agent.Runner, error) {
+	return r.runnerFor(sess, workspacePath, RunnerOptions{Platform: platform, SourceChannelID: sourceChannelID})
+}
+
+func (r *Runtime) runnerFor(sess session.Session, workspacePath string, opts RunnerOptions) (*agent.Runner, error) {
 	p, err := r.ProviderForSession(sess)
 	if err != nil {
 		return nil, err
 	}
 	skillRegistry := r.SkillsForWorkspace(workspacePath)
 
-	return &agent.Runner{
+	maxSteps := opts.MaxSteps
+	if maxSteps == 0 {
+		maxSteps = r.Config.MaxSteps
+	}
+	platform := opts.Platform
+	if platform == "" {
+		platform = jobs.PlatformDesktop
+	}
+
+	var registry *tools.Registry
+	if opts.Subagent {
+		registry = tools.NewSubagentRegistry(workspacePath, &skillRegistry)
+	} else {
+		registry = r.toolRegistryWithJobMeta(workspacePath, skillRegistry, sess.ID, platform, opts.SourceChannelID)
+	}
+
+	runner := &agent.Runner{
 		Config:       r.Config,
 		Provider:     p,
 		Sessions:     r.Sessions,
 		Memory:       r.Memory,
-		Registry:     r.toolRegistryWithJobMeta(workspacePath, skillRegistry, sess.ID, platform, sourceChannelID),
+		Registry:     registry,
 		Jobs:         r.Jobs,
-		MaxSteps:     r.Config.MaxSteps,
+		MaxSteps:     maxSteps,
 		MaxTokens:    r.Config.MaxTokens,
 		SystemPrompt: r.SystemPrompt,
 		SkillIndex:   skillRegistry.PromptIndex(),
-		JobIndex:     tools.JobPromptIndex(workspacePath, platform),
 		MemorySem:    r.memorySem,
-		Compactor:    &agent.ContextCompactor{Sessions: r.Sessions, Config: r.Config},
-	}, nil
-}
-
-func (r *Runtime) toolRegistry(workspacePath string, skillRegistry skills.Registry, sessionID string) *tools.Registry {
-	return r.toolRegistryWithJobMeta(workspacePath, skillRegistry, sessionID, jobs.PlatformDesktop, "")
+	}
+	if !opts.Subagent {
+		runner.JobIndex = tools.JobPromptIndex(workspacePath, platform)
+		runner.Compactor = &agent.ContextCompactor{Sessions: r.Sessions, Config: r.Config}
+	}
+	return runner, nil
 }
 
 func (r *Runtime) toolRegistryWithJobMeta(workspacePath string, skillRegistry skills.Registry, sessionID, platform, sourceChannelID string) *tools.Registry {
