@@ -175,20 +175,13 @@ func workspaceRootExists(path string) bool {
 	return err == nil && info.IsDir()
 }
 
-func activeDelegationStatuses() map[string]bool {
-	return map[string]bool{
-		"pending": true,
-		"running": true,
-	}
-}
-
 // ChangeSessionWorkspace reassigns a session to a different workspace root.
 func (s *Service) ChangeSessionWorkspace(ctx context.Context, sessionID, absPath string) (Session, error) {
 	sess, err := s.GetSession(ctx, sessionID)
 	if err != nil {
 		return Session{}, err
 	}
-	if activeDelegationStatuses()[sess.DelegationStatus] {
+	if sess.DelegationStatus.IsActive() {
 		return Session{}, ErrActiveDelegation
 	}
 
@@ -988,7 +981,7 @@ func (s *Service) NewChildSession(ctx context.Context, parent Session, purpose, 
 		Status:           "active",
 		ParentSessionID:  sql.NullString{String: parent.ID, Valid: true},
 		Purpose:          purpose,
-		DelegationStatus: "pending",
+		DelegationStatus: DelegationPending.String(),
 		OutputSummary:    "",
 		SubagentKind:     subagentKind,
 	})
@@ -1030,18 +1023,18 @@ func (s *Service) ListChildSessions(ctx context.Context, parentSessionID string)
 }
 
 // UpdateDelegation persists delegation status and summary for a child session.
-func (s *Service) UpdateDelegation(ctx context.Context, sessionID, status, summary string) error {
+func (s *Service) UpdateDelegation(ctx context.Context, sessionID string, status DelegationStatus, summary string) error {
 	return s.q.UpdateSessionDelegation(ctx, db.UpdateSessionDelegationParams{
-		DelegationStatus: status,
+		DelegationStatus: status.String(),
 		OutputSummary:    summary,
 		ID:               sessionID,
 	})
 }
 
 // UpdateDelegationState persists delegation status, summary, and pending question.
-func (s *Service) UpdateDelegationState(ctx context.Context, sessionID, status, summary, pendingQuestion string) error {
+func (s *Service) UpdateDelegationState(ctx context.Context, sessionID string, status DelegationStatus, summary, pendingQuestion string) error {
 	return s.q.UpdateSessionDelegationState(ctx, db.UpdateSessionDelegationStateParams{
-		DelegationStatus: status,
+		DelegationStatus: status.String(),
 		OutputSummary:    summary,
 		PendingQuestion:  pendingQuestion,
 		ID:               sessionID,

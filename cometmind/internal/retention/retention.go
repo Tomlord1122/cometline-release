@@ -175,7 +175,7 @@ func (r *Runner) purgeSessions(ctx context.Context) (int, int, error) {
 				if _, ok := deleted[row.ID]; ok {
 					continue
 				}
-				if protectedDelegation(row.DelegationStatus) {
+				if protectedDelegation(session.DelegationStatus(row.DelegationStatus)) {
 					continue
 				}
 				if r.skipSession(row.ID) {
@@ -196,11 +196,6 @@ func (r *Runner) skipSession(sessionID string) bool {
 	return r.IsRunning != nil && r.IsRunning(sessionID)
 }
 
-func protectedDelegation(status string) bool {
-	switch status {
-	case "pending", "running":
-		return true
-	default:
-		return false
-	}
+func protectedDelegation(status session.DelegationStatus) bool {
+	return status.IsActive()
 }

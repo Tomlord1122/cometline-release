@@ -90,10 +90,11 @@ func (w WaitSubagents) Execute(ctx context.Context, input json.RawMessage) (Resu
 			if child.ParentSessionID != parentID {
 				continue
 			}
-			if !isTerminalDelegation(child.DelegationStatus) {
-				continue
-			}
-			writeSubagentResult(&b, child.ID, child.SubagentKind, child.DelegationStatus, child.OutputSummary)
+		if !isTerminalDelegation(child.DelegationStatus) {
+			continue
+		}
+		writeSubagentResult(&b, child.ID, child.SubagentKind, child.DelegationStatus.String(), child.OutputSummary)
+
 		}
 	}
 
@@ -103,13 +104,8 @@ func (w WaitSubagents) Execute(ctx context.Context, input json.RawMessage) (Resu
 	return Result{OK: true, Output: strings.TrimSpace(b.String())}, nil
 }
 
-func isTerminalDelegation(status string) bool {
-	switch status {
-	case "completed", "failed", "cancelled":
-		return true
-	default:
-		return false
-	}
+func isTerminalDelegation(status session.DelegationStatus) bool {
+	return status.IsTerminal()
 }
 
 func writeSubagentResult(b *strings.Builder, id, kind, status, summary string) {

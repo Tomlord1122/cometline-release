@@ -31,7 +31,7 @@ func TestAPISession(t *testing.T) {
 		TokenUsage:       string(usageJSON),
 		ParentSessionID:  parentID,
 		Purpose:          "review diff",
-		DelegationStatus: "completed",
+		DelegationStatus: DelegationCompleted,
 		OutputSummary:    "done",
 		ACPSessionID:     "acp-1",
 		PendingQuestion:  "legacy",

@@ -57,7 +57,7 @@ func TestDelegateCodingTaskWithFakeACP(t *testing.T) {
 	if len(children) != 1 {
 		t.Fatalf("children = %d, want 1", len(children))
 	}
-	if children[0].DelegationStatus != "completed" {
+	if children[0].DelegationStatus != session.DelegationCompleted {
 		t.Fatalf("status = %q", children[0].DelegationStatus)
 	}
 }

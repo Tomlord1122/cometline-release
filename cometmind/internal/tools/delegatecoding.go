@@ -80,7 +80,7 @@ func (d DelegateCodingTask) Execute(ctx context.Context, input json.RawMessage) 
 		emit(event.SubagentStarted(child.ID, task, d.ACP.Command))
 	}
 
-	_ = d.Sessions.UpdateDelegationState(ctx, child.ID, "running", "", "")
+	_ = d.Sessions.UpdateDelegationState(ctx, child.ID, session.DelegationRunning, "", "")
 
 	mgr := d.ACPMgr
 	if mgr == nil {
@@ -143,14 +143,14 @@ func (d DelegateCodingTask) finishDelegation(
 	_, status, summary := d.buildResult(ctx, parentID, childID, result, runErr, emit)
 	if d.Orchestrator != nil {
 		if ctx.Err() != nil {
-			status = "cancelled"
+			status = session.DelegationCancelled
 			if summary == "" {
 				summary = delegationCancelledByUser
 			}
 		}
 		d.Orchestrator.Complete(childID, subagent.Result{
 			Kind:    subagent.KindACP,
-			Status:  status,
+			Status:  status.String(),
 			Summary: summary,
 		})
 	}
@@ -162,44 +162,44 @@ func (d DelegateCodingTask) buildResult(
 	result acp.TaskResult,
 	runErr error,
 	emit func(event.Event),
-) (Result, string, string) {
+) (Result, session.DelegationStatus, string) {
 	status, summary := normalizeDelegationOutcome(result, runErr)
 	_ = d.Sessions.UpdateDelegationState(ctx, childID, status, summary, "")
 
 	if emit != nil {
-		emit(event.SubagentFinished(childID, status, summary))
+		emit(event.SubagentFinished(childID, status.String(), summary))
 	}
 
 	out := fmt.Sprintf("child_session_id: %s\nstatus: %s\nagent: %s",
 		childID, status, result.AgentName)
-	if status == "cancelled" {
+	if status == session.DelegationCancelled {
 		out += "\ncancelled_by: user"
 	}
 	if summary != "" {
 		out += "\n\n" + summary
 	}
-	ok := status == "completed"
+	ok := status == session.DelegationCompleted
 	_ = parentID
 	return Result{OK: ok, Output: out}, status, summary
 }
 
-func normalizeDelegationOutcome(result acp.TaskResult, runErr error) (status, summary string) {
-	status = result.Status
+func normalizeDelegationOutcome(result acp.TaskResult, runErr error) (status session.DelegationStatus, summary string) {
+	status = session.DelegationStatus(result.Status)
 	if status == "" {
-		status = "failed"
+		status = session.DelegationFailed
 	}
 	summary = strings.TrimSpace(result.Summary)
 
-	if runErr != nil && status == "completed" {
-		status = "failed"
+	if runErr != nil && status == session.DelegationCompleted {
+		status = session.DelegationFailed
 	}
-	if errors.Is(runErr, context.Canceled) || status == "cancelled" {
-		status = "cancelled"
+	if errors.Is(runErr, context.Canceled) || status == session.DelegationCancelled {
+		status = session.DelegationCancelled
 		if summary == "" || summary == context.Canceled.Error() {
 			summary = delegationCancelledByUser
 		}
 	}
-	if summary == "" && runErr != nil && status != "cancelled" {
+	if summary == "" && runErr != nil && status != session.DelegationCancelled {
 		summary = runErr.Error()
 	}
 	return status, summary

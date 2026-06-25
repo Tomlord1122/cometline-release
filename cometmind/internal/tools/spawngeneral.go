@@ -99,7 +99,7 @@ func (s SpawnGeneralAgent) Execute(ctx context.Context, input json.RawMessage) (
 	if emit != nil {
 		emit(event.SubagentStarted(child.ID, task, "cometmind"))
 	}
-	_ = s.Sessions.UpdateDelegationState(ctx, child.ID, "running", "", "")
+	_ = s.Sessions.UpdateDelegationState(ctx, child.ID, session.DelegationRunning, "", "")
 
 	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	if err := s.Orchestrator.Register(parentID, child.ID, subagent.KindGeneral, cancel); err != nil {
@@ -126,35 +126,35 @@ func (s SpawnGeneralAgent) runGeneralSubagent(
 	emit func(event.Event),
 	maxSteps int,
 ) {
-	status := "completed"
+	status := session.DelegationCompleted
 	summary := ""
 	var runErr error
 
 	defer func() {
-		if status == "completed" && summary == "" && runErr != nil {
-			status = "failed"
+		if status == session.DelegationCompleted && summary == "" && runErr != nil {
+			status = session.DelegationFailed
 			summary = runErr.Error()
 		}
-		if status == "completed" && summary == "" {
+		if status == session.DelegationCompleted && summary == "" {
 			summary = "subagent finished without assistant text"
 		}
 		_ = s.Sessions.UpdateDelegationState(context.Background(), child.ID, status, summary, "")
-		if status == "completed" || status == "failed" || status == "cancelled" {
+		if status.IsTerminal() {
 			_ = s.Sessions.CompactChildSession(context.Background(), child.ID)
 		}
 		if emit != nil {
-			emit(event.SubagentFinished(child.ID, status, summary))
+			emit(event.SubagentFinished(child.ID, status.String(), summary))
 		}
 		s.Orchestrator.Complete(child.ID, subagent.Result{
 			Kind:    subagent.KindGeneral,
-			Status:  status,
+			Status:  status.String(),
 			Summary: summary,
 		})
 	}()
 
 	runner, err := s.RunnerFactory(child, s.Workspace.Root, maxSteps)
 	if err != nil {
-		status = "failed"
+		status = session.DelegationFailed
 		runErr = err
 		return
 	}
@@ -180,7 +180,7 @@ func (s SpawnGeneralAgent) runGeneralSubagent(
 	}
 
 	if runCtx.Err() != nil {
-		status = "cancelled"
+		status = session.DelegationCancelled
 		summary = runCtx.Err().Error()
 		return
 	}
@@ -192,10 +192,10 @@ func (s SpawnGeneralAgent) finalizeGeneralSubagent(
 	ctx context.Context,
 	childID string,
 	runErr error,
-) (status, summary string) {
-	status = "completed"
+) (status session.DelegationStatus, summary string) {
+	status = session.DelegationCompleted
 	if runErr != nil {
-		status = "failed"
+		status = session.DelegationFailed
 	}
 
 	var parts []string

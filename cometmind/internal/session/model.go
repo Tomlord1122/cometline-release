@@ -28,7 +28,7 @@ type Session struct {
 	TokenUsage              string
 	ParentSessionID         string
 	Purpose                 string
-	DelegationStatus        string
+	DelegationStatus        DelegationStatus
 	OutputSummary           string
 	ACPSessionID            string
 	PendingQuestion         string
@@ -85,7 +85,7 @@ func sessionFromDB(s db.Session) Session {
 		TokenUsage:              s.TokenUsage,
 		ParentSessionID:         parent,
 		Purpose:                 s.Purpose,
-		DelegationStatus:        s.DelegationStatus,
+		DelegationStatus:        DelegationStatus(s.DelegationStatus),
 		OutputSummary:           s.OutputSummary,
 		ACPSessionID:            s.AcpSessionID,
 		PendingQuestion:         s.PendingQuestion,

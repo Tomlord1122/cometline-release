@@ -5,13 +5,14 @@ import (
 	"testing"
 
 	"github.com/cometline/cometmind/internal/acp"
+	"github.com/cometline/cometmind/internal/session"
 )
 
 func TestNormalizeDelegationOutcomeCancelledByUser(t *testing.T) {
 	t.Parallel()
 
-	status, summary := normalizeDelegationOutcome(acp.TaskResult{Status: "cancelled"}, nil)
-	if status != "cancelled" {
+	status, summary := normalizeDelegationOutcome(acp.TaskResult{Status: session.DelegationCancelled.String()}, nil)
+	if status != session.DelegationCancelled {
 		t.Fatalf("status = %q, want cancelled", status)
 	}
 	if summary != delegationCancelledByUser {
@@ -19,7 +20,7 @@ func TestNormalizeDelegationOutcomeCancelledByUser(t *testing.T) {
 	}
 
 	status, summary = normalizeDelegationOutcome(acp.TaskResult{}, context.Canceled)
-	if status != "cancelled" {
+	if status != session.DelegationCancelled {
 		t.Fatalf("status = %q, want cancelled", status)
 	}
 	if summary != delegationCancelledByUser {

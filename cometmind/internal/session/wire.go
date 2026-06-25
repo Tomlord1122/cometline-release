@@ -37,7 +37,7 @@ func APISession(sess Session, workspacePath string) (apigen.Session, error) {
 		out.Purpose = &sess.Purpose
 	}
 	if sess.DelegationStatus != "" {
-		status := apigen.SessionDelegationStatus(sess.DelegationStatus)
+		status := apigen.SessionDelegationStatus(sess.DelegationStatus.String())
 		out.DelegationStatus = &status
 	}
 	if sess.OutputSummary != "" {

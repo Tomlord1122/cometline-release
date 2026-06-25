@@ -359,11 +359,12 @@ func (a *App) handleClearSession(c *gin.Context) {
 	}
 	if children, err := a.sessions.ListChildSessions(c.Request.Context(), sessID); err == nil && a.acpMgr != nil {
 		for _, child := range children {
-			if child.DelegationStatus != "running" {
-				continue
-			}
-			_ = a.acpMgr.Cancel(child.ID)
-			_ = a.sessions.UpdateDelegationState(c.Request.Context(), child.ID, "cancelled", "", "")
+		if child.DelegationStatus != session.DelegationRunning {
+			continue
+		}
+		_ = a.acpMgr.Cancel(child.ID)
+		_ = a.sessions.UpdateDelegationState(c.Request.Context(), child.ID, session.DelegationCancelled, "", "")
+
 		}
 	}
 	if err := a.sessions.ClearSessionTranscript(c.Request.Context(), sessID); err != nil {
