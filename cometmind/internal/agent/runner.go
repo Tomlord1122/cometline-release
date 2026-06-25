@@ -330,9 +330,7 @@ func (r *Runner) Run(ctx context.Context, turn session.AgentTurn, ch chan<- even
 			start := time.Now()
 			logging.L().Info("tool.call.start", "session", turn.ID, "tool", tc.Name, "tool_call_id", tc.ID, "input_bytes", len(tc.Input))
 			toolCtx := tools.WithToolSession(ctx, turn.ID)
-			toolCtx = tools.WithProgress(toolCtx, func(ev event.Event) {
-				ch <- ev
-			})
+			toolCtx = tools.WithProgress(toolCtx, backgroundProgressEmitter(ch))
 			res, execErr := r.Registry.Execute(toolCtx, tc.Name, tc.Input)
 			dur := time.Since(start).Milliseconds()
 			logging.L().Info("tool.call.finish", "session", turn.ID, "tool", tc.Name, "tool_call_id", tc.ID, "ok", res.OK && execErr == nil, "duration_ms", dur, "output_bytes", len(res.Output))
@@ -475,4 +473,16 @@ func assistantPlainText(m cometsdk.Message) string {
 		}
 	}
 	return b.String()
+}
+
+// backgroundProgressEmitter is used for tool callbacks that may outlive the
+// current turn stream, such as background subagents. Once the caller has
+// drained the turn and closed the channel, later progress is best-effort only.
+func backgroundProgressEmitter(ch chan<- event.Event) tools.ProgressFn {
+	return func(ev event.Event) {
+		defer func() {
+			_ = recover()
+		}()
+		ch <- ev
+	}
 }

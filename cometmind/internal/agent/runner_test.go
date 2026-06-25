@@ -244,6 +244,28 @@ func TestRunner_EmitsMemoryUpdatedAfterDone(t *testing.T) {
 	}
 }
 
+func TestBackgroundProgressEmitterIgnoresClosedChannel(t *testing.T) {
+	ch := make(chan event.Event, 1)
+	emit := backgroundProgressEmitter(ch)
+	close(ch)
+
+	emit(event.SubagentProgress("child-1", "tool", "grep"))
+}
+
+func TestBackgroundProgressEmitterForwardsWhenChannelOpen(t *testing.T) {
+	ch := make(chan event.Event, 1)
+	emit := backgroundProgressEmitter(ch)
+
+	emit(event.SubagentProgress("child-1", "tool", "grep"))
+	ev := <-ch
+	if ev.Kind != event.KindSubagentProgress {
+		t.Fatalf("event kind = %q, want %q", ev.Kind, event.KindSubagentProgress)
+	}
+	if ev.ProgressKind != "tool" || ev.ProgressText != "grep" {
+		t.Fatalf("progress = (%q, %q), want (%q, %q)", ev.ProgressKind, ev.ProgressText, "tool", "grep")
+	}
+}
+
 func TestRunner_MaxTokensWithoutToolsContinuesThenStops(t *testing.T) {
 	store := &fakeStore{}
 	provider := &sequentialFakeProvider{sequences: [][]cometsdk.Event{
