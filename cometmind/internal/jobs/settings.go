@@ -1,31 +1,16 @@
 package jobs
 
-// NotificationSettings controls job status notifications.
-type NotificationSettings struct {
-	Enabled     bool `json:"enabled"`
-	OnClaimed   bool `json:"on_claimed"`
-	OnCompleted bool `json:"on_completed"`
-	OnReleased  bool `json:"on_released"`
-}
+import "github.com/cometline/cometmind/internal/config"
 
-// Settings holds runtime job configuration.
-type Settings struct {
-	Notifications      NotificationSettings `json:"notifications"`
-	LeaseMinutes       int                  `json:"lease_minutes"`
-	DeletedPurgeDays   int                  `json:"deleted_purge_days"`
-	ReconcileIntervalS int                  `json:"reconcile_interval_seconds"`
-}
+// NotificationSettings is the legacy name for config.JobNotificationSettings.
+// It is kept as a type alias so existing callers continue to compile while the
+// canonical type lives in config (breaking the previous config -> jobs import).
+type NotificationSettings = config.JobNotificationSettings
 
+// Settings is the legacy name for config.JobSettings.
+type Settings = config.JobSettings
+
+// DefaultSettings returns the default job settings.
 func DefaultSettings() Settings {
-	return Settings{
-		Notifications: NotificationSettings{
-			Enabled:     true,
-			OnClaimed:   true,
-			OnCompleted: true,
-			OnReleased:  false,
-		},
-		LeaseMinutes:       DefaultLeaseMinutes,
-		DeletedPurgeDays:   30,
-		ReconcileIntervalS: int(DefaultReconcileInterval.Seconds()),
-	}
+	return config.DefaultJobSettings()
 }

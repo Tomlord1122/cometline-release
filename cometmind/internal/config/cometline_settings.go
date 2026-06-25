@@ -6,7 +6,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/cometline/cometmind/internal/jobs"
 	"github.com/cometline/cometmind/internal/logging"
 )
 
@@ -246,7 +245,7 @@ func adaptCometlineSettings(raw cometlineSettingsJSON) (*Config, error) {
 			VacuumAfterPurge:        cm.Storage.VacuumAfterPurge,
 		},
 		Jobs: JobsConfig{
-			Notifications: jobs.NotificationSettings{
+			Notifications: JobNotificationSettings{
 				Enabled:     cm.Jobs.Notifications.Enabled,
 				OnClaimed:   cm.Jobs.Notifications.OnClaimed,
 				OnCompleted: cm.Jobs.Notifications.OnCompleted,
