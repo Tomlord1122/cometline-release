@@ -46,7 +46,8 @@ func (r *Router) HandleInbound(ctx context.Context, msg InboundMessage) error {
 	}
 	if !r.allowed(msg) {
 		if reason := r.blockReason(msg); reason != "" {
-			logging.L().Info("discord.message.ignored",
+			logging.L().Info("gateway.message.ignored",
+				"platform", msg.Platform,
 				"user", msg.UserID,
 				"channel", msg.ChannelID,
 				"reason", reason,
@@ -104,7 +105,7 @@ func (r *Router) HandleInbound(ctx context.Context, msg InboundMessage) error {
 		defer stopTyping()
 	}
 
-	logging.L().Info("discord.agent_turn.start", "session", sess.ID, "workspace", runPath)
+	logging.L().Info("gateway.agent_turn.start", "platform", msg.Platform, "session", sess.ID, "workspace", runPath)
 	var reply strings.Builder
 	var jobProposal *JobProposalPayload
 	sourceChannelID := deliveryChannelID(msg)
@@ -129,7 +130,8 @@ func (r *Router) HandleInbound(ctx context.Context, msg InboundMessage) error {
 	var text string
 	if err != nil {
 		text = fmt.Sprintf("Error: %v", err)
-		logging.L().Error("discord.agent_turn.failed",
+		logging.L().Error("gateway.agent_turn.failed",
+			"platform", msg.Platform,
 			"user", msg.UserID,
 			"channel", msg.ChannelID,
 			"error", err,
@@ -141,7 +143,7 @@ func (r *Router) HandleInbound(ctx context.Context, msg InboundMessage) error {
 		}
 	}
 	if r.onReply != nil {
-		logging.L().Info("discord.reply", "channel", msg.ChannelID, "bytes", len(text))
+		logging.L().Info("gateway.reply", "platform", msg.Platform, "channel", msg.ChannelID, "bytes", len(text))
 		if err := r.onReply(ctx, OutboundMessage{
 			Platform:  msg.Platform,
 			UserID:    msg.UserID,
@@ -155,7 +157,7 @@ func (r *Router) HandleInbound(ctx context.Context, msg InboundMessage) error {
 	if jobProposal != nil && r.JobProposals != nil && r.DeliverJobProposal != nil {
 		paths, pathErr := r.SuggestWorkspacePaths(ctx, "", 25)
 		if pathErr != nil {
-			logging.L().Warn("discord.job_proposal.workspace_paths", "error", pathErr)
+			logging.L().Warn("gateway.job_proposal.workspace_paths", "platform", msg.Platform, "error", pathErr)
 			paths = nil
 		}
 		if runPath != "" {
@@ -178,7 +180,7 @@ func (r *Router) HandleInbound(ctx context.Context, msg InboundMessage) error {
 			ThreadID:  msg.ThreadID,
 		}
 		if err := r.DeliverJobProposal(ctx, out, pending, paths); err != nil {
-			logging.L().Error("discord.job_proposal.deliver_failed", "error", err)
+			logging.L().Error("gateway.job_proposal.deliver_failed", "platform", msg.Platform, "error", err)
 		}
 	}
 	return nil
@@ -193,7 +195,7 @@ func (r *Router) resolveSession(ctx context.Context, msg InboundMessage, ws sess
 		return "", err
 	}
 
-	modelID, providerID := r.discordSessionModel()
+	modelID, providerID := r.gatewaySessionModel()
 	sess, err := r.Sessions.NewSession(ctx, ws.ID, modelID, providerID)
 	if err != nil {
 		return "", err
@@ -204,16 +206,17 @@ func (r *Router) resolveSession(ctx context.Context, msg InboundMessage, ws sess
 	return sess.ID, nil
 }
 
-// EnsureThreadSession creates a fresh CometMind session for a newly created Discord thread.
-func (r *Router) EnsureThreadSession(ctx context.Context, userID, parentChannelID, threadID string) error {
+// EnsureThreadSession creates a fresh CometMind session for a newly created platform thread.
+func (r *Router) EnsureThreadSession(ctx context.Context, platform, userID, parentChannelID, threadID string) error {
 	if r == nil || r.Sessions == nil {
 		return fmt.Errorf("gateway router is not configured")
 	}
+	platform = strings.TrimSpace(platform)
 	userID = strings.TrimSpace(userID)
 	parentChannelID = strings.TrimSpace(parentChannelID)
 	threadID = strings.TrimSpace(threadID)
-	if userID == "" || parentChannelID == "" || threadID == "" {
-		return fmt.Errorf("user_id, parent_channel_id, and thread_id are required")
+	if platform == "" || userID == "" || parentChannelID == "" || threadID == "" {
+		return fmt.Errorf("platform, user_id, parent_channel_id, and thread_id are required")
 	}
 
 	wsPath := r.Config.Gateway.Discord.WorkspacePath
@@ -225,18 +228,18 @@ func (r *Router) EnsureThreadSession(ctx context.Context, userID, parentChannelI
 		return err
 	}
 
-	if _, err := r.Sessions.LookupGatewaySession(ctx, "discord", userID, parentChannelID, threadID); err == nil {
+	if _, err := r.Sessions.LookupGatewaySession(ctx, platform, userID, parentChannelID, threadID); err == nil {
 		return nil
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
 
-	modelID, providerID := r.discordSessionModel()
+	modelID, providerID := r.gatewaySessionModel()
 	sess, err := r.Sessions.NewSession(ctx, ws.ID, modelID, providerID)
 	if err != nil {
 		return err
 	}
-	_, err = r.Sessions.UpsertGatewaySession(ctx, "discord", userID, parentChannelID, threadID, sess.ID, ws.ID)
+	_, err = r.Sessions.UpsertGatewaySession(ctx, platform, userID, parentChannelID, threadID, sess.ID, ws.ID)
 	return err
 }
 
@@ -370,7 +373,7 @@ func (r *Router) allowed(msg InboundMessage) bool {
 
 func (r *Router) blockReason(msg InboundMessage) string {
 	cfg := r.Config.Gateway.Discord
-	if msg.Platform == "discord" && cfg.RequireMention && !msg.Mentioned && msg.ThreadID == "" {
+	if cfg.RequireMention && !msg.Mentioned && msg.ThreadID == "" {
 		return "mention required"
 	}
 	if len(cfg.AllowedUsers) > 0 && !contains(cfg.AllowedUsers, msg.UserID) {
@@ -388,7 +391,7 @@ func (r *Router) blockReason(msg InboundMessage) string {
 	return ""
 }
 
-func (r *Router) discordSessionModel() (modelID, providerID string) {
+func (r *Router) gatewaySessionModel() (modelID, providerID string) {
 	cfg := r.Config.Gateway.Discord
 	modelID = strings.TrimSpace(cfg.Model)
 	providerID = strings.TrimSpace(cfg.Provider)

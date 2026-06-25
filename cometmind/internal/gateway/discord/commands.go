@@ -244,7 +244,7 @@ func (a *Adapter) handleCreateSkillCommand(s *discordgo.Session, i *discordgo.In
 	}
 
 	a.onInbound(context.Background(), gateway.InboundMessage{
-		Platform:        platformName,
+		Platform:        PlatformName,
 		GuildID:         i.GuildID,
 		ParentChannelID: parentChannelID,
 		UserID:          userID,

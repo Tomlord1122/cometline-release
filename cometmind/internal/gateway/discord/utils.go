@@ -96,7 +96,7 @@ func routingInboundMessage(s *discordgo.Session, i *discordgo.InteractionCreate)
 	}
 	routingChannelID, threadID := discordRoutingIDs(i.ChannelID, parentChannelID)
 	return gateway.InboundMessage{
-		Platform:        platformName,
+		Platform:        PlatformName,
 		GuildID:         i.GuildID,
 		ParentChannelID: parentChannelID,
 		UserID:          interactionUserID(i),

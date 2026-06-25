@@ -96,7 +96,7 @@ func TestEnsureThreadSessionCreatesSeparateMapping(t *testing.T) {
 		},
 	}
 
-	if err := r.EnsureThreadSession(ctx, "user-1", "chan-1", "thread-1"); err != nil {
+	if err := r.EnsureThreadSession(ctx, "discord", "user-1", "chan-1", "thread-1"); err != nil {
 		t.Fatalf("EnsureThreadSession() error = %v", err)
 	}
 	threadMapped, err := svc.LookupGatewaySession(ctx, "discord", "user-1", "chan-1", "thread-1")

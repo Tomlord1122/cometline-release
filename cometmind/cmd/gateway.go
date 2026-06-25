@@ -84,7 +84,7 @@ func runGateway(_ *cobra.Command, _ []string) error {
 		})
 		router.Typing = adapter
 		adapter.SetThreadCreatedHandler(func(ctx context.Context, userID, parentChannelID, threadID string) error {
-			return router.EnsureThreadSession(ctx, userID, parentChannelID, threadID)
+			return router.EnsureThreadSession(ctx, discordgw.PlatformName, userID, parentChannelID, threadID)
 		})
 		adapter.SetChangeWorkspaceHandler(func(ctx context.Context, msg gateway.InboundMessage, path string) (string, error) {
 			return router.ChangeWorkspace(ctx, msg, path)

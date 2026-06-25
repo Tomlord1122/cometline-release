@@ -15,7 +15,8 @@ import (
 	"github.com/cometline/cometmind/internal/logging"
 )
 
-const platformName = "discord"
+// PlatformName is the normalized platform identifier for Discord.
+const PlatformName = "discord"
 
 // Adapter connects CometMind to Discord via discordgo.
 type Adapter struct {
