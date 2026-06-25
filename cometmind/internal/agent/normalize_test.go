@@ -38,6 +38,24 @@ func TestNormalizeHistoryForProvider_NativeFamiliesUnchanged(t *testing.T) {
 	}
 }
 
+func TestNormalizeHistoryForProvider_DropsEmptyAssistantForAllFamilies(t *testing.T) {
+	in := []cometsdk.Message{
+		{Role: cometsdk.RoleUser, Content: []cometsdk.Block{cometsdk.TextBlock{Text: "hi"}}},
+		{Role: cometsdk.RoleAssistant},
+		{Role: cometsdk.RoleAssistant, Content: []cometsdk.Block{cometsdk.TextBlock{Text: "hello"}}},
+	}
+
+	for _, family := range []string{config.ProviderAnthropic, config.ProviderOpenAI, config.ProviderCodex} {
+		out, degradations := NormalizeHistoryForProvider(family, in)
+		if len(out) != 2 {
+			t.Fatalf("%s: expected empty assistant dropped, got %d messages", family, len(out))
+		}
+		if len(degradations) == 0 || degradations[len(degradations)-1].Kind != "empty_assistant_dropped" {
+			t.Fatalf("%s: expected empty_assistant_dropped degradation, got %+v", family, degradations)
+		}
+	}
+}
+
 func TestNormalizeHistoryForProvider_CodexSummarizesReasoning(t *testing.T) {
 	in := []cometsdk.Message{assistantWithReasoning()}
 	out, degradations := NormalizeHistoryForProvider(config.ProviderCodex, in)

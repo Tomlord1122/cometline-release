@@ -78,8 +78,9 @@ func toCodexRequest(req *cometsdk.Request, disableMaxOutputTokens bool) ([]byte,
 
 func convertMessages(messages []cometsdk.Message) ([]codexInput, error) {
 	var out []codexInput
+	toolNames := make(map[string]string)
 	for _, m := range messages {
-		converted, err := convertMessage(m)
+		converted, err := convertMessage(m, toolNames)
 		if err != nil {
 			return nil, err
 		}
@@ -88,7 +89,7 @@ func convertMessages(messages []cometsdk.Message) ([]codexInput, error) {
 	return out, nil
 }
 
-func convertMessage(m cometsdk.Message) ([]codexInput, error) {
+func convertMessage(m cometsdk.Message, toolNames map[string]string) ([]codexInput, error) {
 	switch m.Role {
 	case cometsdk.RoleUser:
 		parts, err := inputContentParts(m.Content)
@@ -108,6 +109,7 @@ func convertMessage(m cometsdk.Message) ([]codexInput, error) {
 				if len(strings.TrimSpace(string(args))) == 0 {
 					args = json.RawMessage(`{}`)
 				}
+				toolNames[v.ID] = v.Name
 				out = append(out, codexInput{Type: "function_call", CallID: v.ID, Name: v.Name, Args: string(args)})
 			default:
 				return nil, fmt.Errorf("codex: unsupported block type %T in assistant message", b)
@@ -124,7 +126,7 @@ func convertMessage(m cometsdk.Message) ([]codexInput, error) {
 			if !ok {
 				return nil, fmt.Errorf("codex: RoleToolResult message contains non-ToolResultBlock")
 			}
-			out = append(out, codexInput{Type: "function_call_output", CallID: tr.ToolCallID, Output: tr.Content})
+			out = append(out, codexInput{Type: "function_call_output", CallID: tr.ToolCallID, Name: toolNames[tr.ToolCallID], Output: tr.Content})
 		}
 		return out, nil
 	default:

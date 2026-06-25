@@ -189,6 +189,24 @@ func TestStreamMessage_StreamError(t *testing.T) {
 	assert.Equal(t, "server disconnect", err.Error())
 }
 
+func TestStreamMessage_StreamErrorWithoutDone(t *testing.T) {
+	p := &mockProvider{
+		id: "test",
+		events: []cometsdk.Event{
+			cometsdk.ErrorEvent{Err: errors.New("scanner token too long")},
+		},
+	}
+
+	stream := llm.StreamMessage(context.Background(), p, simpleTextRequest())
+	for range stream.Events() {
+	}
+
+	result, err := stream.Result()
+	assert.Nil(t, result)
+	require.Error(t, err)
+	assert.Equal(t, "scanner token too long", err.Error())
+}
+
 func TestStreamMessage_ContextCancelled(t *testing.T) {
 	ch := make(chan cometsdk.Event)
 	blockingProvider := &blockingMockProvider{ch: ch}

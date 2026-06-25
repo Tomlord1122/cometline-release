@@ -133,6 +133,10 @@ func (ms *MessageStream) run(ctx context.Context, ch <-chan cometsdk.Event, even
 
 		case ev, ok := <-ch:
 			if !ok {
+				if streamErr != nil {
+					ms.setResult(nil, streamErr)
+					return
+				}
 				ms.setFinalMessage(textBuf, reasoningBuf, toolCalls, finish, usage)
 				return
 			}

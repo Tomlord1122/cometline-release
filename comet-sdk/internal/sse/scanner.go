@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+const maxEventBytes = 16 * 1024 * 1024
+
 // Event holds the parsed fields of a single SSE event.
 // For simple providers that only use "data:" lines, only Data is populated.
 type Event struct {
@@ -38,7 +40,12 @@ type Scanner struct {
 
 // NewScanner creates a new Scanner reading from r.
 func NewScanner(r io.Reader) *Scanner {
-	return &Scanner{scanner: bufio.NewScanner(r)}
+	scanner := bufio.NewScanner(r)
+	// Some providers echo the complete request tool schema inside early stream
+	// events. The default bufio.Scanner token limit is 64 KiB, which is too
+	// small for a real agent registry with many MCP/function tools.
+	scanner.Buffer(make([]byte, 0, 64*1024), maxEventBytes)
+	return &Scanner{scanner: scanner}
 }
 
 // Next advances the scanner to the next SSE event.

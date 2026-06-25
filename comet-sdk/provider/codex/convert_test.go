@@ -56,6 +56,7 @@ func TestConvertRequest_ResponsesShape(t *testing.T) {
 	require.Equal(t, "function_call", out.Input[2].Type)
 	require.Equal(t, `{"path":"main.go"}`, out.Input[2].Args)
 	require.Equal(t, "function_call_output", out.Input[3].Type)
+	require.Equal(t, "read_file", out.Input[3].Name)
 	require.Len(t, out.Tools, 1)
 	require.False(t, out.Tools[0].Strict)
 
@@ -67,21 +68,65 @@ func TestConvertRequest_ResponsesShape(t *testing.T) {
 func TestConvertEvent_TextToolAndCompleted(t *testing.T) {
 	state := &codexStreamState{}
 
-	events, err := toSDKEvents(`{"type":"response.output_text.delta","delta":"hello"}`, state)
+	events, err := toSDKEvents("", `{"type":"response.output_text.delta","delta":"hello"}`, state)
 	require.NoError(t, err)
 	require.Equal(t, cometsdk.TextDeltaEvent{Text: "hello"}, events[0])
 
-	events, err = toSDKEvents(`{"type":"response.output_item.done","item":{"type":"function_call","call_id":"call_1","name":"read_file","arguments":{"path":"main.go"}}}`, state)
+	events, err = toSDKEvents("", `{"type":"response.output_item.done","item":{"type":"function_call","call_id":"call_1","name":"read_file","arguments":{"path":"main.go"}}}`, state)
 	require.NoError(t, err)
 	require.Len(t, events, 3)
 	require.Equal(t, cometsdk.ToolCallStartEvent{ID: "call_1", Name: "read_file"}, events[0])
 	require.Equal(t, cometsdk.ToolCallDeltaEvent{ID: "call_1", Delta: `{"path":"main.go"}`}, events[1])
 	require.Equal(t, cometsdk.ToolCallDoneEvent{ID: "call_1", Name: "read_file", Input: json.RawMessage(`{"path":"main.go"}`)}, events[2])
 
-	events, err = toSDKEvents(`{"type":"response.completed","response":{"usage":{"input_tokens":7,"output_tokens":3}}}`, state)
+	events, err = toSDKEvents("", `{"type":"response.completed","response":{"usage":{"input_tokens":7,"output_tokens":3}}}`, state)
 	require.NoError(t, err)
 	require.Equal(t, cometsdk.StepFinishEvent{FinishReason: cometsdk.FinishToolUse, Usage: cometsdk.TokenUsage{InputTokens: 7, OutputTokens: 3}}, events[0])
 	require.Equal(t, cometsdk.DoneEvent{}, events[1])
+}
+
+func TestConvertEvent_SSEEventTypeFallback(t *testing.T) {
+	state := &codexStreamState{}
+
+	events, err := toSDKEvents("response.output_text.delta", `{"delta":"hello"}`, state)
+	require.NoError(t, err)
+	require.Equal(t, []cometsdk.Event{cometsdk.TextDeltaEvent{Text: "hello"}}, events)
+
+	events, err = toSDKEvents("response.function_call_arguments.done", `{"call_id":"call_1","name":"read_file","arguments":{"path":"main.go"}}`, state)
+	require.NoError(t, err)
+	require.Len(t, events, 3)
+	require.Equal(t, cometsdk.ToolCallDoneEvent{ID: "call_1", Name: "read_file", Input: json.RawMessage(`{"path":"main.go"}`)}, events[2])
+}
+
+func TestConvertEvent_NormalizesStringWrappedToolArguments(t *testing.T) {
+	state := &codexStreamState{}
+
+	events, err := toSDKEvents("response.function_call_arguments.done", `{"call_id":"call_1","name":"list_dir","arguments":"{\"path\":\".\"}"}`, state)
+	require.NoError(t, err)
+	require.Len(t, events, 3)
+	require.Equal(t, cometsdk.ToolCallDoneEvent{ID: "call_1", Name: "list_dir", Input: json.RawMessage(`{"path":"."}`)}, events[2])
+}
+
+func TestConvertEvent_AssemblesToolArgumentDeltas(t *testing.T) {
+	state := &codexStreamState{}
+
+	events, err := toSDKEvents("response.output_item.added", `{"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"list_dir"}}`, state)
+	require.NoError(t, err)
+	require.Empty(t, events)
+
+	events, err = toSDKEvents("response.function_call_arguments.delta", `{"item_id":"fc_1","delta":"{\"path\":"}`, state)
+	require.NoError(t, err)
+	require.Empty(t, events)
+
+	events, err = toSDKEvents("response.function_call_arguments.delta", `{"item_id":"fc_1","delta":"\".\"}"}`, state)
+	require.NoError(t, err)
+	require.Empty(t, events)
+
+	events, err = toSDKEvents("response.function_call_arguments.done", `{"item_id":"fc_1"}`, state)
+	require.NoError(t, err)
+	require.Len(t, events, 3)
+	require.Equal(t, cometsdk.ToolCallStartEvent{ID: "call_1", Name: "list_dir"}, events[0])
+	require.Equal(t, cometsdk.ToolCallDoneEvent{ID: "call_1", Name: "list_dir", Input: json.RawMessage(`{"path":"."}`)}, events[2])
 }
 
 func TestJWTExpiry(t *testing.T) {

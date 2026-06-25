@@ -60,13 +60,14 @@ const reasoningSummaryPrefix = "[prior reasoning] "
 // mutated; messages that need no change are shared by reference.
 func NormalizeHistoryForProvider(family string, messages []cometsdk.Message) ([]cometsdk.Message, []HistoryDegradation) {
 	mode := reasoningModeForFamily(family)
+	sanitized, droppedEmpty := dropEmptyAssistantMessages(messages)
 	if mode == reasoningNative {
-		return messages, nil
+		return sanitized, historyDegradations(0, droppedEmpty)
 	}
 
-	out := make([]cometsdk.Message, len(messages))
+	out := make([]cometsdk.Message, len(sanitized))
 	summarized := 0
-	for i, m := range messages {
+	for i, m := range sanitized {
 		if m.Role != cometsdk.RoleAssistant || len(m.ReasoningContent) == 0 {
 			out[i] = m
 			continue
@@ -89,6 +90,10 @@ func NormalizeHistoryForProvider(family string, messages []cometsdk.Message) ([]
 		summarized++
 	}
 
+	return out, historyDegradations(summarized, droppedEmpty)
+}
+
+func historyDegradations(summarized, droppedEmpty int) []HistoryDegradation {
 	var degradations []HistoryDegradation
 	if summarized > 0 {
 		degradations = append(degradations, HistoryDegradation{
@@ -97,7 +102,41 @@ func NormalizeHistoryForProvider(family string, messages []cometsdk.Message) ([]
 			Message: "Prior reasoning was condensed into summary text because the selected provider cannot replay chain-of-thought.",
 		})
 	}
-	return out, degradations
+	if droppedEmpty > 0 {
+		degradations = append(degradations, HistoryDegradation{
+			Kind:    "empty_assistant_dropped",
+			Count:   droppedEmpty,
+			Message: "Empty assistant turns were skipped because some providers reject replaying assistant messages without text or tool calls.",
+		})
+	}
+	return degradations
+}
+
+func dropEmptyAssistantMessages(messages []cometsdk.Message) ([]cometsdk.Message, int) {
+	dropped := 0
+	for _, m := range messages {
+		if isEmptyAssistantMessage(m) {
+			// A prior provider may have ended the stream without yielding text,
+			// reasoning, or tool calls. Replaying that row into OpenAI-compatible
+			// APIs triggers 400s because assistant history must contain content.
+			dropped++
+		}
+	}
+	if dropped == 0 {
+		return messages, 0
+	}
+	out := make([]cometsdk.Message, 0, len(messages)-dropped)
+	for _, m := range messages {
+		if isEmptyAssistantMessage(m) {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out, dropped
+}
+
+func isEmptyAssistantMessage(m cometsdk.Message) bool {
+	return m.Role == cometsdk.RoleAssistant && len(m.Content) == 0 && len(m.ReasoningContent) == 0
 }
 
 // summarizeReasoning collapses reasoning blocks into a single trimmed line.

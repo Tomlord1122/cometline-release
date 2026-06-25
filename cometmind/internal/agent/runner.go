@@ -295,11 +295,18 @@ func (r *Runner) Run(ctx context.Context, turn session.AgentTurn, ch chan<- even
 
 		text := assistantPlainText(result.Message)
 		reasoningBlocks := result.Message.ReasoningContent
-		_, persistedToolIDs, err := r.Sessions.AppendAssistantStep(ctx, turn.ID, text, reasoningBlocks, result.ToolCalls, pendingMemories)
-		if err != nil {
-			ch <- event.Errorf(err.Error(), "db")
-			return err
+		persistedToolIDs := map[string]string{}
+		if text != "" || len(reasoningBlocks) > 0 || len(result.ToolCalls) > 0 {
+			_, persistedToolIDs, err = r.Sessions.AppendAssistantStep(ctx, turn.ID, text, reasoningBlocks, result.ToolCalls, pendingMemories)
+			if err != nil {
+				ch <- event.Errorf(err.Error(), "db")
+				return err
+			}
 		}
+		// Guard against providers that terminate a step without yielding any
+		// replayable assistant payload. Persisting an empty assistant row poisons
+		// later provider switches because many APIs reject assistant history with
+		// neither content nor tool calls.
 		// Memories are attached to the first persisted assistant message only.
 		pendingMemories = nil
 
