@@ -163,6 +163,22 @@ func (a *Adapter) handleChangeCommand(s *discordgo.Session, i *discordgo.Interac
 	})
 }
 
+func (a *Adapter) handleClearCommand(s *discordgo.Session, i *discordgo.InteractionCreate, _ discordgo.ApplicationCommandInteractionData) {
+	if a.onClear == nil {
+		respondEphemeral(s, i, "Session clearing is not configured.")
+		return
+	}
+
+	msg := routingInboundMessage(s, i)
+	text, err := a.onClear(context.Background(), msg)
+	if err != nil {
+		respondEphemeral(s, i, fmt.Sprintf("Failed to clear session: %v", err))
+		return
+	}
+
+	respondEphemeral(s, i, text)
+}
+
 func (a *Adapter) handleJobsCommand(s *discordgo.Session, i *discordgo.InteractionCreate, data discordgo.ApplicationCommandInteractionData) {
 	jobID := ""
 	for _, opt := range data.Options {

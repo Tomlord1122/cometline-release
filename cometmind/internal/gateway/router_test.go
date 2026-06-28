@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cometline/cometmind/internal/config"
@@ -181,6 +182,174 @@ func TestChangeWorkspaceUpdatesSessionPath(t *testing.T) {
 	}
 	if updated.WorkspaceID != ws2.ID {
 		t.Fatalf("workspace_id = %q, want %q", updated.WorkspaceID, ws2.ID)
+	}
+}
+
+func TestHandleClearSlashClearsMappedSessionTranscript(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "cometmind.db")
+	sqlDB, err := store.OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatalf("OpenSQLite() error = %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+
+	svc := session.New(sqlDB)
+	ws, err := svc.EnsureWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("EnsureWorkspace() error = %v", err)
+	}
+
+	r := &Router{
+		Sessions: svc,
+		Config: &config.Config{
+			Gateway: config.GatewayConfig{
+				Discord: config.DiscordGatewayConfig{
+					WorkspacePath: ws.Path,
+				},
+			},
+		},
+	}
+
+	sess, err := svc.NewSession(ctx, ws.ID, "test-model", "test-provider")
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	if _, err := svc.UpsertGatewaySession(ctx, "discord", "user-1", "chan-1", "", sess.ID, ws.ID); err != nil {
+		t.Fatalf("UpsertGatewaySession() error = %v", err)
+	}
+	if _, err := svc.AppendUserMessageContent(ctx, sess.ID, []session.ContentBlock{{Type: "text", Text: "hello"}}, ""); err != nil {
+		t.Fatalf("AppendUserMessageContent() error = %v", err)
+	}
+	if err := svc.SetTitleIfEmpty(ctx, sess.ID, "hello"); err != nil {
+		t.Fatalf("SetTitleIfEmpty() error = %v", err)
+	}
+
+	msg, err := r.HandleClearSlash(ctx, InboundMessage{
+		Platform:  "discord",
+		UserID:    "user-1",
+		ChannelID: "chan-1",
+		Mentioned: true,
+	})
+	if err != nil {
+		t.Fatalf("HandleClearSlash() error = %v", err)
+	}
+	if msg != "Cleared this CometMind conversation transcript." {
+		t.Fatalf("confirmation = %q", msg)
+	}
+
+	transcript, err := svc.LoadTranscript(ctx, sess.ID)
+	if err != nil {
+		t.Fatalf("LoadTranscript() error = %v", err)
+	}
+	if len(transcript) != 0 {
+		t.Fatalf("transcript len = %d, want 0", len(transcript))
+	}
+	updated, err := svc.GetSession(ctx, sess.ID)
+	if err != nil {
+		t.Fatalf("GetSession() error = %v", err)
+	}
+	if updated.Title != "" {
+		t.Fatalf("title = %q, want empty", updated.Title)
+	}
+	if updated.TokenUsage != "{}" {
+		t.Fatalf("token_usage = %q, want {}", updated.TokenUsage)
+	}
+}
+
+func TestHandleClearSlashRequiresExistingSession(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "cometmind.db")
+	sqlDB, err := store.OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatalf("OpenSQLite() error = %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+
+	svc := session.New(sqlDB)
+	ws, err := svc.EnsureWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("EnsureWorkspace() error = %v", err)
+	}
+
+	r := &Router{
+		Sessions: svc,
+		Config: &config.Config{
+			Gateway: config.GatewayConfig{
+				Discord: config.DiscordGatewayConfig{
+					WorkspacePath: ws.Path,
+				},
+			},
+		},
+	}
+
+	_, err = r.HandleClearSlash(ctx, InboundMessage{
+		Platform:  "discord",
+		UserID:    "user-1",
+		ChannelID: "chan-1",
+		Mentioned: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "no active session in this channel") {
+		t.Fatalf("HandleClearSlash() error = %v, want no active session", err)
+	}
+}
+
+func TestHandleClearSlashRejectsRunningSession(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "cometmind.db")
+	sqlDB, err := store.OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatalf("OpenSQLite() error = %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+
+	svc := session.New(sqlDB)
+	ws, err := svc.EnsureWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("EnsureWorkspace() error = %v", err)
+	}
+
+	turns := NewTurnRunTracker()
+	r := &Router{
+		Sessions: svc,
+		Turns:    turns,
+		Config: &config.Config{
+			Gateway: config.GatewayConfig{
+				Discord: config.DiscordGatewayConfig{
+					WorkspacePath: ws.Path,
+				},
+			},
+		},
+	}
+
+	sess, err := svc.NewSession(ctx, ws.ID, "test-model", "test-provider")
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	if _, err := svc.UpsertGatewaySession(ctx, "discord", "user-1", "chan-1", "", sess.ID, ws.ID); err != nil {
+		t.Fatalf("UpsertGatewaySession() error = %v", err)
+	}
+
+	_, finish, err := turns.Start(ctx, sess.ID)
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer finish()
+
+	_, err = r.HandleClearSlash(ctx, InboundMessage{
+		Platform:  "discord",
+		UserID:    "user-1",
+		ChannelID: "chan-1",
+		Mentioned: true,
+	})
+	if err == nil || err.Error() != "session is running" {
+		t.Fatalf("HandleClearSlash() error = %v, want session is running", err)
 	}
 }
 

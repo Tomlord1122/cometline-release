@@ -20,18 +20,19 @@ const PlatformName = "discord"
 
 // Adapter connects CometMind to Discord via discordgo.
 type Adapter struct {
-	Config    config.DiscordGatewayConfig
-	Session   *discordgo.Session
-	onInbound func(context.Context, gateway.InboundMessage)
-	onThread  func(context.Context, string, string, string) error
-	onChange  func(context.Context, gateway.InboundMessage, string) (string, error)
-	onSuggest func(context.Context, string) ([]string, error)
-	onJobs    func(context.Context, gateway.InboundMessage, string) (string, string, error)
-	jobSuggest func(context.Context, string) ([]jobs.Job, error)
-	onCreateJob func(context.Context, gateway.InboundMessage, string, string, string) (string, error)
-	onJobProposalSelect func(string, string) (string, error)
+	Config               config.DiscordGatewayConfig
+	Session              *discordgo.Session
+	onInbound            func(context.Context, gateway.InboundMessage)
+	onThread             func(context.Context, string, string, string) error
+	onChange             func(context.Context, gateway.InboundMessage, string) (string, error)
+	onClear              func(context.Context, gateway.InboundMessage) (string, error)
+	onSuggest            func(context.Context, string) ([]string, error)
+	onJobs               func(context.Context, gateway.InboundMessage, string) (string, string, error)
+	jobSuggest           func(context.Context, string) ([]jobs.Job, error)
+	onCreateJob          func(context.Context, gateway.InboundMessage, string, string, string) (string, error)
+	onJobProposalSelect  func(string, string) (string, error)
 	onJobProposalConfirm func(context.Context, gateway.InboundMessage, string) (string, error)
-	onJobProposalCancel func(string) error
+	onJobProposalCancel  func(string) error
 
 	mu sync.Mutex
 }
@@ -96,6 +97,11 @@ func (a *Adapter) SetThreadCreatedHandler(fn func(context.Context, string, strin
 // SetChangeWorkspaceHandler registers the callback used for /change slash commands.
 func (a *Adapter) SetChangeWorkspaceHandler(fn func(context.Context, gateway.InboundMessage, string) (string, error)) {
 	a.onChange = fn
+}
+
+// SetClearHandler registers the callback used for /clear slash commands.
+func (a *Adapter) SetClearHandler(fn func(context.Context, gateway.InboundMessage) (string, error)) {
+	a.onClear = fn
 }
 
 // SetWorkspaceSuggestHandler registers autocomplete suggestions for /change path.
@@ -195,6 +201,10 @@ func applicationCommands() []*discordgo.ApplicationCommand {
 					Required:    false,
 				},
 			},
+		},
+		{
+			Name:        "clear",
+			Description: "Clear this channel's CometMind conversation transcript",
 		},
 		{
 			Name:        "change",

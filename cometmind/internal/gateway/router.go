@@ -290,6 +290,32 @@ func (r *Router) ChangeWorkspace(ctx context.Context, msg InboundMessage, worksp
 	return fmt.Sprintf("Switched workspace to `%s`.", runPath), nil
 }
 
+// HandleClearSlash clears the transcript for the session mapped to the current
+// platform channel or thread while preserving the session identity.
+func (r *Router) HandleClearSlash(ctx context.Context, msg InboundMessage) (string, error) {
+	if r == nil || r.Sessions == nil {
+		return "", fmt.Errorf("gateway router is not configured")
+	}
+	if !r.allowed(msg) {
+		return "", fmt.Errorf("not allowed")
+	}
+
+	mapped, err := r.Sessions.LookupGatewaySession(ctx, msg.Platform, msg.UserID, msg.ChannelID, msg.ThreadID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("no active session in this channel; send a message first")
+	}
+	if err != nil {
+		return "", err
+	}
+	if r.Turns != nil && r.Turns.Running(mapped.CometmindSessionID) {
+		return "", fmt.Errorf("session is running")
+	}
+	if err := r.Sessions.ClearSessionTranscript(ctx, mapped.CometmindSessionID); err != nil {
+		return "", err
+	}
+	return "Cleared this CometMind conversation transcript.", nil
+}
+
 // SuggestWorkspacePaths returns workspace roots matching query for autocomplete UIs.
 func (r *Router) SuggestWorkspacePaths(ctx context.Context, query string, limit int) ([]string, error) {
 	if r == nil || r.Sessions == nil {
