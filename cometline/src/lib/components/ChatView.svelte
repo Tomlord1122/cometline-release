@@ -258,6 +258,11 @@
 		stop();
 	}
 
+	function onWindowFocus() {
+		if (!compact) return;
+		setTimeout(() => composerRef?.focus(), 0);
+	}
+
 	function revertModelSelection() {
 		const session = sessionStore.sessions.find((item) => item.id === sessionId);
 		if (session) modelStore.selectFromSession(session);
@@ -305,7 +310,7 @@
 	}
 </script>
 
-<svelte:window onkeydown={onWindowKeydown} />
+<svelte:window onkeydown={onWindowKeydown} onfocus={onWindowFocus} />
 
 <div
 	class="chat-home"
