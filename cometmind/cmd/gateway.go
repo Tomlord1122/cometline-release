@@ -89,6 +89,9 @@ func runGateway(_ *cobra.Command, _ []string) error {
 		adapter.SetChangeWorkspaceHandler(func(ctx context.Context, msg gateway.InboundMessage, path string) (string, error) {
 			return router.ChangeWorkspace(ctx, msg, path)
 		})
+		adapter.SetClearHandler(func(ctx context.Context, msg gateway.InboundMessage) (string, error) {
+			return router.HandleClearSlash(ctx, msg)
+		})
 		adapter.SetWorkspaceSuggestHandler(func(ctx context.Context, query string) ([]string, error) {
 			return router.SuggestWorkspacePaths(ctx, query, 25)
 		})

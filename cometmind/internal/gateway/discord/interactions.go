@@ -19,6 +19,8 @@ func (a *Adapter) onInteractionCreate(s *discordgo.Session, i *discordgo.Interac
 			a.handleThreadCommand(s, i, data)
 		case "create-skill":
 			a.handleCreateSkillCommand(s, i, data)
+		case "clear":
+			a.handleClearCommand(s, i, data)
 		case "change":
 			a.handleChangeCommand(s, i, data)
 		case "jobs":
