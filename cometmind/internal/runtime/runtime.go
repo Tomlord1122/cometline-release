@@ -17,11 +17,12 @@ import (
 	cometsdk "github.com/cometline/comet-sdk"
 	"github.com/cometline/cometmind/internal/acp"
 	"github.com/cometline/cometmind/internal/agent"
+	"github.com/cometline/cometmind/internal/codecontext"
 	"github.com/cometline/cometmind/internal/config"
 	"github.com/cometline/cometmind/internal/jobs"
 	"github.com/cometline/cometmind/internal/logging"
-	"github.com/cometline/cometmind/internal/memory"
 	mcppkg "github.com/cometline/cometmind/internal/mcp"
+	"github.com/cometline/cometmind/internal/memory"
 	"github.com/cometline/cometmind/internal/paths"
 	"github.com/cometline/cometmind/internal/provider"
 	"github.com/cometline/cometmind/internal/retention"
@@ -40,19 +41,19 @@ const memoryExtractionConcurrency = 3
 
 // Runtime is the composition root shared by the CLI and server.
 type Runtime struct {
-	Config       *config.Config
-	DB           *sql.DB
-	Sessions     *session.Service
-	Memory       *memory.Service
-	Jobs         *jobs.Service
-	jobSettings  jobs.Settings
+	Config        *config.Config
+	DB            *sql.DB
+	Sessions      *session.Service
+	Memory        *memory.Service
+	Jobs          *jobs.Service
+	jobSettings   jobs.Settings
 	jobSettingsMu sync.RWMutex
-	SystemPrompt string
-	acpMgr       *acp.SessionManager
-	mcpMgr       *mcppkg.Manager
-	subagentOrch *subagent.Orchestrator
-	memorySem    chan struct{} // bounds concurrent memory-extraction goroutines
-	isRunning    func(sessionID string) bool
+	SystemPrompt  string
+	acpMgr        *acp.SessionManager
+	mcpMgr        *mcppkg.Manager
+	subagentOrch  *subagent.Orchestrator
+	memorySem     chan struct{} // bounds concurrent memory-extraction goroutines
+	isRunning     func(sessionID string) bool
 }
 
 // New builds a Runtime from the environment and filesystem.
@@ -299,20 +300,21 @@ func (r *Runtime) runnerFor(sess session.Session, workspacePath string, opts Run
 	}
 
 	runner := &agent.Runner{
-		Config:       r.Config,
-		Provider:     p,
-		Sessions:     r.Sessions,
-		Memory:       r.Memory,
-		Registry:     registry,
-		Jobs:         r.Jobs,
-		MaxSteps:     maxSteps,
-		MaxTokens:    r.Config.MaxTokens,
-		SystemPrompt: r.SystemPrompt,
-		SkillIndex:   skillRegistry.PromptIndex(),
+		Config:               r.Config,
+		Provider:             p,
+		Sessions:             r.Sessions,
+		Memory:               r.Memory,
+		Registry:             registry,
+		Jobs:                 r.Jobs,
+		MaxSteps:             maxSteps,
+		MaxTokens:            r.Config.MaxTokens,
+		SystemPrompt:         r.SystemPrompt,
+		SkillIndex:           skillRegistry.PromptIndex(),
 		SubagentOrchestrator: r.subagentOrchestratorForRunner(opts.Subagent),
-		MemorySem:    r.memorySem,
+		MemorySem:            r.memorySem,
 	}
 	if !opts.Subagent {
+		runner.CodeContext = codecontext.NewWorkspaceRetriever()
 		runner.JobIndex = tools.JobPromptIndex(workspacePath, platform)
 		runner.Compactor = &agent.ContextCompactor{Sessions: r.Sessions, Config: r.Config}
 	}

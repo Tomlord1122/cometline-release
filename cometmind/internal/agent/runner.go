@@ -9,6 +9,7 @@ import (
 
 	cometsdk "github.com/cometline/comet-sdk"
 	"github.com/cometline/comet-sdk/llm"
+	"github.com/cometline/cometmind/internal/codecontext"
 	"github.com/cometline/cometmind/internal/config"
 	"github.com/cometline/cometmind/internal/event"
 	"github.com/cometline/cometmind/internal/logging"
@@ -40,14 +41,23 @@ type MemoryStore interface {
 	ExtractAfterTurn(ctx context.Context, sessionID, model string, llmProvider cometsdk.Provider) ([]memory.Change, error)
 }
 
+type sessionLoader interface {
+	GetSession(ctx context.Context, sessionID string) (session.Session, error)
+}
+
+type workspacePathResolver interface {
+	WorkspacePath(ctx context.Context, workspaceID string) (string, error)
+}
+
 // Runner executes the persisted agent loop for one user turn (which may span many tool steps).
 type Runner struct {
-	Config   *config.Config
-	Provider cometsdk.Provider
-	Sessions TurnStore
-	Memory   MemoryStore
-	Registry *tools.Registry
-	Jobs     OngoingJobLookup
+	Config      *config.Config
+	Provider    cometsdk.Provider
+	Sessions    TurnStore
+	Memory      MemoryStore
+	CodeContext codecontext.Retriever
+	Registry    *tools.Registry
+	Jobs        OngoingJobLookup
 
 	MaxSteps               int
 	MaxTokens              int
@@ -112,9 +122,17 @@ func (r *Runner) Run(ctx context.Context, turn session.AgentTurn, ch chan<- even
 	// AppendAssistantStep call so they persist and rebuild on reload.
 	var pendingMemories []session.InjectedMemory
 	var sess session.Session
-	if svc, ok := r.Sessions.(*session.Service); ok {
+	if svc, ok := r.Sessions.(sessionLoader); ok {
 		if loaded, err := svc.GetSession(ctx, turn.ID); err == nil {
 			sess = loaded
+		}
+	}
+	workspacePath := ""
+	if sess.WorkspaceID != "" {
+		if svc, ok := r.Sessions.(workspacePathResolver); ok {
+			if path, err := svc.WorkspacePath(ctx, sess.WorkspaceID); err == nil {
+				workspacePath = path
+			}
 		}
 	}
 	emitStatus := func(phase event.TurnPhase) {
@@ -180,6 +198,14 @@ func (r *Runner) Run(ctx context.Context, turn session.AgentTurn, ch chan<- even
 		system := baseSystem
 		truncationContinue = false
 		jobProgressNudge = false
+		if r.CodeContext != nil && steps == 0 && workspacePath != "" {
+			result, err := r.CodeContext.Retrieve(ctx, codecontext.Query{WorkspacePath: workspacePath, Messages: msgs})
+			if err != nil {
+				logging.L().Warn("code_context.retrieve.failed", "session", turn.ID, "error", err)
+			} else {
+				system += codecontext.FormatPrompt(result)
+			}
+		}
 		if r.Memory != nil && r.Memory.Enabled() && steps == 0 {
 			decision := memory.DecideRetrieval(msgs)
 			logging.L().Info("memory.retrieve.policy", "session", turn.ID, "retrieve", decision.Retrieve, "reason", decision.Reason, "score", decision.Score, "text_bytes", decision.TextBytes)

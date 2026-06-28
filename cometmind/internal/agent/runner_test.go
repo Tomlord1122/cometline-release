@@ -10,6 +10,7 @@ import (
 	"time"
 
 	cometsdk "github.com/cometline/comet-sdk"
+	"github.com/cometline/cometmind/internal/codecontext"
 	"github.com/cometline/cometmind/internal/db"
 	"github.com/cometline/cometmind/internal/event"
 	"github.com/cometline/cometmind/internal/jobs"
@@ -23,6 +24,8 @@ import (
 // runner makes so the agent loop can be exercised without a live database.
 type fakeStore struct {
 	history     []cometsdk.Message
+	session     session.Session
+	workspace   string
 	usageSaved  int
 	appendCalls int
 	toolUpdates int
@@ -58,7 +61,14 @@ func (f *fakeStore) AppendToolResultMessage(ctx context.Context, sessionID, tool
 }
 
 func (f *fakeStore) GetSession(ctx context.Context, sessionID string) (session.Session, error) {
+	if f.session.ID != "" {
+		return f.session, nil
+	}
 	return session.Session{ID: sessionID}, nil
+}
+
+func (f *fakeStore) WorkspacePath(ctx context.Context, workspaceID string) (string, error) {
+	return f.workspace, nil
 }
 
 func (f *fakeStore) NewChildSession(ctx context.Context, parent session.Session, purpose, subagentKind string) (session.Session, error) {
@@ -133,12 +143,22 @@ func (p *sequentialFakeProvider) Stream(ctx context.Context, req *cometsdk.Reque
 }
 
 type fakeMemory struct {
-	retrieveCalls int
-	baselineCalls int
-	extractCalls  int
-	waitForCancel bool
-	preferences   []memory.ScoredMemory
+	retrieveCalls  int
+	baselineCalls  int
+	extractCalls   int
+	waitForCancel  bool
+	preferences    []memory.ScoredMemory
 	extractChanges []memory.Change
+}
+
+type fakeCodeContext struct {
+	calls  int
+	result codecontext.Result
+}
+
+func (f *fakeCodeContext) Retrieve(ctx context.Context, query codecontext.Query) (codecontext.Result, error) {
+	f.calls++
+	return f.result, nil
 }
 
 func (m *fakeMemory) Enabled() bool { return true }
@@ -442,6 +462,59 @@ func TestRunner_RetrievesMemoryForSubstantiveTurn(t *testing.T) {
 	}
 	if mem.baselineCalls != 1 {
 		t.Fatalf("BaselinePreferences called %d times, want 1", mem.baselineCalls)
+	}
+}
+
+func TestRunner_InjectsRetrievedCodeContextIntoFirstTurnPrompt(t *testing.T) {
+	store := &fakeStore{
+		history: []cometsdk.Message{{
+			Role:    cometsdk.RoleUser,
+			Content: []cometsdk.Block{cometsdk.TextBlock{Text: "where is createMiniWindow defined?"}},
+		}},
+		session:   session.Session{ID: "s1", WorkspaceID: "ws1"},
+		workspace: "/workspace/cometline",
+	}
+	codeCtx := &fakeCodeContext{result: codecontext.Result{Blocks: []codecontext.Block{{
+		Path:      "cometline/electron/main.cjs",
+		Symbol:    "createMiniWindow",
+		StartLine: 1600,
+		EndLine:   1680,
+		Content:   "function createMiniWindow() { /* ... */ }",
+		Score:     0.92,
+	}}}}
+	provider := &capturingSequentialFakeProvider{sequences: [][]cometsdk.Event{{
+		cometsdk.TextDeltaEvent{Text: "found it"},
+		cometsdk.StepFinishEvent{FinishReason: cometsdk.FinishStop},
+		cometsdk.DoneEvent{},
+	}}}
+
+	r := &Runner{
+		Provider:    provider,
+		Sessions:    store,
+		Registry:    tools.NewRegistry(t.TempDir()),
+		CodeContext: codeCtx,
+	}
+	_, runErr := runAndDrain(t, r, session.AgentTurn{ID: "s1", ModelID: "m"})
+
+	if runErr != nil {
+		t.Fatalf("Run returned error: %v", runErr)
+	}
+	if codeCtx.calls != 1 {
+		t.Fatalf("Retrieve called %d times, want 1", codeCtx.calls)
+	}
+	if len(provider.requests) != 1 {
+		t.Fatalf("captured %d requests, want 1", len(provider.requests))
+	}
+	system := provider.requests[0].System
+	for _, want := range []string{
+		"Relevant code context",
+		"cometline/electron/main.cjs:1600-1680",
+		"createMiniWindow",
+		"function createMiniWindow()",
+	} {
+		if !strings.Contains(system, want) {
+			t.Fatalf("system prompt missing %q:\n%s", want, system)
+		}
 	}
 }
 
