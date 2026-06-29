@@ -200,7 +200,8 @@
 		await tick();
 		if (activationRun !== run || sessionId !== id) return;
 		conversation.onMount();
-		setTimeout(() => composerRef?.focus(), 0);
+		if (shellStore.focusedPane !== 'chat') return;
+		composerRef?.focus();
 	}
 
 	$effect(() => {
@@ -223,7 +224,7 @@
 
 	$effect(() => {
 		if (!composerFocusRequestId || shellStore.focusedPane !== 'chat') return;
-		setTimeout(() => composerRef?.focus(), 0);
+		composerRef?.focus();
 	});
 
 	$effect(() => {
@@ -266,7 +267,8 @@
 
 	function onWindowFocus() {
 		if (!compact) return;
-		setTimeout(() => composerRef?.focus(), 0);
+		if (shellStore.focusedPane !== 'chat') return;
+		composerRef?.focus();
 	}
 
 	function revertModelSelection() {

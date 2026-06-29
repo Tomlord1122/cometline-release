@@ -21,7 +21,7 @@
 
 	$effect(() => {
 		if (!composerFocusRequestId || shellStore.focusedPane !== 'chat') return;
-		setTimeout(() => composerRef?.focus(), 0);
+		composerRef?.focus();
 	});
 
 	// Entering the home route is a one-shot reset: no reactive inputs, so this

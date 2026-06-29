@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { ArrowLeft, ArrowRight, RotateCcw, RotateCw, Save, X } from '@lucide/svelte';
+	import { tick } from 'svelte';
 	import FilePreview from '$lib/components/FilePreview.svelte';
 	import { shellStore } from '$lib/stores/shell.svelte';
 	import { isWebPanelUrl, normalizeUserUrl, openLink } from '$lib/open-link';
@@ -216,6 +217,35 @@
 		};
 	}
 
+	// Tracks the focus request id we have already satisfied, so a remounting
+	// input (or a late effect run) doesn't refocus twice and a brand-new request
+	// always wins regardless of which path observes it first.
+	let satisfiedFocusRequestId = 0;
+
+	function applyAddressFocus() {
+		const requestId = shellStore.addressBarFocusRequestId;
+		if (!requestId || requestId === satisfiedFocusRequestId) return;
+		if (!shellStore.webPanelOpen) return;
+		const el = addressInputEl;
+		if (!el) return;
+		satisfiedFocusRequestId = requestId;
+		shellStore.setFocusedPane('web');
+		el.focus({ preventScroll: true });
+		el.select();
+	}
+
+	function trackAddressInput(node: HTMLInputElement) {
+		addressInputEl = node;
+		// The input may mount *after* a focus request was issued (panel reopen
+		// rebuilds the URL field). Focus straight from mount so no request is lost.
+		applyAddressFocus();
+		return {
+			destroy() {
+				if (addressInputEl === node) addressInputEl = null;
+			}
+		};
+	}
+
 	$effect(() => {
 		const el = webviewEl;
 		const sessionKey = panelSessionKey;
@@ -277,13 +307,13 @@
 	});
 
 	$effect(() => {
+		// Re-run whenever a focus is requested or the panel opens. The input may
+		// already be mounted (panel was visible) so handle it here too; if it is
+		// still mounting, trackAddressInput will pick up the same request id.
 		const requestId = shellStore.addressBarFocusRequestId;
-		if (!requestId || !panelOpen) return;
-		queueMicrotask(() => {
-			shellStore.setFocusedPane('web');
-			addressInputEl?.focus();
-			addressInputEl?.select();
-		});
+		const open = panelOpen;
+		if (!requestId || !open) return;
+		void tick().then(applyAddressFocus);
 	});
 </script>
 
@@ -345,7 +375,7 @@
 						<span class="page-title">{pageTitle}</span>
 					{/if}
 					<input
-						bind:this={addressInputEl}
+						use:trackAddressInput
 						class="address-input"
 						type="text"
 						inputmode="url"
