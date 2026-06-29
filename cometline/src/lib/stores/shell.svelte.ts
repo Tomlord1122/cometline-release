@@ -230,6 +230,7 @@ function createShellStore() {
 			};
 			focusedPane = 'web';
 			syncWebPanelOpen(true);
+			addressBarFocusRequestId += 1;
 		},
 		openFilePreview(filePath: string, sessionId: string) {
 			webPanelsBySession = {
@@ -257,6 +258,7 @@ function createShellStore() {
 			};
 			focusedPane = 'web';
 			syncWebPanelOpen(true);
+			addressBarFocusRequestId += 1;
 		},
 		requestAddressBarFocus() {
 			const sessionId = panelSessionKey();
@@ -290,6 +292,9 @@ function createShellStore() {
 			};
 			focusedPane = visible ? 'web' : 'chat';
 			syncWebPanelOpen(visible);
+			if (visible && panel.mode === 'url') {
+				addressBarFocusRequestId += 1;
+			}
 		},
 		closeWebPanel() {
 			const sessionId = panelSessionKey();
@@ -297,7 +302,7 @@ function createShellStore() {
 			const next = { ...webPanelsBySession };
 			delete next[sessionId];
 			webPanelsBySession = next;
-			focusedPane = 'chat';
+			this.requestComposerFocus();
 			syncWebPanelOpen(false);
 		},
 		clearWebPanelForSession(sessionId: string) {
@@ -306,7 +311,7 @@ function createShellStore() {
 			delete next[sessionId];
 			webPanelsBySession = next;
 			if (activeSessionId() === sessionId) {
-				focusedPane = 'chat';
+				this.requestComposerFocus();
 				syncWebPanelOpen(false);
 			}
 		},

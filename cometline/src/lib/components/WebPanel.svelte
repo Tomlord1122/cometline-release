@@ -280,6 +280,7 @@
 		const requestId = shellStore.addressBarFocusRequestId;
 		if (!requestId || !panelOpen) return;
 		queueMicrotask(() => {
+			shellStore.setFocusedPane('web');
 			addressInputEl?.focus();
 			addressInputEl?.select();
 		});
