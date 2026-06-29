@@ -426,15 +426,9 @@ function sendCloseWebPanel() {
 	}
 }
 
-function sendToggleWebPanel() {
+function sendShortcutAction(action) {
 	if (mainWindow && !mainWindow.isDestroyed()) {
-		mainWindow.webContents.send('cometline:toggle-web-panel');
-	}
-}
-
-function sendOpenWebPanel() {
-	if (mainWindow && !mainWindow.isDestroyed()) {
-		mainWindow.webContents.send('cometline:open-web-panel');
+		mainWindow.webContents.send('cometline:shortcut-action', action);
 	}
 }
 
@@ -746,16 +740,36 @@ function handleWebPanelGuestShortcuts(event, input) {
 	if (handleDarwinCloseWindowShortcut(event, input, hideMainWindow)) {
 		return true;
 	}
-	if (shortcutCaptureActive || sessionNavigationSuspended) return false;
+	if (shortcutCaptureActive) return false;
 	const shortcuts = readProviderSettings().shortcuts ?? defaultSettings().shortcuts;
-	if (matchesInputShortcut(input, shortcuts.toggleWebPanel)) {
+
+	// Forward the full set of global app shortcuts to the main renderer so they
+	// keep working while the webview guest holds DOM focus.
+	const forwardActions = [
+		'toggleSidebar',
+		'openWebPanel',
+		'toggleWebPanel',
+		'openSettings',
+		'newChat',
+		'focusSearch'
+	];
+	for (const action of forwardActions) {
+		if (matchesInputShortcut(input, shortcuts[action])) {
+			event.preventDefault();
+			sendShortcutAction(action);
+			return true;
+		}
+	}
+
+	if (sessionNavigationSuspended) return false;
+	if (matchesInputShortcut(input, shortcuts.previousSession)) {
 		event.preventDefault();
-		sendToggleWebPanel();
+		sendShortcutAction('previousSession');
 		return true;
 	}
-	if (matchesInputShortcut(input, shortcuts.openWebPanel)) {
+	if (matchesInputShortcut(input, shortcuts.nextSession)) {
 		event.preventDefault();
-		sendOpenWebPanel();
+		sendShortcutAction('nextSession');
 		return true;
 	}
 	return false;
