@@ -242,6 +242,8 @@ Only one run is allowed per session at a time (`409 session_running` on duplicat
 | `cometmind model set <provider> <model>` | Set default model in settings |
 | `cometmind skills list\|show\|sync\|delete\|export` | Manage Agent Skills |
 | `cometmind gateway run --platform discord` | Start the Discord messaging gateway |
+| `cometmind settings reload` | Ask running `serve` and gateway processes to reload settings in place |
+| `cometmind process status|stop|restart` | Inspect or control long-lived CometMind processes |
 
 Persistent flag: `--workspace` / `-w` (defaults to current directory).
 
@@ -258,6 +260,14 @@ cometmind session list --all --json                 # machine-readable output
 ## Configuration
 
 Settings live at `~/.cometmind/cometline-settings.json` (shared with Cometline). The SQLite database is at `~/.cometmind/cometmind.db`.
+
+Set `COMETMIND_DATA_DIR` to relocate the settings file, database, MCP OAuth tokens, and process metadata into a different directory for container or managed-service deployments.
+
+Runtime apply semantics:
+
+- `cometmind settings reload` and `POST /api/v1/admin/reload-runs` re-read the settings file and apply safe in-process changes for new work.
+- Memory settings, memory provider swaps, storage cleanup interval changes, job reconcile interval changes, bind host or port changes, Discord token changes, and fresh environment variable values still require restart.
+- `cometmind process restart` and `POST /api/v1/admin/restart-runs` are graceful stop requests. Supervised environments such as Electron, Docker, systemd, Fly, Railway, ECS, or Kubernetes should bring the process back automatically.
 
 If `cometline-settings.json` is missing but legacy `config.toml` exists, CometMind loads the TOML once and logs a migration hint. New installs get a minimal JSON template from `cometmind init` / first `Load()`.
 

@@ -141,7 +141,7 @@ go run . gateway run --platform discord # Start Discord gateway
 - **Managed via:** Settings UI in Cometline
 - **Contents:** Provider configs, active provider, appearance, shortcuts, app settings
 
-Settings are synced to CometMind on save. If provider or runtime settings change, the sidecar restarts automatically.
+Settings are synced to CometMind on save. The desktop app now prefers in-place reload for provider and many runtime changes, and falls back to restart when required (for example memory settings, memory provider changes, retention interval changes, job reconcile interval changes, or process-level changes such as host, port, and Discord token updates).
 
 ## Key Features
 
