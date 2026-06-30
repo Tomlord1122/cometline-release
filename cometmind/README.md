@@ -267,7 +267,7 @@ Runtime apply semantics:
 
 - `cometmind settings reload` re-reads the settings file and applies safe in-process changes for new work.
 - Memory settings, memory provider swaps, storage cleanup interval changes, job reconcile interval changes, bind host or port changes, Discord token changes, and fresh environment variable values still require restart.
-- `cometmind process restart` is a graceful stop request. Supervised environments such as Electron, Docker, systemd, Fly, Railway, ECS, or Kubernetes should bring the process back automatically.
+- `cometmind process restart` stops the target process and relaunches it using its recorded command arguments. It waits up to 10 seconds for a clean exit before force-killing, then re-execs the same binary with the same flags.
 
 If `cometline-settings.json` is missing but legacy `config.toml` exists, CometMind loads the TOML once and logs a migration hint. New installs get a minimal JSON template from `cometmind init` / first `Load()`.
 

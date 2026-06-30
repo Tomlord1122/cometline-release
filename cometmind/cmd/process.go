@@ -109,8 +109,6 @@ func handleReloadSignal(ctx context.Context, hupCh <-chan os.Signal, reload func
 			reloadCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			if err := reload(reloadCtx); err != nil {
 				logging.L().Error("runtime.reload_failed", "error", err)
-			} else {
-				logging.L().Info("runtime.reload_requested")
 			}
 			cancel()
 		}
