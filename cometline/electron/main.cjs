@@ -2626,7 +2626,9 @@ ipcMain.handle('cometline:save-provider-settings', async (_event, settings, opti
 	}
 	await syncDiscordGatewayFromSettings(saved);
 	applyOpenAtLoginSetting(saved.app?.openAtLogin);
-	applyIconVariant(saved.app?.iconVariant);
+	if (iconVariantChanged) {
+		applyIconVariant(saved.app?.iconVariant);
+	}
 	return saved;
 });
 
