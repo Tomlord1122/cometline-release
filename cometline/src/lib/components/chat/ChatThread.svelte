@@ -32,6 +32,7 @@
 	import { createFoldController } from '$lib/conversation/thread-fold.svelte';
 	import { createThreadScroll } from '$lib/conversation/thread-scroll.svelte';
 	import { createThreadClocks } from '$lib/conversation/thread-clocks.svelte';
+	import { groupThreadItemsIntoTurns } from '$lib/conversation/thread-turns';
 	import { hasReasoning } from '$lib/conversation/reasoning';
 	import type { ChatTurnPayload } from '$lib/actions/start-chat';
 	import type { JobResource } from '$lib/client/cometmind';
@@ -76,6 +77,7 @@
 
 	let scrollerEl = $state<HTMLDivElement | undefined>(undefined);
 	let threadItems = $derived(isSessionSynced ? chatStore.items : snapshotItems);
+	let threadTurns = $derived(groupThreadItemsIntoTurns(threadItems));
 	let embeddedPinnedJobIds = $derived(pinnedJobProposalToolIds(threadItems));
 	let firstAssistantItem = $derived(
 		threadItems.find(
@@ -194,11 +196,6 @@
 		onStartJob
 	});
 
-	let bottomSpacerHeight = $derived(
-		userMessageCount > 1 && scroll.viewportHeight > 0 && threadItems.at(-1)?.type === 'user'
-			? Math.max(0, scroll.viewportHeight - 240)
-			: 0
-	);
 	let showMessages = $derived(
 		threadItems.length > 0 || (isSessionSynced && awaitingFirstAssistant && !firstUserId)
 	);
@@ -241,6 +238,7 @@
 		class="thread scrollbar-none"
 		bind:this={scrollerEl}
 		onscroll={scroll.onScroll}
+		style:--thread-user-pin-offset-followup="{scroll.userPinScrollMargin}px"
 		role="log"
 		aria-label="Conversation"
 		aria-live="polite"
@@ -267,17 +265,29 @@
 						/>
 					{/if}
 
-					{#each threadItems as item, index (item.id)}
-						{#if item.type === 'user'}
+					{#each threadTurns as turn (turn.id)}
+						{@const isActiveTurn =
+							scroll.activeTurnMinHeight > 0 && turn.id === lastUserId}
+						<div
+							class="thread-turn"
+							class:thread-turn-active={isActiveTurn}
+							style:min-height={isActiveTurn
+								? `${scroll.activeTurnMinHeight}px`
+								: undefined}
+						>
 							<UserMessageRow
-								{item}
+								item={turn.user}
 								{avatarSrc}
 								{avatarSrcset}
-								continuationRow={!startsSpeakerRun(threadItems, index, 'user')}
+								continuationRow={!startsSpeakerRun(
+									threadItems,
+									turn.userIndex,
+									'user'
+								)}
 								copiedId={clocks.copiedId}
 								onCopyMessage={clocks.copyMessage}
 							/>
-							{#if showFirstTurnAvatarSlot(visibilityContext) && item.id === firstUserId}
+							{#if showFirstTurnAvatarSlot(visibilityContext) && turn.user.id === firstUserId}
 								<FirstTurnAssistantSlot
 									{avatarSrc}
 									{avatarSrcset}
@@ -291,58 +301,54 @@
 									ariaHidden={!firstAssistantId}
 								/>
 							{/if}
-						{:else if item.type === 'assistant' && showAssistantRow(item) && shouldShowAssistantInNormalList(item, visibilityContext)}
-							<AssistantMessageRow
-								{item}
-								{threadItems}
-								{index}
-								{avatarSrc}
-								{avatarSrcset}
-								{stackContext}
-								{showActivitySpinner}
-								hideAvatarForFirstTurn={hideAssistantAvatarForFirstTurn(
-									item,
-									firstTurnHandoffPending,
-									firstAssistantRowId
-								)}
-							/>
-						{:else if item.type === 'tool' && !isToolInBuffer(item) && !embeddedPinnedJobIds.has(item.id)}
-							<ToolMessageRow
-								{item}
-								{threadItems}
-								{index}
-								{avatarSrc}
-								{avatarSrcset}
-								{sessionId}
-								toolFoldLabel={stackContext.toolFoldLabel}
-								{fold}
-								{onNotifyAgent}
-								{onStartJob}
-							/>
-						{:else if item.type === 'subagent' && !isSubagentInBuffer(item)}
-							<SubagentMessageRow
-							{item}
-							{threadItems}
-							{index}
-							{avatarSrc}
-							{avatarSrcset}
-							{fold}
-						/>
-						{:else if item.type === 'memory' && !isMemoryInBuffer(item)}
-							<MemoryEventRow {item} memoryCycleTick={clocks.memoryCycleTick} />
-						{:else if item.type === 'status'}
-							<div class="status">{usageText(item)}</div>
-						{:else if item.type === 'error'}
-							<ErrorEventRow {item} />
-						{/if}
+							{#each turn.items as { item, index } (item.id)}
+								{#if item.type === 'assistant' && showAssistantRow(item) && shouldShowAssistantInNormalList(item, visibilityContext)}
+									<AssistantMessageRow
+										{item}
+										{threadItems}
+										{index}
+										{avatarSrc}
+										{avatarSrcset}
+										{stackContext}
+										{showActivitySpinner}
+										hideAvatarForFirstTurn={hideAssistantAvatarForFirstTurn(
+											item,
+											firstTurnHandoffPending,
+											firstAssistantRowId
+										)}
+									/>
+								{:else if item.type === 'tool' && !isToolInBuffer(item) && !embeddedPinnedJobIds.has(item.id)}
+									<ToolMessageRow
+										{item}
+										{threadItems}
+										{index}
+										{avatarSrc}
+										{avatarSrcset}
+										{sessionId}
+										toolFoldLabel={stackContext.toolFoldLabel}
+										{fold}
+										{onNotifyAgent}
+										{onStartJob}
+									/>
+								{:else if item.type === 'subagent' && !isSubagentInBuffer(item)}
+									<SubagentMessageRow
+										{item}
+										{threadItems}
+										{index}
+										{avatarSrc}
+										{avatarSrcset}
+										{fold}
+									/>
+								{:else if item.type === 'memory' && !isMemoryInBuffer(item)}
+									<MemoryEventRow {item} memoryCycleTick={clocks.memoryCycleTick} />
+								{:else if item.type === 'status'}
+									<div class="status">{usageText(item)}</div>
+								{:else if item.type === 'error'}
+									<ErrorEventRow {item} />
+								{/if}
+							{/each}
+						</div>
 					{/each}
-					{#if bottomSpacerHeight > 0}
-						<div
-							class="thread-bottom-spacer"
-							style:height="{bottomSpacerHeight}px"
-							aria-hidden="true"
-						></div>
-					{/if}
 				</div>
 			{/if}
 		</div>
@@ -391,9 +397,14 @@
 		pointer-events: none;
 	}
 
-	.thread-bottom-spacer {
-		flex: 0 0 auto;
-		pointer-events: none;
+	.thread-turn {
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+	}
+
+	.thread-turn-active :global(.user-row) {
+		scroll-margin-top: var(--thread-user-pin-offset-followup);
 	}
 
 	@media (min-width: 768px) {

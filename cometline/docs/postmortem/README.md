@@ -26,6 +26,7 @@ Short write-ups of non-obvious bugs in the Cometline UI layer (and cross-cutting
 | 2026-06-21 | Reload: reasoning-less tool/memory rows become loose, ungrouped pills                               | [reload-loose-tool-memory-pills-no-reasoning.md](./reload-loose-tool-memory-pills-no-reasoning.md)                 |
 | 2026-06-23 | Provider label casing inconsistency ("OpenAI Compatible" vs "OpenAI-compatible")                    | [provider-label-casing-inconsistency.md](./provider-label-casing-inconsistency.md)                                 |
 | 2026-06-29 | Settings "Save changes" stuck disabled after picking embedding model (state mutation in `$derived`) | [settings-save-disabled-state-mutation-in-derived.md](./settings-save-disabled-state-mutation-in-derived.md)       |
+| 2026-07-01 | Thread turn scroll pinning (user message upper-third, turn min-height, spacer removal)              | [thread-turn-scroll-pinning.md](./thread-turn-scroll-pinning.md)                                                   |
 
 ## When to add a postmortem
 

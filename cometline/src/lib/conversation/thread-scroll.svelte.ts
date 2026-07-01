@@ -1,10 +1,10 @@
 import { tick, untrack } from 'svelte';
 import type { ChatItem } from '$lib/stores/chat.svelte';
+import { activeTurnMinHeight } from './thread-turns';
 import {
 	buildScrollKey,
-	offsetTopRelativeTo,
-	shouldShowJumpToBottom,
-	userMessageScrollTop
+	followUpPinScrollMargin,
+	shouldShowJumpToBottom
 } from './thread-scroll';
 
 export interface ThreadScrollDeps {
@@ -25,8 +25,14 @@ export function createThreadScroll(deps: ThreadScrollDeps) {
 	let viewportHeight = $state(0);
 	let scrollFrame = 0;
 	let isInitialTranscriptPaint = $state(true);
+	/** Keeps min-height on the latest turn from send until the next user message. */
+	let activeTurnCanvas = $state(false);
 
 	const scrollKey = $derived(buildScrollKey(deps.getThreadItems(), deps.getSessionStreaming()));
+	const turnMinHeight = $derived.by(() =>
+		activeTurnCanvas ? activeTurnMinHeight(viewportHeight) : 0
+	);
+	const userPinScrollMargin = $derived(followUpPinScrollMargin(viewportHeight));
 
 	function setScroller(element: HTMLDivElement | undefined) {
 		scroller = element;
@@ -50,14 +56,21 @@ export function createThreadScroll(deps: ThreadScrollDeps) {
 		showJumpToBottom = false;
 	}
 
-	function scrollUserMessageToTop(userId: string) {
+	function scrollUserMessageIntoView(userId: string) {
 		if (!scroller) return;
 		const target = scroller.querySelector<HTMLElement>(`[data-user-item-id="${userId}"]`);
-		if (!target) return;
-		const absoluteTop = offsetTopRelativeTo(target, scroller);
-		const top = userMessageScrollTop(absoluteTop, deps.getUserMessageCount(), viewportHeight);
-		scroller.scrollTo({ top, behavior: 'smooth' });
+		target?.scrollIntoView({ block: 'start', behavior: 'auto' });
 		updateJumpToBottom();
+	}
+
+	function pinUserMessageAfterLayout(userId: string) {
+		let frame = 0;
+		const settle = () => {
+			scrollUserMessageIntoView(userId);
+			frame += 1;
+			if (frame < 3) requestAnimationFrame(settle);
+		};
+		requestAnimationFrame(settle);
 	}
 
 	$effect(() => {
@@ -65,6 +78,7 @@ export function createThreadScroll(deps: ThreadScrollDeps) {
 		untrack(() => {
 			lastScrolledUserId = deps.getLastUserId();
 			isInitialTranscriptPaint = !deps.sessionHasCachedTranscript(deps.getSessionId());
+			activeTurnCanvas = false;
 		});
 	});
 
@@ -168,19 +182,23 @@ export function createThreadScroll(deps: ThreadScrollDeps) {
 			return;
 		}
 		if (userId === lastScrolledUserId) return;
-		if (isInitialTranscriptPaint) {
-			lastScrolledUserId = userId;
-			return;
-		}
 		lastScrolledUserId = userId;
+		if (isInitialTranscriptPaint || deps.getUserMessageCount() <= 1) return;
+		activeTurnCanvas = true;
 		void tick().then(() => {
-			requestAnimationFrame(() => scrollUserMessageToTop(userId));
+			pinUserMessageAfterLayout(userId);
 		});
 	});
 
 	return {
 		get showJumpToBottom() {
 			return showJumpToBottom;
+		},
+		get activeTurnMinHeight() {
+			return turnMinHeight;
+		},
+		get userPinScrollMargin() {
+			return userPinScrollMargin;
 		},
 		get viewportHeight() {
 			return viewportHeight;

@@ -3,6 +3,10 @@ import { anyReasoningPending, reasoningTextLength } from './reasoning';
 
 export const SCROLL_PIN_THRESHOLD = 96;
 export const USER_SEND_TOP_OFFSET = 24;
+/** Upper-third pin for follow-up turns (turn 2+), applied via scroll-margin-top. */
+export const USER_PIN_RATIO_FOLLOWUP = 0.28;
+export const USER_PIN_OFFSET_FALLBACK = 100;
+export const TURN_BOTTOM_CLEARANCE = 96;
 
 export function isNearBottom(element: HTMLElement, threshold = SCROLL_PIN_THRESHOLD) {
 	return element.scrollHeight - element.scrollTop - element.clientHeight <= threshold;
@@ -11,17 +15,6 @@ export function isNearBottom(element: HTMLElement, threshold = SCROLL_PIN_THRESH
 export function shouldShowJumpToBottom(element: HTMLElement, threshold = SCROLL_PIN_THRESHOLD) {
 	const overflowing = element.scrollHeight - element.clientHeight > threshold;
 	return overflowing && !isNearBottom(element, threshold);
-}
-
-/** Walk the offsetParent chain to get an element's top offset relative to an ancestor. */
-export function offsetTopRelativeTo(el: HTMLElement, ancestor: HTMLElement): number {
-	let top = 0;
-	let cur: HTMLElement | null = el;
-	while (cur && cur !== ancestor) {
-		top += cur.offsetTop;
-		cur = cur.offsetParent as HTMLElement | null;
-	}
-	return top;
 }
 
 export function buildScrollKey(items: readonly ChatItem[], sessionStreaming: boolean) {
@@ -41,15 +34,12 @@ export function buildScrollKey(items: readonly ChatItem[], sessionStreaming: boo
 	return `stream:empty:${items.length}`;
 }
 
-export function userMessageScrollTop(
-	absoluteTop: number,
-	userMessageCount: number,
-	viewportHeight: number,
-	firstTurnOffset = USER_SEND_TOP_OFFSET
-) {
-	if (userMessageCount > 1) {
-		const followupOffset = viewportHeight > 0 ? Math.round(viewportHeight * 0.15) : 80;
-		return Math.max(0, absoluteTop - followupOffset);
-	}
-	return Math.max(0, absoluteTop - firstTurnOffset);
+export function followUpPinScrollMargin(viewportHeight: number) {
+	return viewportHeight > 0
+		? Math.round(viewportHeight * USER_PIN_RATIO_FOLLOWUP)
+		: USER_PIN_OFFSET_FALLBACK;
+}
+
+export function countUserMessages(items: readonly ChatItem[]) {
+	return items.reduce((count, item) => (item.type === 'user' ? count + 1 : count), 0);
 }

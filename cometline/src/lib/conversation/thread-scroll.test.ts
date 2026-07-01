@@ -2,9 +2,9 @@
 import { describe, expect, it } from 'vitest';
 import {
 	buildScrollKey,
+	followUpPinScrollMargin,
 	isNearBottom,
-	offsetTopRelativeTo,
-	userMessageScrollTop
+	shouldShowJumpToBottom
 } from './thread-scroll';
 import type { ChatItem } from '$lib/stores/chat.svelte';
 
@@ -37,27 +37,32 @@ describe('isNearBottom', () => {
 	});
 });
 
-describe('userMessageScrollTop', () => {
-	it('uses first-turn offset for the first user message', () => {
-		expect(userMessageScrollTop(200, 1, 800)).toBe(176);
+describe('shouldShowJumpToBottom', () => {
+	it('returns false when already near the bottom', () => {
+		const el = {
+			scrollHeight: 1000,
+			scrollTop: 904,
+			clientHeight: 96
+		} as HTMLElement;
+		expect(shouldShowJumpToBottom(el, 96)).toBe(false);
 	});
 
-	it('uses follow-up offset for later user messages', () => {
-		expect(userMessageScrollTop(400, 2, 800)).toBe(280);
+	it('returns true when content overflows and the viewport is far from bottom', () => {
+		const el = {
+			scrollHeight: 1000,
+			scrollTop: 0,
+			clientHeight: 96
+		} as HTMLElement;
+		expect(shouldShowJumpToBottom(el, 96)).toBe(true);
 	});
 });
 
-describe('offsetTopRelativeTo', () => {
-	it('sums offsetTop along the offsetParent chain', () => {
-		const ancestor = document.createElement('div');
-		const parent = document.createElement('div');
-		const child = document.createElement('div');
-		ancestor.appendChild(parent);
-		parent.appendChild(child);
-		Object.defineProperty(parent, 'offsetParent', { value: ancestor });
-		Object.defineProperty(child, 'offsetParent', { value: parent });
-		Object.defineProperty(parent, 'offsetTop', { value: 40 });
-		Object.defineProperty(child, 'offsetTop', { value: 12 });
-		expect(offsetTopRelativeTo(child, ancestor)).toBe(52);
+describe('followUpPinScrollMargin', () => {
+	it('uses the upper-third ratio when viewport height is known', () => {
+		expect(followUpPinScrollMargin(800)).toBe(224);
+	});
+
+	it('falls back when viewport height is zero', () => {
+		expect(followUpPinScrollMargin(0)).toBe(100);
 	});
 });

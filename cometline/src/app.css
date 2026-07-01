@@ -56,6 +56,11 @@
 	/* Clip thread at composer vertical center so scroll area extends further down. */
 	--thread-dock-inset: calc(var(--composer-dock-bottom) + 10rem);
 	--thread-padding-bottom: var(--thread-scroll-gap);
+	--thread-user-pin-offset-first: 24px;
+	--thread-user-pin-ratio-followup: 0.28;
+	--thread-turn-bottom-clearance: 96px;
+	/* Set on .thread at runtime from viewport height; used by active turn scroll-margin. */
+	--thread-user-pin-offset-followup: 0px;
 
 	/* Motion */
 	--ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);

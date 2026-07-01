@@ -205,12 +205,13 @@ export async function flyUserBubble(params: FlyUserBubbleParams): Promise<boolea
 		if (skipReveal || deferReveal) return;
 		revealStagedUser();
 	};
+	const isFollowUpTurn = origin === 'above-composer';
 
 	if (prefersReducedMotion()) {
 		if (!skipOnPrepare) onPrepare?.();
 		if (!skipStage) stageUser(text, images);
 		await tick();
-		scrollThreadToBottom(root);
+		if (!isFollowUpTurn) scrollThreadToBottom(root);
 		reveal();
 		return true;
 	}
@@ -218,7 +219,7 @@ export async function flyUserBubble(params: FlyUserBubbleParams): Promise<boolea
 	if (!skipOnPrepare) onPrepare?.();
 	if (!skipStage) stageUser(text, images);
 	await tick();
-	scrollThreadToBottom(root);
+	if (!isFollowUpTurn) scrollThreadToBottom(root);
 	await afterPaint();
 
 	const userTarget = await waitForSelector(root, '[data-flight-target="user"]');
