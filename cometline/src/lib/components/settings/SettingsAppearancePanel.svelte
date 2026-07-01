@@ -105,10 +105,11 @@
 									class:empty={!hasCustomPreset}
 									style={hasCustomPreset
 										? `background: linear-gradient(135deg, ${appearance.customPreset?.glowColor} 0%, ${appearance.customPreset?.ringColor} 100%)`
-										: undefined}
+										: "background: linear-gradient(135deg, #23232a 0%, #454553 100%)"}
+					
 									aria-hidden="true"
 								></span>
-								{hasCustomPreset ? 'Custom' : 'Create custom'}
+								Custom
 							</button>
 						</div>
 					</div>
