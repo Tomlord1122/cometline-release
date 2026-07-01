@@ -15,7 +15,7 @@ const {
 } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
-const { spawn } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const http = require('http');
@@ -338,6 +338,7 @@ const PERSONA_AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 const PERSONA_APP_ICON_SIZE = 1024;
 const PERSONA_APP_ICON_RADIUS = 224;
 const PERSONA_APP_ICON_ARTWORK_SCALE = 0.8125;
+const PERSONA_ICON_SCRIPT = path.join(__dirname, '..', 'scripts', 'generate-project-icons.swift');
 
 function migratePersonaIdFromIconVariant(iconVariant) {
 	return iconVariant === 'man' ? 'souma' : 'minako';
@@ -1265,10 +1266,16 @@ function getPersonaId() {
 	return readSavedPersonaId(readProviderSettings());
 }
 
+function customPersonaAppIconPath(personaId) {
+	const dir = getPersonaDir(personaId);
+	return dir ? path.join(dir, 'app_icon.png') : '';
+}
+
 function resolveAppIconPaths(personaId = 'minako', settings = undefined) {
 	const customPersona = findCustomPersona(settings ?? readProviderSettings(), personaId);
-	if (customPersona?.avatarPath) {
-		return [path.resolve(expandHomePath(customPersona.avatarPath))];
+	if (customPersona) {
+		const appIconPath = customPersonaAppIconPath(customPersona.id);
+		return appIconPath ? [appIconPath] : [];
 	}
 	const variant = builtinPersonaToIconVariant(personaId);
 	if (variant === 'man') {
@@ -1283,7 +1290,11 @@ function resolveAppIconPaths(personaId = 'minako', settings = undefined) {
 	if (app.isPackaged) {
 		return [path.join(process.resourcesPath, 'icon.png')];
 	}
-	return [path.join(__dirname, '..', 'buildResources', 'icon.png')];
+	return [
+		path.join(app.getAppPath(), 'static', 'app_icon.png'),
+		path.join(__dirname, '..', 'static', 'app_icon.png'),
+		path.join(__dirname, '..', 'buildResources', 'icon.png')
+	];
 }
 
 function getAppIconPath(personaId = getPersonaId(), settings = undefined) {
@@ -1293,28 +1304,94 @@ function getAppIconPath(personaId = getPersonaId(), settings = undefined) {
 function createCustomPersonaAppIcon(customPersona) {
 	if (!customPersona?.avatarPath || !fs.existsSync(customPersona.avatarPath)) return null;
 	const ext = path.extname(customPersona.avatarPath).toLowerCase();
-	const mimeType = PERSONA_IMAGE_MIME_BY_EXT[ext];
-	if (!mimeType) return null;
-	let buffer;
-	try {
-		buffer = fs.readFileSync(customPersona.avatarPath);
-	} catch {
-		return null;
-	}
+	if (!PERSONA_IMAGE_MIME_BY_EXT[ext]) return null;
 	const artworkSize = PERSONA_APP_ICON_SIZE * PERSONA_APP_ICON_ARTWORK_SCALE;
 	const artworkInset = (PERSONA_APP_ICON_SIZE - artworkSize) / 2;
 	const artworkRadius = PERSONA_APP_ICON_RADIUS * PERSONA_APP_ICON_ARTWORK_SCALE;
-	const avatarDataUrl = `data:${mimeType};base64,${buffer.toString('base64')}`;
-	const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${PERSONA_APP_ICON_SIZE}" height="${PERSONA_APP_ICON_SIZE}" viewBox="0 0 ${PERSONA_APP_ICON_SIZE} ${PERSONA_APP_ICON_SIZE}"><defs><clipPath id="persona-icon"><rect x="${artworkInset}" y="${artworkInset}" width="${artworkSize}" height="${artworkSize}" rx="${artworkRadius}" ry="${artworkRadius}"/></clipPath></defs><image href="${avatarDataUrl}" x="${artworkInset}" y="${artworkInset}" width="${artworkSize}" height="${artworkSize}" preserveAspectRatio="xMidYMid slice" clip-path="url(#persona-icon)"/></svg>`;
-	const image = nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`);
+	const avatarHref = pathToFileURL(path.resolve(customPersona.avatarPath)).href;
+	const svg = [
+		`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"`,
+		`width="${PERSONA_APP_ICON_SIZE}" height="${PERSONA_APP_ICON_SIZE}"`,
+		`viewBox="0 0 ${PERSONA_APP_ICON_SIZE} ${PERSONA_APP_ICON_SIZE}">`,
+		`<defs><clipPath id="persona-icon">`,
+		`<rect x="${artworkInset}" y="${artworkInset}" width="${artworkSize}" height="${artworkSize}"`,
+		`rx="${artworkRadius}" ry="${artworkRadius}"/></clipPath></defs>`,
+		`<rect x="${artworkInset}" y="${artworkInset}" width="${artworkSize}" height="${artworkSize}"`,
+		`rx="${artworkRadius}" ry="${artworkRadius}" fill="#ffffff"/>`,
+		`<image href="${avatarHref}" xlink:href="${avatarHref}" x="${artworkInset}" y="${artworkInset}"`,
+		`width="${artworkSize}" height="${artworkSize}" preserveAspectRatio="xMidYMid slice"`,
+		`clip-path="url(#persona-icon)"/></svg>`
+	].join('');
+	const image = nativeImage.createFromDataURL(
+		`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+	);
 	return image.isEmpty() ? null : image;
+}
+
+function generatePersonaAppIconPng(avatarPath, outputPath) {
+	if (!avatarPath || !fs.existsSync(avatarPath) || !outputPath) return false;
+	try {
+		fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+	} catch {
+		return false;
+	}
+	if (process.platform === 'darwin' && fs.existsSync(PERSONA_ICON_SCRIPT)) {
+		try {
+			execFileSync(
+				'swift',
+				[PERSONA_ICON_SCRIPT, 'persona', path.resolve(avatarPath), outputPath],
+				{ stdio: 'pipe', timeout: 30000 }
+			);
+			if (fs.existsSync(outputPath)) return true;
+		} catch (error) {
+			console.warn(
+				'[icon] Swift persona icon generation failed, falling back to SVG:',
+				error?.message ?? error
+			);
+		}
+	}
+	const fallback = createCustomPersonaAppIcon({ avatarPath, id: 'fallback' });
+	if (!fallback) return false;
+	try {
+		fs.writeFileSync(outputPath, fallback.toPNG());
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function ensureCustomPersonaAppIcon(customPersona) {
+	if (!customPersona?.avatarPath || !fs.existsSync(customPersona.avatarPath)) return null;
+	const iconPath = customPersonaAppIconPath(customPersona.id);
+	if (!iconPath) return createCustomPersonaAppIcon(customPersona);
+
+	let avatarMtime = 0;
+	let iconMtime = 0;
+	try {
+		avatarMtime = fs.statSync(customPersona.avatarPath).mtimeMs;
+		if (fs.existsSync(iconPath)) iconMtime = fs.statSync(iconPath).mtimeMs;
+	} catch {
+		return createCustomPersonaAppIcon(customPersona);
+	}
+
+	if (!fs.existsSync(iconPath) || iconMtime < avatarMtime) {
+		generatePersonaAppIconPng(customPersona.avatarPath, iconPath);
+	}
+
+	if (fs.existsSync(iconPath)) {
+		const cached = nativeImage.createFromPath(iconPath);
+		if (!cached.isEmpty()) return cached;
+	}
+	return createCustomPersonaAppIcon(customPersona);
 }
 
 function getAppIconImage(personaId = getPersonaId(), settings = undefined) {
 	const resolvedSettings = settings ?? readProviderSettings();
 	const customPersona = findCustomPersona(resolvedSettings, personaId);
-	const customIcon = createCustomPersonaAppIcon(customPersona);
-	if (customIcon) return customIcon;
+	if (customPersona) {
+		const customIcon = ensureCustomPersonaAppIcon(customPersona);
+		if (customIcon) return customIcon;
+	}
 	const iconPath = getAppIconPath(personaId, resolvedSettings);
 	if (!iconPath) return null;
 	const image = nativeImage.createFromPath(iconPath);
@@ -1324,8 +1401,10 @@ function getAppIconImage(personaId = getPersonaId(), settings = undefined) {
 function resolveTrayImageSource(personaId = getPersonaId(), settings = undefined) {
 	const customPersona = findCustomPersona(settings ?? readProviderSettings(), personaId);
 	if (customPersona?.avatarPath && fs.existsSync(customPersona.avatarPath)) {
-		const image = createCustomPersonaAppIcon(customPersona) ?? nativeImage.createFromPath(customPersona.avatarPath);
-		if (!image.isEmpty()) return image.resize({ width: 18, height: 18, quality: 'best' });
+		const image = ensureCustomPersonaAppIcon(customPersona);
+		if (image && !image.isEmpty()) {
+			return image.resize({ width: 18, height: 18, quality: 'best' });
+		}
 	}
 	const variant = builtinPersonaToIconVariant(personaId);
 	const trayIconPath = resolveTrayResourcePath(
@@ -1348,6 +1427,9 @@ function applyPersona(personaId = getPersonaId(), settings = undefined) {
 	}
 	if (mainWindow && !mainWindow.isDestroyed()) {
 		mainWindow.setIcon(image);
+	}
+	if (miniWindow && !miniWindow.isDestroyed()) {
+		miniWindow.setIcon(image);
 	}
 	if (!tray) return;
 	const trayImageSource = resolveTrayImageSource(personaId, settings);
@@ -3084,6 +3166,7 @@ async function saveCustomPersona(payload = {}) {
 		personas: { custom: nextCustomPersonas }
 	};
 	const saved = writeProviderSettings(settings);
+	generatePersonaAppIconPng(persona.avatarPath, customPersonaAppIconPath(persona.id));
 	await reloadCometMind();
 	applyPersona(saved.app?.personaId, saved);
 	return { ok: true, persona };
