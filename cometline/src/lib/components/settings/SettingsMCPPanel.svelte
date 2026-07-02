@@ -20,13 +20,9 @@
 	import { ChevronDown, ChevronRight, Download, Plus, RefreshCw, Trash2 } from '@lucide/svelte';
 	import { onMount } from 'svelte';
 
-	let {
-		mcp,
-		onMcpChange
-	}: {
-		mcp: CometMindMCPSettings;
-		onMcpChange: (mcp: CometMindMCPSettings) => void;
-	} = $props();
+	let { mcp = $bindable() }: { mcp: CometMindMCPSettings } = $props();
+
+	const MCP_REFRESH_TIMEOUT_MS = 8_000;
 
 	const transportOptions: { value: MCPTransport; label: string; hint: string }[] = [
 		{
@@ -77,8 +73,16 @@
 		argsTexts = nextArgs;
 	}
 
+	// Only re-seed local text mirrors when the server *id set* changes (add/remove/import).
+	// syncServerLists() replaces the servers array on every env/args/header keystroke so
+	// the effect re-runs often; guard so we do not clobber in-progress textarea input
+	// (e.g. "FOO" before "=" was typed).
+	let lastServerIdKey = '';
+
 	$effect(() => {
-		(mcp.servers ?? []).map((server) => server.id).join('\0');
+		const key = (mcp.servers ?? []).map((server) => server.id).join('\0');
+		if (key === lastServerIdKey) return;
+		lastServerIdKey = key;
 		syncTextFieldsFromSettings();
 	});
 
@@ -108,7 +112,13 @@
 	}
 
 	function updateMcp(patch: Partial<CometMindMCPSettings>) {
-		onMcpChange({ ...mcp, ...patch });
+		mcp = { ...mcp, ...patch };
+	}
+
+	function newServerId(): string {
+		const servers = mcp.servers ?? [];
+		const candidate = `server-${Date.now()}`;
+		return servers.some((server) => server.id === candidate) ? `${candidate}-1` : candidate;
 	}
 
 	function updateServer(serverId: string, patch: Partial<MCPServerConfig>) {
@@ -120,10 +130,11 @@
 	}
 
 	function addServer() {
-		const id = `server-${mcp.servers.length + 1}`;
+		const servers = mcp.servers ?? [];
+		const id = newServerId();
 		const server: MCPServerConfig = {
 			id,
-			name: `MCP Server ${mcp.servers.length + 1}`,
+			name: `MCP Server ${servers.length + 1}`,
 			enabled: true,
 			transport: 'stdio',
 			command: '',
@@ -132,7 +143,7 @@
 			url: '',
 			headers: {}
 		};
-		updateMcp({ enabled: true, servers: [...mcp.servers, server] });
+		updateMcp({ enabled: true, servers: [...servers, server] });
 		expandedServerId = id;
 	}
 
@@ -299,11 +310,29 @@
 		return transportOptions.find((option) => option.value === value)?.hint ?? '';
 	}
 
+	async function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+		let timeoutId: ReturnType<typeof setTimeout> | undefined;
+		const timeout = new Promise<never>((_, reject) => {
+			timeoutId = setTimeout(
+				() => reject(new Error(`${label} timed out after ${MCP_REFRESH_TIMEOUT_MS / 1000}s`)),
+				MCP_REFRESH_TIMEOUT_MS
+			);
+		});
+		try {
+			return await Promise.race([promise, timeout]);
+		} finally {
+			if (timeoutId) clearTimeout(timeoutId);
+		}
+	}
+
 	async function refreshMcpRuntime() {
 		mcpBusy = true;
 		mcpStatus = '';
 		try {
-			const [servers, tools] = await Promise.all([listMcpServers(), listMcpTools()]);
+			const [servers, tools] = await Promise.all([
+				withTimeout(listMcpServers(), 'MCP server status'),
+				withTimeout(listMcpTools(), 'MCP tool list')
+			]);
 			serverStatuses = servers ?? [];
 			toolPreview = tools ?? [];
 			rememberDiscoveredTools();
@@ -358,9 +387,9 @@
 	}
 
 	export function syncFields() {
-		onMcpChange({
+		mcp = {
 			...mcp,
-			servers: mcp.servers.map((server) => ({
+			servers: (mcp.servers ?? []).map((server) => ({
 				...server,
 				args: (argsTexts[server.id] ?? '')
 					.split(/\s+/)
@@ -370,7 +399,7 @@
 				headers: parseEnv(headerTexts[server.id] ?? ''),
 				oauth: server.oauth
 			}))
-		});
+		};
 	}
 
 	// Parses the local text mirrors (argsTexts / envTexts / headerTexts) into the
