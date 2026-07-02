@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cometline/cometmind/internal/process"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -65,9 +66,20 @@ func buildTransport(cfg ServerConfig) (mcp.Transport, error) {
 		if command == "" {
 			return nil, fmt.Errorf("stdio server %q: command is required", cfg.ID)
 		}
-		cmd := exec.Command(command, cfg.Args...)
+		resolved, err := process.ResolveCommand(command)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"stdio server %q: %w",
+				cfg.ID,
+				process.CommandNotFoundError(command, err),
+			)
+		}
+		cmd := exec.Command(resolved, cfg.Args...)
+		// Packaged Cometline/Electron often inherits a minimal PATH (no /usr/local/bin).
+		// Use the same augmented PATH as ACP and built-in shell tools.
+		cmd.Env = process.Env()
 		if len(cfg.Env) > 0 {
-			cmd.Env = append(cmd.Environ(), envPairs(cfg.Env)...)
+			cmd.Env = append(cmd.Env, envPairs(cfg.Env)...)
 		}
 		return &mcp.CommandTransport{Command: cmd}, nil
 	case TransportHTTP:
